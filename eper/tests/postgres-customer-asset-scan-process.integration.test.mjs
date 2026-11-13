@@ -86,9 +86,10 @@ async function createPendingScanFixture(pool, repository, prefix) {
     observedMimeType: "application/pdf", checksumSha256, scanStatus: "pending",
   });
   return { tenantId, applicationId, actorId, assetId, correlationId,
-    uploadSessionId: reservation.uploadSessionId, testObjectBytes };
+    uploadSessionId: reservation.uploadSessionId, testObjectBytes,
+    providerObjectReference: "opaque-process-object-" + suffix };
 }
-async function createWorkerLogin(pool, prefix) {
+async function createWorkerLogin(pool, prefix, fixture, workerId, scannerServiceId) {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 14);
   const role = "eper_scan_" + prefix + "_" + suffix;
   const password = randomUUID().replaceAll("-", "");
@@ -97,6 +98,13 @@ async function createWorkerLogin(pool, prefix) {
        NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`,
   );
   await pool.query(`GRANT eper_customer_asset_access TO "${role}"`);
+  await pool.query(`GRANT eper_customer_asset_scan_supervisor_access TO "${role}"`);
+  await pool.query(
+    `INSERT INTO public.eper_customer_asset_scan_supervisor_identities
+      (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
+     VALUES ($1, $2, $3, $4, $5, true)`,
+    [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
+  );
   const url = new URL(connectionString);
   url.username = role;
   url.password = password;
@@ -116,7 +124,24 @@ async function createWorkerLogin(pool, prefix) {
   } finally {
     await workerPool.end();
   }
-  return { role, connectionString: url.toString() };
+  return { role, workerId, connectionString: url.toString() };
+}
+
+async function createChildLogin(pool, fixture, workerId, scannerServiceId) {
+  const role = "eper_scan_child_ci";
+  const spiffeId = "spiffe://eper.example/asset-scanner/ci-child";
+  await pool.query(`CREATE ROLE "${role}" WITH LOGIN INHERIT
+    NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`);
+  await pool.query(`GRANT eper_customer_asset_scan_child_access TO "${role}"`);
+  await pool.query(
+    `INSERT INTO public.eper_customer_asset_scan_child_identities
+      (login_role, tenant_id, application_id, worker_id, scanner_service_id,
+       spiffe_id, provider_connection_id, enabled)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
+    [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId,
+      spiffeId, "ci-storage-connection"],
+  );
+  return { role, spiffeId };
 }
 
 function baseWorkerEnv(fixture) {
@@ -138,36 +163,114 @@ test("process-level PostgreSQL 16 scan worker claims, invokes configured test sc
     const pool = new Pool({ connectionString, max: 4 });
     const repository = new PostgresCustomerAssetRepository(pool);
     const fixture = await createPendingScanFixture(pool, repository, "scan-process");
-    const workerLogin = await createWorkerLogin(pool, "scan");
-    const scannerPath = resolve("dist/packages/assets/scanners/ci-postgres-test-scanner.js");
+    const workerId = "ci-asset-scanner:process-test";
+    const scannerServiceId = "ci-asset-scanner";
+    const workerLogin = await createWorkerLogin(pool, "scan", fixture, workerId, scannerServiceId);
+    const childLogin = await createChildLogin(pool, fixture, workerId, scannerServiceId);
+    const certDirectory = process.env.EPER_SCAN_CHILD_CERT_DIR;
+    assert.ok(certDirectory, "CI client-certificate directory must be configured");
+    const compositionPath = resolve("dist/packages/assets/scanners/ci-postgres-test-composition.js");
     const objectPath = resolve("dist/packages/assets/scanners/ci-postgres-test-object-" + randomUUID() + ".bin");
     let child;
     try {
       await mkdir(dirname(scannerPath), { recursive: true });
       await writeFile(objectPath, fixture.testObjectBytes);
-      await writeFile(scannerPath, `import { readFile } from "node:fs/promises";
-import { createHash } from "node:crypto";
-export async function createCustomerAssetScanner({ env }) {
-  return { async scan(input) {
-    const bytes = await readFile(env.EPER_CUSTOMER_ASSET_TEST_OBJECT_PATH);
-    const checksumSha256 = createHash("sha256").update(bytes).digest("hex");
-    if (bytes.length !== input.sizeBytes || checksumSha256 !== input.checksumSha256 ||
-        input.mimeType !== "application/pdf") {
-      return { scanStatus: "infected", scannerServiceId: env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID };
+      const compositionSource = `import { createReadStream } from "node:fs";
+import { CustomerAssetScanChildSpiffeIdentityVerifier } from "../customer-asset-scan-child-spiffe-identity.js";
+import { createCustomerAssetScanChildSpiffeSdkRuntime } from "../customer-asset-scan-child-spiffe-sdk-adapter.js";
+import { PostgresCustomerAssetScanChildInputResolver } from "../customer-asset-scan-child-input-resolver.js";
+import { ProviderStorageDriverDispatchService } from "../../integrations/provider-storage-driver-dispatch-service.js";
+const objectPath = ${JSON.stringify(objectPath)};
+const expectedObjectReference = ${JSON.stringify(fixture.providerObjectReference)};
+export function createCustomerAssetScanChildRuntimeDependencies({ pool, env }) {
+  // Explicit test-only SDK stand-in. Production composition must use the real
+  // SPIFFE SDK/Workload API endpoint and is not supplied by this fixture.
+  class TestSpiffeClient {
+    constructor(options) {
+      if (options.connection !== env.EPER_SCANNER_CHILD_SPIFFE_WORKLOAD_API_SOCKET ||
+          options.retry.enabled !== false) throw new Error("test SPIFFE SDK configuration invalid");
     }
-    return { scanStatus: "clean", scannerServiceId: env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID };
-  } };
+    async getJwtSvid(audience, filter) {
+      if (audience !== "eper:customer-asset-scan-child") return null;
+      return { spiffeId: filter.spiffeId, token: "test-only-svid", expiresAtMs: Date.now() + 120000 };
+    }
+    close() {}
+  }
+  const spiffe = createCustomerAssetScanChildSpiffeSdkRuntime({
+    endpoint: env.EPER_SCANNER_CHILD_SPIFFE_WORKLOAD_API_SOCKET,
+    SpiffeClient: TestSpiffeClient,
+  });
+  const identity = new CustomerAssetScanChildSpiffeIdentityVerifier(
+    spiffe.adapter, env.EPER_SCANNER_CHILD_EXPECTED_SPIFFE_ID,
+  );
+  const input = new PostgresCustomerAssetScanChildInputResolver(pool);
+  const driver = {
+    dependencyIds: [],
+    capabilities: {
+      idempotentCreateByUploadSessionId: true,
+      lookupByUploadSessionId: false, renewByProviderReference: false,
+      verifyObject: false, downloadGrant: false, malwareScan: false,
+      internalObjectRead: true,
+    },
+    async createUploadGrant() { return { kind: "unknown", reason: "test-only" }; },
+    async readObjectInternal(context, request) {
+      if (context.connectionId !== "ci-storage-connection" ||
+          request.providerObjectReference !== expectedObjectReference) {
+        throw new Error("test provider scope mismatch");
+      }
+      return createReadStream(objectPath);
+    },
+  };
+  const runtime = {
+    async resolve({ tenantId, applicationId, capability, expectedConnectionId }) {
+      if (expectedConnectionId !== "ci-storage-connection") throw new Error("test connection pin mismatch");
+      return {
+        runtime: {
+          capability,
+          selection: {
+            tenantId, applicationId, capabilityKey: capability,
+            connectionId: "ci-storage-connection", providerKey: "ci-storage",
+          },
+          adapter: driver,
+        },
+        credentials: Object.freeze({ testOnly: true }),
+      };
+    },
+  };
+  const provider = new ProviderStorageDriverDispatchService(runtime);
+  const scanner = {
+    async scan(scanInput) {
+      const chunks = [];
+      for await (const chunk of scanInput.source) chunks.push(Buffer.from(chunk));
+      const bytes = Buffer.concat(chunks);
+      const digest = await import("node:crypto").then(({ createHash }) =>
+        createHash("sha256").update(bytes).digest("hex"));
+      return bytes.length === scanInput.sizeBytes && digest === scanInput.checksumSha256 &&
+        scanInput.mimeType === "application/pdf" ? { scanStatus: "clean" } : { scanStatus: "infected" };
+    },
+  };
+  return { identity, input, provider, scanner };
 }
-`);
+`;
+      await writeFile(compositionPath, compositionSource);
       child = spawn(process.execPath, ["dist/apps/worker/customer-asset-scan-main.js"], {
         env: {
           ...baseWorkerEnv(fixture),
           EPER_CUSTOMER_ASSET_SCAN_DATABASE_URL: workerLogin.connectionString,
           EPER_CUSTOMER_ASSET_SCAN_WORKER_ENABLED: "true",
           EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID: "ci-asset-scanner",
-          EPER_CUSTOMER_ASSET_SCAN_WORKER_ID: "ci-asset-scanner:process-test",
-          EPER_CUSTOMER_ASSET_SCANNER_MODULE: "./dist/packages/assets/scanners/ci-postgres-test-scanner.js",
-          EPER_CUSTOMER_ASSET_TEST_OBJECT_PATH: objectPath,
+          EPER_CUSTOMER_ASSET_SCAN_WORKER_ID: workerId,
+          EPER_SCANNER_CHILD_SPIFFE_WORKLOAD_API_SOCKET: "unix:///tmp/eper-test-workload-api.sock",
+          EPER_SCANNER_CHILD_EXPECTED_SPIFFE_ID: childLogin.spiffeId,
+          EPER_SCANNER_CHILD_SPIFFE_AUDIENCE: "eper:customer-asset-scan-child",
+          EPER_CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_MODULE: "./dist/packages/assets/scanners/ci-postgres-test-composition.js",
+          EPER_SCANNER_CHILD_PGHOST: "localhost",
+          EPER_SCANNER_CHILD_PGPORT: new URL(connectionString).port || "5432",
+          EPER_SCANNER_CHILD_PGDATABASE: new URL(connectionString).pathname.slice(1),
+          EPER_SCANNER_CHILD_PGUSER: childLogin.role,
+          EPER_SCANNER_CHILD_PGSSLROOTCERT: resolve(certDirectory, "ca.crt"),
+          EPER_SCANNER_CHILD_PGSSLCERT: resolve(certDirectory, "child.crt"),
+          EPER_SCANNER_CHILD_PGSSLKEY: resolve(certDirectory, "child.key"),
           EPER_CUSTOMER_ASSET_SCAN_POLL_INTERVAL_MS: "100",
           EPER_CUSTOMER_ASSET_SCAN_LEASE_MS: "5000",
           EPER_CUSTOMER_ASSET_SCAN_BATCH_SIZE: "2",
@@ -196,8 +299,15 @@ export async function createCustomerAssetScanner({ env }) {
       });
     } finally {
       if (child) await stopChild(child).catch(() => {});
-      await rm(scannerPath, { force: true });
+      await rm(compositionPath, { force: true });
       await rm(objectPath, { force: true });
+      await pool.query("DELETE FROM public.eper_customer_asset_scan_child_identities WHERE login_role = $1", [childLogin.role]).catch(() => {});
+      await pool.query(`REVOKE eper_customer_asset_scan_child_access FROM "${childLogin.role}"`).catch(() => {});
+      await pool.query(`DROP ROLE IF EXISTS "${childLogin.role}"`).catch(() => {});
+      await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [workerLogin.role]).catch(() => {});
+      await pool.query(`REVOKE eper_customer_asset_scan_supervisor_access FROM "${workerLogin.role}"`).catch(() => {});
+      await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [workerLogin.role]).catch(() => {});
+      await pool.query(`REVOKE eper_customer_asset_scan_supervisor_access FROM "${workerLogin.role}"`).catch(() => {});
       await pool.query(`DROP ROLE IF EXISTS "${workerLogin.role}"`).catch(() => {});
       await pool.end();
     }
@@ -208,8 +318,9 @@ test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease
     const pool = new Pool({ connectionString, max: 4 });
     const repository = new PostgresCustomerAssetRepository(pool);
     const fixture = await createPendingScanFixture(pool, repository, "recovery-process");
-    const workerLogin = await createWorkerLogin(pool, "recovery");
-    const workerId = "ci-recovery-expired-worker";
+    const workerId = "ci-asset-scan-recovery:expired-worker";
+    const scannerServiceId = "ci-asset-scan-recovery";
+    const workerLogin = await createWorkerLogin(pool, "recovery", fixture, workerId, scannerServiceId);
     let child;
     try {
       const [job] = await repository.claimScanJobs({
@@ -238,7 +349,7 @@ test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease
           EPER_CUSTOMER_ASSET_SCAN_RECOVERY_ENABLED: "true",
           EPER_CUSTOMER_ASSET_SCAN_RECOVERY_TENANT_ID: fixture.tenantId,
           EPER_CUSTOMER_ASSET_SCAN_RECOVERY_APPLICATION_ID: fixture.applicationId,
-          EPER_CUSTOMER_ASSET_SCAN_RECOVERY_SERVICE_ID: "ci-asset-scan-recovery",
+          EPER_CUSTOMER_ASSET_SCAN_RECOVERY_SERVICE_ID: scannerServiceId,
           EPER_CUSTOMER_ASSET_SCAN_RECOVERY_INTERVAL_MS: "30000",
           EPER_CUSTOMER_ASSET_SCAN_RECOVERY_BATCH_SIZE: "5",
         },
