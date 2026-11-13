@@ -72,13 +72,13 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
   async transitionModelStatus(t: string, a: string, e: string, v: number, from: ApplicationDataModel["status"], to: ApplicationDataModel["status"]): Promise<void> {
     if (!((from==="DRAFT"&&to==="ACTIVE")||(from==="ACTIVE"&&to==="RETIRED"))) throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_INVALID");
     const id=this.key([t,a,e,String(v)]);
-    const result=await this.transaction(async session => {
+    await this.transaction(async session => {
       if (to === "ACTIVE") {
         await this.models().updateMany({ ...this.scope(t,a,e), status:"ACTIVE" }, { $set:{status:"RETIRED",updatedAt:new Date().toISOString()} }, {session});
       }
-      return this.models().updateOne({ _id:id,status:from }, { $set:{status:to,updatedAt:new Date().toISOString()} }, {session});
+      const result=await this.models().updateOne({ _id:id,status:from }, { $set:{status:to,updatedAt:new Date().toISOString()} }, {session});
+      if (!result.matchedCount) throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_CONFLICT");
     });
-    if (!result.matchedCount) throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_CONFLICT");
   }
   async create(record: ApplicationDataRecord, context: ApplicationDataContext): Promise<ApplicationDataRecord> {
     return this.transaction(async session => {
@@ -101,7 +101,8 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
         throw new Error(exists ? "APPLICATION_DATA_VERSION_CONFLICT" : "APPLICATION_DATA_RECORD_NOT_FOUND");
       }
       const next={ ...current, ...patch, version:expected+1, updatedAt:new Date().toISOString() };
-      await this.records().replaceOne({ _id, version:expected },next,{session});
+      const replaced=await this.records().replaceOne({ _id, version:expected },next,{session});
+      if (!replaced.matchedCount) throw new Error("APPLICATION_DATA_VERSION_CONFLICT");
       const saved=this.clean(next) as unknown as ApplicationDataRecord;
       await this.evidence(session,c,"APPLICATION_DATA_UPDATED",saved); return saved;
     });
@@ -114,7 +115,8 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
         const exists=await this.records().findOne({ _id },{session});
         throw new Error(exists ? "APPLICATION_DATA_VERSION_CONFLICT" : "APPLICATION_DATA_RECORD_NOT_FOUND");
       }
-      await this.records().deleteOne({ _id,version:expected },{session});
+      const deleted=await this.records().deleteOne({ _id,version:expected },{session});
+      if (!deleted.deletedCount) throw new Error("APPLICATION_DATA_VERSION_CONFLICT");
       await this.evidence(session,c,"APPLICATION_DATA_DELETED",this.clean(current) as unknown as ApplicationDataRecord);
     });
   }
