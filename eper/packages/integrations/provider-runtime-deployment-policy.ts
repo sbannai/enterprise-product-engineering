@@ -1,3 +1,5 @@
+import { lstatSync, readFileSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import {
   readProviderStorageRuntimeConfiguration,
   type ProviderStorageRuntimeConfiguration,
@@ -23,7 +25,9 @@ export class ProviderRuntimeDeploymentPolicyError extends Error {
     | "PROVIDER_RUNTIME_PROVIDER_NOT_ALLOWED"
     | "PROVIDER_RUNTIME_ADAPTER_NOT_ALLOWED"
     | "PROVIDER_RUNTIME_ENDPOINT_NOT_ALLOWED"
-    | "PROVIDER_RUNTIME_ENDPOINT_TLS_REQUIRED") {
+    | "PROVIDER_RUNTIME_ENDPOINT_TLS_REQUIRED"
+    | "PROVIDER_RUNTIME_CONFIG_SOURCE_INVALID"
+    | "PROVIDER_RUNTIME_CONFIG_VERSION_UNSUPPORTED") {
     super(code);
     this.name = "ProviderRuntimeDeploymentPolicyError";
   }
@@ -31,6 +35,36 @@ export class ProviderRuntimeDeploymentPolicyError extends Error {
 
 const keyPattern = /^[A-Za-z][A-Za-z0-9._:-]{0,127}$/;
 const versionPattern = /^[0-9][A-Za-z0-9.+-]{0,127}$/;
+
+/**
+ * Deployment configuration is a versioned file. The environment JSON path is
+ * retained only for local/test compatibility; production must use the file.
+ * The file contains policy and adapter metadata only, never customer secrets.
+ */
+function readDeploymentConfigText(env: Record<string, string | undefined>): string {
+  const filePath = env.EPER_PROVIDER_STORAGE_RUNTIME_CONFIG_FILE?.trim();
+  const inline = env.EPER_PROVIDER_STORAGE_RUNTIME_CONFIG_JSON;
+  if (filePath) {
+    if (inline !== undefined || !isAbsolute(filePath)) {
+      throw new ProviderRuntimeDeploymentPolicyError("PROVIDER_RUNTIME_CONFIG_SOURCE_INVALID");
+    }
+    try {
+      const metadata = lstatSync(filePath);
+      if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size < 2 ||
+          metadata.size > 65_536 || (metadata.mode & 0o002) !== 0) {
+        throw new Error("unsafe config file");
+      }
+      return readFileSync(filePath, "utf8");
+    } catch {
+      throw new ProviderRuntimeDeploymentPolicyError("PROVIDER_RUNTIME_CONFIG_SOURCE_INVALID");
+    }
+  }
+  if (env.NODE_ENV === "production" || env.EPER_ENVIRONMENT === "production" ||
+      typeof inline !== "string" || inline.length < 2 || inline.length > 65_536) {
+    throw new ProviderRuntimeDeploymentPolicyError("PROVIDER_RUNTIME_CONFIG_SOURCE_INVALID");
+  }
+  return inline;
+}
 
 /**
  * Adds deployment-owned trust and resource ceilings to the existing provider
@@ -41,7 +75,11 @@ const versionPattern = /^[0-9][A-Za-z0-9.+-]{0,127}$/;
 export function readProviderRuntimeDeploymentPolicy(
   env: Record<string, string | undefined>,
 ): ProviderRuntimeDeploymentPolicy {
-  const base = readProviderStorageRuntimeConfiguration(env);
+  const enabled = env.EPER_PROVIDER_STORAGE_RUNTIME_ENABLED === "true";
+  const configText = enabled ? readDeploymentConfigText(env) : undefined;
+  const base = readProviderStorageRuntimeConfiguration(configText === undefined
+    ? env
+    : { ...env, EPER_PROVIDER_STORAGE_RUNTIME_CONFIG_JSON: configText });
   if (!base.enabled) {
     return {
       ...base,
@@ -52,7 +90,21 @@ export function readProviderRuntimeDeploymentPolicy(
     };
   }
 
-  const raw = JSON.parse(env.EPER_PROVIDER_STORAGE_RUNTIME_CONFIG_JSON ?? "") as Record<string, unknown>;
+  let parsed: unknown;
+  try { parsed = JSON.parse(configText ?? ""); }
+  catch { throw new ProviderRuntimeDeploymentPolicyError("PROVIDER_RUNTIME_CONFIG_SOURCE_INVALID"); }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new ProviderRuntimeDeploymentPolicyError("PROVIDER_RUNTIME_CONFIG_SOURCE_INVALID");
+  }
+  const raw = parsed as Record<string, unknown>;
+  const allowedFields = ["schemaVersion", "scannerIdentity", "allowedHosts", "adapters",
+    "allowedProviderKeys", "secretManager", "tlsMode", "runtimeLimits"];
+  if (Object.keys(raw).some(key => !allowedFields.includes(key))) {
+    throw new ProviderRuntimeDeploymentPolicyError("PROVIDER_RUNTIME_CONFIG_SOURCE_INVALID");
+  }
+  if (raw.schemaVersion !== 1) {
+    throw new ProviderRuntimeDeploymentPolicyError("PROVIDER_RUNTIME_CONFIG_VERSION_UNSUPPORTED");
+  }
   if (!Array.isArray(raw.allowedProviderKeys) ||
       raw.allowedProviderKeys.length < 1 || raw.allowedProviderKeys.length > 64 ||
       raw.allowedProviderKeys.some(key => typeof key !== "string" || !keyPattern.test(key)) ||
