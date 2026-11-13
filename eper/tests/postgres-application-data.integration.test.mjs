@@ -106,7 +106,7 @@ test("PostgreSQL delete idempotency replays after removal without duplicate evid
     const service=new ApplicationDataService(new PostgresApplicationDataAdapter(pool));
     await service.registerModel({tenantId:context.tenantId,applicationId:context.applicationId,entityType:"Order",version:1,status:"ACTIVE",
       fields:[{id:"total",type:"number",required:true}]});
-    await service.create({...context,idempotencyKey:undefined},"Order","order-"+suffix,{total:25});
+    await service.create({...context,idempotencyKey:undefined,correlationId:"corr-create-"+suffix},"Order","order-"+suffix,{total:25});
     await service.delete(context,"Order","order-"+suffix,1);
     await service.delete(context,"Order","order-"+suffix,1);
     assert.equal(await service.get({...context,idempotencyKey:undefined},"Order","order-"+suffix),undefined);
