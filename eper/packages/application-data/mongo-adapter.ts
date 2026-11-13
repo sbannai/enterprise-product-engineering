@@ -52,7 +52,7 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
     if (r) return this.clean(r) as unknown as ApplicationDataModel;
     if (v !== undefined) return undefined;
     const latest = await this.models().find({ ...this.scope(t,a,e) }).sort({ version:-1 }).limit(1).toArray();
-    return latest[0] ? this.clean(latest[0]) as ApplicationDataModel : undefined;
+    return latest[0] ? this.clean(latest[0]) as unknown as ApplicationDataModel : undefined;
   }
   async putModel(model: ApplicationDataModel): Promise<void> {
     await this.transaction(async session => {
@@ -70,7 +70,7 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
   }
   async get(c: ApplicationDataContext, e: string, id: string): Promise<ApplicationDataRecord | undefined> {
     const r=await this.records().findOne({ _id:this.key([c.tenantId,c.applicationId,e,id]), ...this.scope(c.tenantId,c.applicationId,e) });
-    return r ? this.clean(r) as ApplicationDataRecord : undefined;
+    return r ? this.clean(r) as unknown as ApplicationDataRecord : undefined;
   }
   async update(c: ApplicationDataContext, e: string, id: string, expected: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }): Promise<ApplicationDataRecord> {
     return this.transaction(async session => {
@@ -95,12 +95,12 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
         throw new Error(exists ? "APPLICATION_DATA_VERSION_CONFLICT" : "APPLICATION_DATA_RECORD_NOT_FOUND");
       }
       await this.records().deleteOne({ _id,version:expected },{session});
-      await this.evidence(session,c,"APPLICATION_DATA_DELETED",this.clean(current) as ApplicationDataRecord);
+      await this.evidence(session,c,"APPLICATION_DATA_DELETED",this.clean(current) as unknown as ApplicationDataRecord);
     });
   }
   async query(c: ApplicationDataContext, e: string, q: ApplicationDataQuery): Promise<ApplicationDataRecord[]> {
     const rows=await this.records().find({ ...this.scope(c.tenantId,c.applicationId,e), ...(q.state ? {state:q.state}:{}), ...(q.afterId ? {id:{$gt:q.afterId}}:{}) })
       .sort({id:1}).limit(q.limit ?? 50).toArray();
-    return rows.map(row=>this.clean(row) as ApplicationDataRecord);
+    return rows.map(row=>this.clean(row) as unknown as ApplicationDataRecord);
   }
 }
