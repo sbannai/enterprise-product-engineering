@@ -1,21 +1,22 @@
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { ApplicationDataAdapter, ApplicationDataContext, ApplicationDataModel, ApplicationDataQuery, ApplicationDataRecord } from "./contracts.js";
+import { applicationDataCreateHash } from "./idempotency.js";
 
 /** Local development/import-export adapter only. Not safe for concurrent processes or production transactions. */
 export class JsonFileApplicationDataAdapter implements ApplicationDataAdapter {
   constructor(private readonly filePath: string) {}
-  private async read(): Promise<{ models: ApplicationDataModel[]; records: ApplicationDataRecord[] }> {
+  private async read(): Promise<{ models: ApplicationDataModel[]; records: ApplicationDataRecord[]; idempotency: Array<{ tenantId:string; applicationId:string; key:string; requestHash:string; response:ApplicationDataRecord }> }> {
     try {
       const value = JSON.parse(await readFile(this.filePath, "utf8"));
       if (!value || !Array.isArray(value.models) || !Array.isArray(value.records)) throw new Error();
-      return value;
+      return { ...value, idempotency: Array.isArray(value.idempotency) ? value.idempotency : [] };
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return { models: [], records: [] };
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return { models: [], records: [], idempotency: [] };
       throw new Error("APPLICATION_DATA_FILE_INVALID");
     }
   }
-  private async write(value: { models: ApplicationDataModel[]; records: ApplicationDataRecord[] }): Promise<void> {
+  private async write(value: { models: ApplicationDataModel[]; records: ApplicationDataRecord[]; idempotency: Array<{ tenantId:string; applicationId:string; key:string; requestHash:string; response:ApplicationDataRecord }> }): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true });
     const temp = this.filePath + ".tmp";
     await writeFile(temp, JSON.stringify(value), { encoding: "utf8", mode: 0o600 });
@@ -46,8 +47,21 @@ export class JsonFileApplicationDataAdapter implements ApplicationDataAdapter {
     model.status = to;
     await this.write(db);
   }
-  async create(record: ApplicationDataRecord): Promise<ApplicationDataRecord> {
-    const db = await this.read(); if (db.records.some(r => r.tenantId === record.tenantId && r.applicationId === record.applicationId && r.entityType === record.entityType && r.id === record.id)) throw new Error("APPLICATION_DATA_RECORD_EXISTS");
+  async create(record: ApplicationDataRecord, context: ApplicationDataContext): Promise<ApplicationDataRecord> {
+    const db = await this.read();
+    if (context.idempotencyKey) {
+      const requestHash = applicationDataCreateHash(record);
+      const prior = db.idempotency.find(item => item.tenantId === context.tenantId && item.applicationId === context.applicationId && item.key === context.idempotencyKey);
+      if (prior) {
+        if (prior.requestHash !== requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+        return prior.response;
+      }
+      if (db.records.some(r => r.tenantId === record.tenantId && r.applicationId === record.applicationId && r.entityType === record.entityType && r.id === record.id)) throw new Error("APPLICATION_DATA_RECORD_EXISTS");
+      db.records.push(record);
+      db.idempotency.push({tenantId:context.tenantId,applicationId:context.applicationId,key:context.idempotencyKey,requestHash,response:record});
+      await this.write(db); return record;
+    }
+    if (db.records.some(r => r.tenantId === record.tenantId && r.applicationId === record.applicationId && r.entityType === record.entityType && r.id === record.id)) throw new Error("APPLICATION_DATA_RECORD_EXISTS");
     db.records.push(record); await this.write(db); return record;
   }
   async get(c: ApplicationDataContext, e: string, id: string) { return (await this.read()).records.find(r => r.tenantId === c.tenantId && r.applicationId === c.applicationId && r.entityType === e && r.id === id); }
