@@ -59,16 +59,19 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
   /** A transactional write to each target document serializes relationship creation against target deletion. */
   private async lockRelationshipTargets(session: MongoSessionLike, c: ApplicationDataContext,
     relationships: ApplicationDataRelationship[] | undefined, data: Record<string, unknown>): Promise<void> {
+    const targets: Array<{entityType:string; id:string; field:string}> = [];
     for (const relation of relationships ?? []) {
       const value=data[relation.field];
       if (value === undefined || value === null) continue;
       const ids=relation.cardinality === "one" ? [value] : value;
-      if (!Array.isArray(ids)) throw new Error("APPLICATION_DATA_RELATIONSHIP_VALUE_INVALID:" + relation.field);
-      for (const id of ids) {
-        const targetId=this.key([c.tenantId,c.applicationId,relation.targetEntity,String(id)]);
-        const result=await this.records().updateOne({_id:targetId},{$inc:{_relationshipGuard:1}},{session});
-        if (!result.matchedCount) throw new Error("APPLICATION_DATA_RELATIONSHIP_TARGET_NOT_FOUND:" + relation.field);
-      }
+      if (!Array.isArray(ids) || ids.some(id=>typeof id !== "string")) throw new Error("APPLICATION_DATA_RELATIONSHIP_VALUE_INVALID:" + relation.field);
+      for (const id of ids as string[]) targets.push({entityType:relation.targetEntity,id,field:relation.field});
+    }
+    targets.sort((a,b)=>a.entityType.localeCompare(b.entityType)||a.id.localeCompare(b.id));
+    for (const targetRef of targets) {
+      const targetId=this.key([c.tenantId,c.applicationId,targetRef.entityType,targetRef.id]);
+      const result=await this.records().updateOne({_id:targetId},{$inc:{_relationshipGuard:1}},{session});
+      if (!result.matchedCount) throw new Error("APPLICATION_DATA_RELATIONSHIP_TARGET_NOT_FOUND:" + targetRef.field);
     }
   }
   private async assertNotReferenced(session: MongoSessionLike, c: ApplicationDataContext, entityType: string, id: string): Promise<void> {
