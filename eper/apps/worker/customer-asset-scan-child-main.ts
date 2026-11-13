@@ -84,8 +84,12 @@ console.log = console.error;
 console.info = console.error;
 console.debug = console.error;
 
-const start = await readStartMessage();
-if (!isCustomerAssetScanChildStart(start)) {
+let inputFailure = false;
+const start = await readStartMessage().catch(() => {
+  inputFailure = true;
+  return undefined;
+});
+if (inputFailure || !isCustomerAssetScanChildStart(start)) {
   emitFailure(start, "SCANNER_BOOTSTRAP_FAILED");
   process.exitCode = 1;
 } else {
