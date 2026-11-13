@@ -1,5 +1,4 @@
 import { evaluateDependencyCompatibility } from "./compatibility.js";
-import type { DependencyPolicy } from "./compatibility.js";
 import type { DependencyScope, StoredDependencyInstallation, StoredDependencyPolicy } from "./postgres-dependency-inventory-repository.js";
 
 export interface DependencyInventoryReader {
@@ -71,7 +70,7 @@ export async function assertDependencyRuntimeCompatible(
       throw new Error(prefix + "_INSTALLATION_NOT_READY:" + id);
     }
     const decision = evaluateDependencyCompatibility({
-      policy: policy as DependencyPolicy,
+      policy,
       installation: {
         installedVersion: selected.installedVersion,
         operatingSystem: selected.operatingSystem,
