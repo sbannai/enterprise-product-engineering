@@ -77,3 +77,44 @@ test("propagates exact-version registry rejection without fallback", async () =>
     tenantId: "tenant-a", applicationId: "app-a", capability: "storage.upload.grant",
   }), /PROVIDER_RUNTIME_VERSION_MISMATCH/);
 });
+
+
+test("enforces deployment provider, adapter, endpoint and TLS allowlists before adapter resolution", async () => {
+  const policy = {
+    enabled: true, environment: "production", allowedProviderKeys: ["storage-provider"],
+    adapters: [{ adapterKey: "storage.local", adapterVersion: "1.2.0",
+      capabilities: ["storage.upload.grant"], synthetic: false }],
+    allowedHosts: ["objects.example.com"], tlsMode: "verify-full",
+  };
+  const cases = [
+    [{ allowedProviderKeys: ["other-provider"] }, "PROVIDER_RUNTIME_PROVIDER_NOT_ALLOWED"],
+    [{ adapters: [{ ...policy.adapters[0], adapterVersion: "2.0.0" }] }, "PROVIDER_RUNTIME_ADAPTER_NOT_ALLOWED"],
+    [{ allowedHosts: ["safe.example.com"] }, "PROVIDER_RUNTIME_ENDPOINT_NOT_ALLOWED"],
+  ];
+  for (const [override, code] of cases) {
+    const calls = [];
+    const f = new ProviderRuntimeResolutionService(
+      { async resolve() { return { ...selection, policy: { endpoint: "https://objects.example.com" } }; } },
+      { async get() { return definition(); } },
+      { resolve(input) { calls.push(input); return {}; } },
+      { ...policy, ...override },
+    );
+    await assert.rejects(() => f.resolve({ tenantId: "tenant-a", applicationId: "app-a", capability: "storage.upload.grant" }),
+      error => error.code === code);
+    assert.equal(calls.length, 0, "adapter registry must not be reached after a policy rejection");
+  }
+});
+
+test("requires a server-owned HTTPS endpoint when deployment policy is enabled", async () => {
+  const f = new ProviderRuntimeResolutionService(
+    { async resolve() { return { ...selection, policy: {} }; } },
+    { async get() { return definition(); } },
+    { resolve() { throw new Error("must not resolve adapter"); } },
+    { enabled: true, environment: "production", allowedProviderKeys: ["storage-provider"],
+      adapters: [{ adapterKey: "storage.local", adapterVersion: "1.2.0",
+        capabilities: ["storage.upload.grant"], synthetic: false }],
+      allowedHosts: ["objects.example.com"], tlsMode: "verify-full" },
+  );
+  await assert.rejects(() => f.resolve({ tenantId: "tenant-a", applicationId: "app-a", capability: "storage.upload.grant" }),
+    /PROVIDER_RUNTIME_ENDPOINT_NOT_ALLOWED/);
+});
