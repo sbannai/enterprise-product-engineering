@@ -31,7 +31,8 @@ function validSpiffeId(value: string): boolean {
 
 /**
  * Fixed production launch boundary. Callers cannot select an executable,
- * module path, Node flags, or arbitrary environment variables. Credentials
+ * executable, arbitrary module paths outside the deployment-owned scanner directory, Node flags,
+ * or arbitrary environment variables. Credentials
  * are deliberately absent: PostgreSQL uses client-certificate authentication
  * and provider secrets are resolved inside the child through a separate port.
  */
