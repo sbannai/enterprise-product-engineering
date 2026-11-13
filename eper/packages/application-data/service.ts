@@ -73,6 +73,12 @@ export class ApplicationDataService {
     }
     await this.adapter.putModel(clone(model));
   }
+  async activateModel(tenantId: string, applicationId: string, entityType: string, version: number): Promise<void> {
+    await this.adapter.transitionModelStatus(tenantId,applicationId,entityType,version,"DRAFT","ACTIVE");
+  }
+  async retireModel(tenantId: string, applicationId: string, entityType: string, version: number): Promise<void> {
+    await this.adapter.transitionModelStatus(tenantId,applicationId,entityType,version,"ACTIVE","RETIRED");
+  }
   private async validateRelationships(context: ApplicationDataContext, model: ApplicationDataModel, data: Record<string, unknown>): Promise<void> {
     for (const relation of model.relationships ?? []) {
       const value = data[relation.field];
