@@ -20,7 +20,7 @@ export type ProviderStorageRuntimeRegistration<TCredentials> =
 
 export type ProviderStorageRuntimeCompositionInput<TCredentials> = {
   enabled: boolean;
-  deploymentPolicy?: ProviderRuntimeDeploymentPolicy;
+  deploymentPolicy: ProviderRuntimeDeploymentPolicy;
   environment?: ProviderStorageRuntimeEnvironment;
   registrations?: readonly ProviderStorageRuntimeRegistration<TCredentials>[];
   dispatch?: Pick<ProviderDispatchConfigurationService, "resolve">;
@@ -76,7 +76,7 @@ export function createProviderStorageRuntimeComposition<TCredentials>(
       input.environment !== "uat" && input.environment !== "production") {
     throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_DEPENDENCIES_REQUIRED");
   }
-  if (!input.deploymentPolicy?.enabled) {
+  if (!input.deploymentPolicy?.enabled || input.deploymentPolicy.environment !== input.environment) {
     throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_DEPLOYMENT_POLICY_REQUIRED");
   }
   if (!input.dispatch || !input.catalogue || !input.connections || !input.secretResolver) {
