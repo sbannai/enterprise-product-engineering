@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const migration = await readFile(
-  new URL("../packages/audit/migrations/053_customer_asset_scan_child_authenticated_context.sql", import.meta.url),
+  new URL("../packages/audit/migrations/054_customer_asset_scan_child_authenticated_context.sql", import.meta.url),
   "utf8",
 );
 
