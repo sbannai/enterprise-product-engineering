@@ -172,10 +172,7 @@ export function evaluateDependencyCompatibility(input: {
         (!policy.notice.source?.trim() || !policy.notice.reference?.trim() ||
          !policy.notice.recordedAt || !Number.isFinite(Date.parse(policy.notice.recordedAt)))) ||
       (policy.mandatoryUpdate &&
-        (!policy.requiredMinimumVersion || !policy.effectiveAt ||
-         policy.notice.verification !== "verified" ||
-         !policy.notice.source?.trim() || !policy.notice.reference?.trim() ||
-         !policy.notice.recordedAt || !Number.isFinite(Date.parse(policy.notice.recordedAt))))) {
+        (!policy.requiredMinimumVersion || !policy.effectiveAt))) {
     throw new Error("DEPENDENCY_COMPATIBILITY_INPUT_INVALID");
   }
 
