@@ -123,6 +123,15 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
       if (!result.matchedCount) throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_CONFLICT");
     });
   }
+  async getIdempotentCreate(context: ApplicationDataContext, entityType: string, id: string, data: Record<string, unknown>): Promise<ApplicationDataRecord | undefined> {
+    const key=context.idempotencyKey;
+    if (!key) return undefined;
+    const prior=await this.idempotency().findOne({_id:this.key([context.tenantId,context.applicationId,key])});
+    if (!prior) return undefined;
+    const requestHash=applicationDataCreateHash({tenantId:context.tenantId,applicationId:context.applicationId,entityType,id,data});
+    if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+    return prior.response as ApplicationDataRecord;
+  }
   async create(record: ApplicationDataRecord, context: ApplicationDataContext, relationships?: ApplicationDataRelationship[]): Promise<ApplicationDataRecord> {
     const key = context.idempotencyKey;
     const requestHash = key ? applicationDataCreateHash(record) : undefined;
