@@ -2,6 +2,7 @@ import { isAbsolute, resolve, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCustomerAssetScanChild, type CustomerAssetScanChildOutcome } from "./customer-asset-scan-child-supervisor.js";
 import type { CustomerAssetScanChildStart } from "./customer-asset-scan-child-protocol.js";
+import { CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE } from "./customer-asset-scan-child-spiffe-identity.js";
 
 export interface TrustedCustomerAssetScanChildConfiguration {
   workloadApiSocket: string;
@@ -57,6 +58,9 @@ export function buildTrustedCustomerAssetScanChildLaunch(configuration: TrustedC
     throw new Error("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_ID_INVALID");
   }
   const audience = required(configuration.audience, "CUSTOMER_ASSET_SCAN_CHILD_AUDIENCE_INVALID", 256);
+  if (audience !== CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE) {
+    throw new Error("CUSTOMER_ASSET_SCAN_CHILD_AUDIENCE_INVALID");
+  }
   const host = required(configuration.databaseHost, "CUSTOMER_ASSET_SCAN_CHILD_DATABASE_HOST_INVALID", 255);
   const name = required(configuration.databaseName, "CUSTOMER_ASSET_SCAN_CHILD_DATABASE_NAME_INVALID", 128);
   const user = required(configuration.databaseUser, "CUSTOMER_ASSET_SCAN_CHILD_DATABASE_USER_INVALID", 128);
