@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ApplicationDataAdapter, ApplicationDataContext, ApplicationDataModel, ApplicationDataQuery, ApplicationDataRecord } from "./contracts.js";
+import { applicationDataCreateHash } from "./idempotency.js";
 
 interface MongoResult { acknowledged?: boolean; matchedCount?: number; deletedCount?: number; }
 interface MongoCursor<T> { sort(spec: Record<string, 1 | -1>): MongoCursor<T>; limit(value: number): MongoCursor<T>; toArray(): Promise<T[]>; }
@@ -41,6 +42,7 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
   }
   private audits() { return this.db.collection<Record<string, unknown>>("eper_application_data_audit"); }
   private outbox() { return this.db.collection<Record<string, unknown>>("eper_application_data_outbox"); }
+  private idempotency() { return this.db.collection<Record<string, unknown>>("eper_application_data_idempotency"); }
   private scope(t: string, a: string, e: string) { return { tenantId: t, applicationId: a, entityType: e }; }
   private key(parts: string[]): string { return JSON.stringify(parts); }
   private clean<T extends Record<string, unknown>>(value: T): Omit<T, "_id"> {
@@ -92,12 +94,40 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
     });
   }
   async create(record: ApplicationDataRecord, context: ApplicationDataContext): Promise<ApplicationDataRecord> {
-    return this.transaction(async session => {
-      const id=this.key([record.tenantId,record.applicationId,record.entityType,record.id]);
-      try { await this.records().insertOne({ ...record, _id:id }, { session }); }
-      catch (error) { if ((error as { code?: number }).code === 11000) throw new Error("APPLICATION_DATA_RECORD_EXISTS"); throw error; }
-      await this.evidence(session,context,"APPLICATION_DATA_CREATED",record); return record;
-    });
+    const key = context.idempotencyKey;
+    const requestHash = key ? applicationDataCreateHash(record) : undefined;
+    const idempotencyId = key ? this.key([context.tenantId,context.applicationId,key]) : undefined;
+    try {
+      return await this.transaction(async session => {
+        if (key && idempotencyId && requestHash) {
+          const prior=await this.idempotency().findOne({_id:idempotencyId},{session});
+          if (prior) {
+            if (prior.requestHash !== requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+            return prior.response as ApplicationDataRecord;
+          }
+        }
+        const id=this.key([record.tenantId,record.applicationId,record.entityType,record.id]);
+        try { await this.records().insertOne({ ...record, _id:id }, { session }); }
+        catch (error) { if ((error as { code?: number }).code === 11000) throw new Error("APPLICATION_DATA_RECORD_EXISTS"); throw error; }
+        await this.evidence(session,context,"APPLICATION_DATA_CREATED",record);
+        if (key && idempotencyId && requestHash) {
+          try {
+            await this.idempotency().insertOne({_id:idempotencyId,tenantId:context.tenantId,applicationId:context.applicationId,
+              idempotencyKey:key,requestHash,response:record,createdAt:new Date().toISOString()},{session});
+          } catch (error) {
+            if ((error as {code?:number}).code === 11000) throw new Error("APPLICATION_DATA_IDEMPOTENCY_RACE");
+            throw error;
+          }
+        }
+        return record;
+      });
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== "APPLICATION_DATA_IDEMPOTENCY_RACE" || !idempotencyId || !requestHash) throw error;
+      const prior=await this.idempotency().findOne({_id:idempotencyId});
+      if (!prior) throw error;
+      if (prior.requestHash !== requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+      return prior.response as ApplicationDataRecord;
+    }
   }
   async get(c: ApplicationDataContext, e: string, id: string): Promise<ApplicationDataRecord | undefined> {
     const r=await this.records().findOne({ _id:this.key([c.tenantId,c.applicationId,e,id]), ...this.scope(c.tenantId,c.applicationId,e) });
