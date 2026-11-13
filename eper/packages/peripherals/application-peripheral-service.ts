@@ -215,7 +215,7 @@ export class ApplicationPeripheralService {
     });
     // Never fall back to adapter-local policy snapshots: they can be stale and
     // bypass tenant/application inventory. Explicit [] is the only dependency-free declaration.
-    if(ids===undefined)throw new Error("EPER_PERIPHERAL_DEPENDENCY_DECLARATION_REQUIRED");
+    if(!Array.isArray(ids))throw new Error("EPER_PERIPHERAL_DEPENDENCY_DECLARATION_REQUIRED");
     if(ids.length===0)return;
     if(!this.dependencyInventory)throw new Error("EPER_DEPENDENCY_INVENTORY_NOT_CONFIGURED");
     const scope={tenantId:input.tenantId,applicationId:input.applicationId};
