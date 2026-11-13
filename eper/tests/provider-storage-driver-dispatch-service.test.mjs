@@ -10,7 +10,7 @@ const capabilities = {
   idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true,
   renewByProviderReference: true, verifyObject: true, downloadGrant: true, malwareScan: true,
 };
-function fixture({ selection = {}, driver = {}, resolveError = null } = {}) {
+function fixture({ selection = {}, driver = {}, resolveError = null, dependencyInventory = undefined } = {}) {
   const calls = [];
   const adapter = {
     dependencyIds: [],
@@ -37,7 +37,7 @@ function fixture({ selection = {}, driver = {}, resolveError = null } = {}) {
         credentials,
       };
     },
-  }, { async getDependencyInventory() { return []; } });
+  }, dependencyInventory);
   const dispatch = service.dispatch.bind(service);
   service.dispatch = input => dispatch({ actorId: "actor-a", correlationId: "correlation-a", ...input });
   return { service, calls, credentials };
