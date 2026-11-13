@@ -74,6 +74,7 @@ test("legacy in-memory dependency snapshots cannot substitute for persisted depe
   const registry = new PeripheralAdapterRegistry([{
     adapterKey: "vendor.scanner", adapterVersion: "1.0.0",
     kinds: ["barcode_scanner"], adapter,
+    dependencies: [{ policy: { dependencyId: "vendor.scanner.sdk" }, installation: { installedVersion: "1.0.0" } }],
   }]);
   assert.equal(registry.dependencyIds({
     adapterKey: "vendor.scanner", adapterVersion: "1.0.0", kind: "barcode_scanner",
