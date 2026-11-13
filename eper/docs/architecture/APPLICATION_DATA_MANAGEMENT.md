@@ -12,8 +12,9 @@ Provide one platform-owned data service for customer-defined business entities. 
 - Workflow activities bind to a registered entity type and operation. Workflow JSON cannot select a database, collection, table, SQL fragment or arbitrary storage adapter.
 - Workflow data operations require an explicit authorization callback. API and product-admin entry points must apply the same tenant/application and role policy before calling the service.
 - Payment, inventory reservation and other financially sensitive state changes remain behind their dedicated governed domain services. Generic record CRUD must not become a way to bypass those invariants.
-- PostgreSQL writes place the record mutation, integrity-hashed audit evidence and outbox event in one transaction.
-- MongoDB writes use a session transaction and persist audit/outbox evidence in the same transaction. MongoDB must run on a replica set or sharded cluster with transaction support; otherwise the adapter fails closed.
+- PostgreSQL writes place the record mutation, integrity-hashed audit evidence, outbox event and optional create-idempotency response in one transaction.
+- A caller-supplied idempotency key is scoped to tenant and application. Replaying the same create request returns the original result; reusing the key for a different semantic request is rejected. Generated timestamps and tracing metadata do not change the request fingerprint.
+- MongoDB writes use a session transaction and persist audit/outbox evidence in the same transaction; create-idempotency responses are stored in that same session transaction. MongoDB must run on a replica set or sharded cluster with transaction support; otherwise the adapter fails closed.
 - JSON-file storage is for local development, fixtures and import/export only. It is not safe for multiple processes, distributed workers or production customer transactions.
 
 ## Adapter contract
@@ -35,6 +36,6 @@ This is a shared platform capability extension to authoritative records, validat
 1. The workflow activity is a reusable service boundary; it still needs to be wired into the published workflow capability catalogue and runtime executor.
 2. A governed model-authoring API/UI and a policy-backed model-registration permission are not yet included.
 3. Relationship declarations are stored and validated structurally; referential integrity and cross-entity cascade semantics are not yet implemented.
-4. Automatic schema migration, idempotency-key replay, soft-delete retention policy, backup/restore procedures and adapter conformance tests against live PostgreSQL/MongoDB instances remain follow-up gates.
+4. Automatic schema migration, idempotency for update/delete operations, soft-delete retention policy, backup/restore procedures and adapter conformance tests against live PostgreSQL/MongoDB instances remain follow-up gates.
 5. The JSON adapter is intentionally not a concurrency-safe production backend.
 6. This PR must not claim production readiness until build, unit tests, migration tests, tenant/application isolation tests, adapter conformance and end-to-end workflow tests pass in the repository CI environment.
