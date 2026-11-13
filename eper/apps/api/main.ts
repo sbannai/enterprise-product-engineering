@@ -31,6 +31,7 @@ import { ProviderConnectionValidationService } from "../../packages/integrations
 import { SyntheticProviderSecretResolver, SyntheticProviderValidationAdapterRegistry } from "../../packages/integrations/synthetic-provider-validation-adapters.js";
 import { PostgresProviderCatalogueRepository } from "../../packages/integrations/postgres-provider-catalogue-repository.js";
 import { readProviderRuntimeDeploymentPolicy } from "../../packages/integrations/provider-runtime-deployment-policy.js";
+import { PostgresDependencyInventoryRepository } from "../../packages/dependencies/postgres-dependency-inventory-repository.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
 import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
 import { PostgresApplicationAddonEntitlementReader } from "../../packages/addon-entitlements/postgres-application-addon-entitlement-reader.js";
@@ -544,6 +545,11 @@ const platformAdminCredentialStore = platformAdminCredentialsEnabled && platform
   : undefined;
 if (platformAdminCredentialStore) await platformAdminCredentialStore.assertReady();
 
+const dependencyInventory = peripheralApiEnabled && paymentPool
+  ? new PostgresDependencyInventoryRepository(paymentPool, process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
+  : undefined;
+if (dependencyInventory) await dependencyInventory.assertReady();
+
 const peripheralRepository = peripheralApiEnabled && paymentPool
   ? new PostgresPeripheralRepository(paymentPool)
   : undefined;
@@ -563,8 +569,10 @@ const peripheralService = peripheralApiEnabled && paymentPool && peripheralRepos
         adapterVersion: "1.0.0",
         kinds: ["barcode_scanner", "qr_reader", "sensor", "rfid_nfc", "printer", "weighing_scale", "custom"],
         adapter: new SyntheticPeripheralAdapter(),
+        dependencyIds: [],
       }]),
       peripheralRoleAuthorizer,
+      dependencyInventory,
     )
   : undefined;
 if (peripheralRepository) await peripheralRepository.assertReady();
