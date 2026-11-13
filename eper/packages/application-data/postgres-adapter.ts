@@ -36,7 +36,7 @@ export class PostgresApplicationDataAdapter implements ApplicationDataAdapter {
   async putModel(model: ApplicationDataModel): Promise<void> {
     await withTenantTransaction(this.pool, model.tenantId, async ({ client }) => {
       await client.query("SELECT set_config('eper.application_id',$1,true)",[model.applicationId]);
-      await client.query("INSERT INTO eper_application_data_models(tenant_id,application_id,entity_type,version,status,fields,relationships) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb) ON CONFLICT(tenant_id,application_id,entity_type,version) DO UPDATE SET status=EXCLUDED.status,fields=EXCLUDED.fields,relationships=EXCLUDED.relationships", [model.tenantId,model.applicationId,model.entityType,model.version,model.status,JSON.stringify(model.fields),JSON.stringify(model.relationships ?? [])]);
+      await client.query("INSERT INTO eper_application_data_models(tenant_id,application_id,entity_type,version,status,fields,relationships) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb)", [model.tenantId,model.applicationId,model.entityType,model.version,model.status,JSON.stringify(model.fields),JSON.stringify(model.relationships ?? [])]);
     });
   }
   private async evidence(client: import("pg").PoolClient, context: ApplicationDataContext, action: string, record: ApplicationDataRecord): Promise<void> {
