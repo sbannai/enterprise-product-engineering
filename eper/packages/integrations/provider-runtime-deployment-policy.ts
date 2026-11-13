@@ -1,4 +1,4 @@
-import { lstatSync, readFileSync } from "node:fs";
+import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import {
   readProviderStorageRuntimeConfiguration,
@@ -48,15 +48,21 @@ function readDeploymentConfigText(env: Record<string, string | undefined>): stri
     if (inline !== undefined || !isAbsolute(filePath)) {
       throw new ProviderRuntimeDeploymentPolicyError("PROVIDER_RUNTIME_CONFIG_SOURCE_INVALID");
     }
+    let descriptor: number | undefined;
     try {
-      const metadata = lstatSync(filePath);
-      if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size < 2 ||
+      // Open the exact file without following a final-component symlink, then
+      // validate and read through the same descriptor to avoid lstat/read TOCTOU.
+      descriptor = openSync(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+      const metadata = fstatSync(descriptor);
+      if (!metadata.isFile() || metadata.size < 2 ||
           metadata.size > 65_536 || (metadata.mode & 0o022) !== 0) {
         throw new Error("unsafe config file");
       }
-      return readFileSync(filePath, "utf8");
+      return readFileSync(descriptor, "utf8");
     } catch {
       throw new ProviderRuntimeDeploymentPolicyError("PROVIDER_RUNTIME_CONFIG_SOURCE_INVALID");
+    } finally {
+      if (descriptor !== undefined) closeSync(descriptor);
     }
   }
   if (env.NODE_ENV === "production" || env.EPER_ENVIRONMENT === "production" ||
