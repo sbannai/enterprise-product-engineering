@@ -73,6 +73,15 @@ export class JsonFileApplicationDataAdapter implements ApplicationDataAdapter {
   async delete(c: ApplicationDataContext, e: string, id: string, expected: number): Promise<void> {
     const db = await this.read(); const i = db.records.findIndex(x => x.tenantId === c.tenantId && x.applicationId === c.applicationId && x.entityType === e && x.id === id);
     if (i < 0) throw new Error("APPLICATION_DATA_RECORD_NOT_FOUND"); if (db.records[i].version !== expected) throw new Error("APPLICATION_DATA_VERSION_CONFLICT");
+    for (const model of db.models.filter(m => m.tenantId === c.tenantId && m.applicationId === c.applicationId && (m.status === "ACTIVE" || m.status === "RETIRED"))) {
+      for (const relation of model.relationships ?? []) {
+        if (relation.targetEntity !== e) continue;
+        const referenced = db.records.some(record => record.tenantId === c.tenantId && record.applicationId === c.applicationId &&
+          record.entityType === model.entityType && (relation.cardinality === "one" ? record.data[relation.field] === id :
+            Array.isArray(record.data[relation.field]) && (record.data[relation.field] as unknown[]).includes(id)));
+        if (referenced) throw new Error("APPLICATION_DATA_RECORD_REFERENCED");
+      }
+    }
     db.records.splice(i, 1); await this.write(db);
   }
   async query(c: ApplicationDataContext, e: string, q: ApplicationDataQuery): Promise<ApplicationDataRecord[]> {
