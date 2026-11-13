@@ -226,6 +226,30 @@ test("persisted vendor cutoff blocks activation before ACTIVE persistence and ha
   assert.equal(calls.some(call=>call[0]==="connect"),false);
 });
 
+test("user-scoped dependency installation takes precedence over application default", async () => {
+  const dependencyId="vendor.scanner.sdk";
+  const policy={
+    dependencyId,vendor:"Vendor",componentKind:"sdk",supportedVersions:{minimum:"1.0.0"},
+    supportState:"supported",mandatoryUpdate:false,downgradePolicy:"allowed",
+    notice:{verification:"not_provided",source:null,reference:null,recordedAt:null},
+    policyStatus:"active",version:1,
+  };
+  const rows=[
+    {dependencyId,installationId:"app",scopeType:"application",scopeId:"app-a",
+      installedVersion:"1.2.0",operatingSystem:"Linux",runtime:"node",installationStatus:"observed",version:1},
+    {dependencyId,installationId:"user",scopeType:"user",scopeId:"operator-1",
+      installedVersion:"0.8.0",operatingSystem:"Linux",runtime:"node",installationStatus:"observed",version:1},
+  ];
+  const inventory={async get(){return policy;},async listInstallations(){return rows;}};
+  const {service,calls}=fixture({dependencyIds:[dependencyId],dependencyInventory:inventory});
+  await assert.rejects(
+    service.activate({...scope,userId:"operator-1",peripheralId:"peripheral-1",expectedVersion:7}),
+    /DEPENDENCY_VERSION_INVALID|EPER_PERIPHERAL_DEPENDENCY_BLOCKED/,
+  );
+  assert.equal(calls.some(call=>call[0]==="transition"),false);
+  assert.equal(calls.some(call=>call[0]==="connect"),false);
+});
+
 test("persisted dependency activation fails closed for ambiguous installation scope", async () => {
   const policy = {
     dependencyId:"vendor.scanner.sdk",vendor:"Vendor",componentKind:"sdk",
