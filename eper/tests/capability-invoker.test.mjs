@@ -35,7 +35,7 @@ test("blocked dependency prevents capability handler invocation", async () => {
   ]));
   let called = false;
   await assert.rejects(() => invoker.invoke(invocation, async () => { called = true; }),
-    /CAPABILITY_DEPENDENCY_BLOCKED:vendor.sdk:unsupported_dependency/);
+    /CAPABILITY_DEPENDENCY_BLOCKED:vendor.sdk:upgrade_required/);
   assert.equal(called, false);
 });
 
