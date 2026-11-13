@@ -62,11 +62,11 @@ export class ApplicationDataService {
   constructor(private readonly adapter: ApplicationDataAdapter) {}
   async registerModel(model: ApplicationDataModel): Promise<void> {
     validateModel(model);
-    if (model.status === "ACTIVE") {
-      const current = await this.adapter.getModel(model.tenantId, model.applicationId, model.entityType);
-      if (current && model.version !== current.version + 1) {
-        throw new Error("APPLICATION_DATA_SCHEMA_VERSION_CONFLICT");
-      }
+    const existingVersion = await this.adapter.getModel(model.tenantId, model.applicationId, model.entityType, model.version);
+    if (existingVersion) throw new Error("APPLICATION_DATA_SCHEMA_VERSION_IMMUTABLE");
+    const current = await this.adapter.getModel(model.tenantId, model.applicationId, model.entityType);
+    if (current && model.version !== current.version + 1) {
+      throw new Error("APPLICATION_DATA_SCHEMA_VERSION_CONFLICT");
     }
     await this.adapter.putModel(clone(model));
   }
