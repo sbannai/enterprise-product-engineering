@@ -43,6 +43,13 @@ export interface ProviderInternalObjectReadRequest {
   expectedSha256: string;
 }
 
+export interface ProviderInternalObjectReadRequest {
+  assetId: string;
+  providerObjectReference: string;
+  expectedSizeBytes: number;
+  expectedSha256: string;
+}
+
 export interface ProviderMalwareScanRequest {
   assetId: string;
   providerObjectReference: string;
@@ -130,6 +137,7 @@ export function assertProviderStorageDriver<TCredentials>(
     ["verifyObject", driver.capabilities.verifyObject],
     ["createDownloadGrant", driver.capabilities.downloadGrant],
     ["scanObject", driver.capabilities.malwareScan],
+    ["readObjectInternal", driver.capabilities.internalObjectRead === true],
     ["readObjectInternal", driver.capabilities.internalObjectRead === true],
   ];
   if (typeof driver.createUploadGrant !== "function" ||
