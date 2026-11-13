@@ -16,7 +16,7 @@ const configuration = {
   adapterKey: "synthetic.local", adapterVersion: "1.0.0", settings: { mode: "test" },
 };
 
-function fixture({ connect = async () => {}, disconnect = async () => {}, noRegistration = false, noConfiguration = false, failDegradedPersist = false, initialStatus = "CONFIGURED", initialVersion = 7, authorize = async () => {} } = {}) {
+function fixture({ connect = async () => {}, disconnect = async () => {}, noRegistration = false, noConfiguration = false, failDegradedPersist = false, initialStatus = "CONFIGURED", initialVersion = 7, authorize = async () => {}, dependencyError = null } = {}) {
   const calls = [];
   let current = registration({ status: initialStatus, version: initialVersion });
   const config = configuration;
@@ -50,6 +50,10 @@ function fixture({ connect = async () => {}, disconnect = async () => {}, noRegi
         throw new Error("wrong adapter");
       }
       return adapter;
+    },
+    assertDependenciesCompatible(input) {
+      calls.push(["dependencyCheck", input]);
+      if (dependencyError) throw dependencyError;
     },
   };
   const capabilities = {
@@ -177,4 +181,19 @@ test("missing registration and missing configuration fail closed without adapter
     /EPER_PERIPHERAL_CONFIGURATION_REQUIRED/,
   );
   assert.equal(missingConfiguration.calls.some(call => call[0] === "resolve"), false);
+});
+
+
+test("vendor dependency policy is checked before ACTIVE persistence and adapter connection", async () => {
+  const { service, calls } = fixture({
+    dependencyError: new Error("EPER_PERIPHERAL_DEPENDENCY_BLOCKED:vendor.scanner.sdk:blocked_at_cutoff"),
+  });
+  await assert.rejects(
+    service.activate({ ...scope, peripheralId: "peripheral-1", expectedVersion: 7 }),
+    /EPER_PERIPHERAL_DEPENDENCY_BLOCKED:vendor.scanner.sdk:blocked_at_cutoff/,
+  );
+  const dependencyCheck = calls.findIndex(call => call[0] === "dependencyCheck");
+  assert.ok(dependencyCheck >= 0);
+  assert.equal(calls.some(call => call[0] === "transition"), false);
+  assert.equal(calls.some(call => call[0] === "connect"), false);
 });
