@@ -57,6 +57,9 @@ test("relationships must resolve to records in the same tenant and application",
   await assert.rejects(()=>service.create(context,"Order","order-missing",{customerId:"customer-404",total:10,status:"NEW"}),/RELATIONSHIP_TARGET_NOT_FOUND/);
   await service.create(context,"Customer","customer-01",{name:"A"});
   await service.create(context,"Order","order-linked",{customerId:"customer-01",total:10,status:"NEW"});
+  await assert.rejects(()=>service.delete(context,"Customer","customer-01",1),/APPLICATION_DATA_RECORD_REFERENCED/);
+  await service.delete(context,"Order","order-linked",1);
+  await service.delete(context,"Customer","customer-01",1);
   await assert.rejects(()=>service.get({...context,applicationId:"app-b"},"Order","order-linked"),/MODEL_NOT_ACTIVE/);
 });
 
