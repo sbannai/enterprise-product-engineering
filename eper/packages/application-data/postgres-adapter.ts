@@ -2,6 +2,7 @@ import { randomUUID, createHash } from "node:crypto";
 import type { Pool } from "pg";
 import { withTenantTransaction, enqueueOutboxEvent } from "../capabilities/postgres-transaction.js";
 import type { ApplicationDataAdapter, ApplicationDataContext, ApplicationDataModel, ApplicationDataQuery, ApplicationDataRecord } from "./contracts.js";
+import { applicationDataCreateHash } from "./idempotency.js";
 
 type Row = Record<string, unknown>;
 function json<T>(value: unknown): T { return (typeof value === "string" ? JSON.parse(value) : value) as T; }
@@ -68,8 +69,24 @@ export class PostgresApplicationDataAdapter implements ApplicationDataAdapter {
   }
   async create(record: ApplicationDataRecord, context: ApplicationDataContext): Promise<ApplicationDataRecord> {
     return this.scope(context, async client => {
+      const key = context.idempotencyKey;
+      const requestHash = key ? applicationDataCreateHash(record) : undefined;
+      if (key && requestHash) {
+        // Serialize the same key across processes; the idempotency row is committed with the business write.
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`application-data:${context.tenantId}:${context.applicationId}:${key}`]);
+        const replay = await client.query<Row>("SELECT request_hash,response FROM eper_application_data_idempotency WHERE tenant_id=$1 AND application_id=$2 AND idempotency_key=$3", [context.tenantId,context.applicationId,key]);
+        if (replay.rows[0]) {
+          if (String(replay.rows[0].request_hash) !== requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+          return json<ApplicationDataRecord>(replay.rows[0].response);
+        }
+      }
       const result = await client.query<Row>("INSERT INTO eper_application_data_records(tenant_id,application_id,entity_type,record_id,schema_version,version,state,data) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb) RETURNING *", [record.tenantId,record.applicationId,record.entityType,record.id,record.schemaVersion,record.version,record.state,JSON.stringify(record.data)]);
-      const saved = mapRecord(result.rows[0]); await this.evidence(client,context,"APPLICATION_DATA_CREATED",saved); return saved;
+      const saved = mapRecord(result.rows[0]);
+      await this.evidence(client,context,"APPLICATION_DATA_CREATED",saved);
+      if (key && requestHash) {
+        await client.query("INSERT INTO eper_application_data_idempotency(tenant_id,application_id,idempotency_key,request_hash,response) VALUES($1,$2,$3,$4,$5::jsonb)", [context.tenantId,context.applicationId,key,requestHash,JSON.stringify(saved)]);
+      }
+      return saved;
     });
   }
   async get(c: ApplicationDataContext, e: string, id: string): Promise<ApplicationDataRecord | undefined> {
