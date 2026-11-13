@@ -33,6 +33,16 @@ export class JsonFileApplicationDataAdapter implements ApplicationDataAdapter {
     const db = await this.read(); if (db.models.some(m => m.tenantId === model.tenantId && m.applicationId === model.applicationId && m.entityType === model.entityType && m.version === model.version)) throw new Error("APPLICATION_DATA_SCHEMA_VERSION_IMMUTABLE");
     db.models.push(model); await this.write(db);
   }
+  async transitionModelStatus(t: string, a: string, e: string, v: number, from: ApplicationDataModel["status"], to: ApplicationDataModel["status"]): Promise<void> {
+    if (!((from === "DRAFT" && to === "ACTIVE") || (from === "ACTIVE" && to === "RETIRED"))) {
+      throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_INVALID");
+    }
+    const db = await this.read();
+    const model = db.models.find(m => m.tenantId === t && m.applicationId === a && m.entityType === e && m.version === v);
+    if (!model || model.status !== from) throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_CONFLICT");
+    model.status = to;
+    await this.write(db);
+  }
   async create(record: ApplicationDataRecord): Promise<ApplicationDataRecord> {
     const db = await this.read(); if (db.records.some(r => r.tenantId === record.tenantId && r.applicationId === record.applicationId && r.entityType === record.entityType && r.id === record.id)) throw new Error("APPLICATION_DATA_RECORD_EXISTS");
     db.records.push(record); await this.write(db); return record;
