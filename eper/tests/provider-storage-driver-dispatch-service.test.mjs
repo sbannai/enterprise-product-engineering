@@ -13,6 +13,7 @@ const capabilities = {
 function fixture({ selection = {}, driver = {}, resolveError = null } = {}) {
   const calls = [];
   const adapter = {
+    dependencyIds: [],
     capabilities,
     async createUploadGrant(context, request, requestId) { calls.push(["create", context, request, requestId]); return { kind: "unknown", reason: "transport" }; },
     async lookupUpload(context, id, requestId) { calls.push(["lookup", context, id, requestId]); return { kind: "not_found" }; },
@@ -36,7 +37,9 @@ function fixture({ selection = {}, driver = {}, resolveError = null } = {}) {
         credentials,
       };
     },
-  });
+  }, { async getDependencyInventory() { return []; } });
+  const dispatch = service.dispatch.bind(service);
+  service.dispatch = input => dispatch({ actorId: "actor-a", correlationId: "correlation-a", ...input });
   return { service, calls, credentials };
 }
 
@@ -252,6 +255,7 @@ test("does not invoke the provider when cancellation occurs during credential re
   let driverInvoked = false;
   const resolution = new Promise(resolve => { releaseResolution = resolve; });
   const adapter = {
+    dependencyIds: [],
     capabilities,
     async createUploadGrant() { driverInvoked = true; return { kind: "unknown", reason: "transport" }; },
     async lookupUpload() { driverInvoked = true; return { kind: "not_found" }; },
@@ -272,7 +276,9 @@ test("does not invoke the provider when cancellation occurs during credential re
         credentials: { token: "test-only" },
       };
     },
-  });
+  }, { async getDependencyInventory() { return []; } });
+  const dispatch = service.dispatch.bind(service);
+  service.dispatch = input => dispatch({ actorId: "actor-a", correlationId: "correlation-a", ...input });
   const controller = new AbortController();
   const pending = service.dispatch({
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-during-resolution",
