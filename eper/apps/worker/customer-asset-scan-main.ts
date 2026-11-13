@@ -3,7 +3,8 @@ import { pathToFileURL } from "node:url";
 import { createPostgresPaymentPool } from "../../packages/payments/postgres-payment-runtime.js";
 import { assertAuditStoreReady } from "../../packages/audit/audit-event-store.js";
 import { PostgresCustomerAssetRepository } from "../../packages/assets/postgres-customer-asset-repository.js";
-import { runCustomerAssetScanWorker, type CustomerAssetScanner } from "../../packages/assets/customer-asset-scan-worker.js";
+import { runCustomerAssetScanWorker } from "../../packages/assets/customer-asset-scan-worker.js";
+import { runTrustedCustomerAssetScanChild } from "../../packages/assets/customer-asset-scan-child-launcher.js";
 import type { AuditEnvironment } from "../../packages/audit/audit-event-store.js";
 
 function required(name: string): string {
@@ -18,16 +19,6 @@ function boundedInteger(name: string, fallback: number, minimum: number, maximum
   const value = Number(raw);
   if (!Number.isSafeInteger(value) || value < minimum || value > maximum) throw new Error(name + "_OUT_OF_RANGE");
   return value;
-}
-function resolveScannerPath(value: string): string {
-  const root = resolve(process.cwd(), "dist/packages/assets/scanners");
-  const candidate = resolve(process.cwd(), value);
-  const rel = relative(root, candidate);
-  if (!value.startsWith("./dist/packages/assets/scanners/") ||
-      !rel || rel === ".." || rel.startsWith(".." + sep) || !candidate.endsWith(".js")) {
-    throw new Error("CUSTOMER_ASSET_SCANNER_MODULE_PATH_INVALID");
-  }
-  return candidate;
 }
 
 if (process.env.EPER_CUSTOMER_ASSET_SCAN_WORKER_ENABLED !== "true") {
@@ -45,12 +36,8 @@ if (!workerId.startsWith(scannerServiceId + ":") || workerId.length > 128) {
 }
 const tenantId = required("EPER_CUSTOMER_ASSET_SCAN_TENANT_ID");
 const applicationId = required("EPER_CUSTOMER_ASSET_SCAN_APPLICATION_ID");
-const scannerModulePath = resolveScannerPath(required("EPER_CUSTOMER_ASSET_SCANNER_MODULE"));
 const environment = (process.env.EPER_AUDIT_ENVIRONMENT ?? "sandbox") as AuditEnvironment;
 if (!["production", "uat", "sandbox"].includes(environment)) throw new Error("EPER_AUDIT_ENVIRONMENT_INVALID");
-if (environment === "production" || process.env.EPER_ENVIRONMENT === "production") {
-  throw new Error("CUSTOMER_ASSET_SCAN_CHILD_PROCESS_ISOLATION_REQUIRED");
-}
 
 const controller = new AbortController();
 let shuttingDown = false;
@@ -71,18 +58,24 @@ try {
   const repository = new PostgresCustomerAssetRepository(pool);
   await repository.assertReady();
   await assertAuditStoreReady(pool);
-  const module = await import(pathToFileURL(scannerModulePath).href) as {
-    createCustomerAssetScanner?: (context: { pool: typeof pool; env: NodeJS.ProcessEnv }) =>
-      Promise<CustomerAssetScanner> | CustomerAssetScanner;
+  const childConfiguration = {
+    workloadApiSocket: required("EPER_SCANNER_CHILD_SPIFFE_WORKLOAD_API_SOCKET"),
+    expectedSpiffeId: required("EPER_SCANNER_CHILD_EXPECTED_SPIFFE_ID"),
+    audience: required("EPER_SCANNER_CHILD_SPIFFE_AUDIENCE"),
+    databaseHost: required("EPER_SCANNER_CHILD_PGHOST"),
+    databasePort: boundedInteger("EPER_SCANNER_CHILD_PGPORT", 5432, 1, 65535),
+    databaseName: required("EPER_SCANNER_CHILD_PGDATABASE"),
+    databaseUser: required("EPER_SCANNER_CHILD_PGUSER"),
+    databaseCaFile: required("EPER_SCANNER_CHILD_PGSSLROOTCERT"),
+    databaseClientCertificateFile: required("EPER_SCANNER_CHILD_PGSSLCERT"),
+    databaseClientKeyFile: required("EPER_SCANNER_CHILD_PGSSLKEY"),
+    compositionModulePath: required("EPER_CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_MODULE"),
   };
-  if (typeof module.createCustomerAssetScanner !== "function") {
-    throw new Error("CUSTOMER_ASSET_SCANNER_FACTORY_REQUIRED");
-  }
-  const scanner = await module.createCustomerAssetScanner({ pool, env: process.env });
-  if (!scanner || typeof scanner.scan !== "function") throw new Error("CUSTOMER_ASSET_SCANNER_CONTRACT_INVALID");
   console.log("EPER customer asset scan worker started");
   await runCustomerAssetScanWorker({
-    repository, scanner, tenantId, applicationId, workerId, scannerServiceId, environment,
+    repository, childRunner: (start, signal, timeoutMs) => runTrustedCustomerAssetScanChild({
+      start, signal, timeoutMs, configuration: childConfiguration,
+    }), tenantId, applicationId, workerId, scannerServiceId, environment,
     signal: controller.signal,
     pollIntervalMs: boundedInteger("EPER_CUSTOMER_ASSET_SCAN_POLL_INTERVAL_MS", 1_000, 100, 60_000),
     leaseMs: boundedInteger("EPER_CUSTOMER_ASSET_SCAN_LEASE_MS", 60_000, 5_000, 900_000),
