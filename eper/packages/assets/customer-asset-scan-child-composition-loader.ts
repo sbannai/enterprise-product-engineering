@@ -22,7 +22,7 @@ export async function assertTrustedCustomerAssetScanCompositionModule(value: str
     let current = root;
     while (true) {
       const directory = await lstat(current);
-      if (!directory.isDirectory() || directory.isSymbolicLink() || (directory.mode & 0o022) !== 0 ||
+      if (!directory.isDirectory() || directory.isSymbolicLink() || ((directory.mode & 0o020) !== 0 || ((directory.mode & 0o002) !== 0 && (directory.mode & 0o1000) === 0)) ||
           await realpath(current) !== current) {
         throw new Error("unsafe composition directory");
       }
