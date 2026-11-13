@@ -30,7 +30,7 @@ import { PostgresProviderValidationStore } from "../../packages/integrations/pos
 import { ProviderConnectionValidationService } from "../../packages/integrations/provider-connection-validation-service.js";
 import { SyntheticProviderSecretResolver, SyntheticProviderValidationAdapterRegistry } from "../../packages/integrations/synthetic-provider-validation-adapters.js";
 import { PostgresProviderCatalogueRepository } from "../../packages/integrations/postgres-provider-catalogue-repository.js";
-import { readProviderStorageRuntimeConfiguration } from "../../packages/integrations/provider-storage-runtime-configuration.js";
+import { readProviderRuntimeDeploymentPolicy } from "../../packages/integrations/provider-runtime-deployment-policy.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
 import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
 import { PostgresApplicationAddonEntitlementReader } from "../../packages/addon-entitlements/postgres-application-addon-entitlement-reader.js";
@@ -83,7 +83,7 @@ if (peripheralApiEnabled && (customerIdentityPersistenceMode !== "postgres" ||
   throw new Error("PERIPHERAL_API_REQUIRES_POSTGRES_IDENTITY_ASSIGNMENTS_AND_DURABLE_AUDIT");
 }
 const customerAssetPersistenceApiEnabled = customerAssetUploadApiEnabled || customerAssetMetadataApiEnabled;
-const providerStorageRuntimeConfiguration = readProviderStorageRuntimeConfiguration(process.env);
+const providerStorageRuntimeConfiguration = readProviderRuntimeDeploymentPolicy(process.env);
 if (providerStorageRuntimeConfiguration.enabled) {
   // Runtime contracts are implemented, but no approved real provider drivers or secret-manager adapter are wired into this entrypoint yet.
   throw new Error("PROVIDER_STORAGE_RUNTIME_EXECUTION_NOT_COMPOSED");
