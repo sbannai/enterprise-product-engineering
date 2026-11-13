@@ -47,7 +47,7 @@ CREATE POLICY eper_application_data_records_tenant_policy ON eper_application_da
   WITH CHECK (tenant_id = current_setting('eper.tenant_id', true)
      AND application_id = current_setting('eper.application_id', true));
 
--- Create-operation idempotency responses are committed with the record, audit evidence and outbox event.
+-- Mutation idempotency responses are committed with the record change, audit evidence and outbox event.
 CREATE TABLE IF NOT EXISTS eper_application_data_idempotency (
   tenant_id text NOT NULL,
   application_id text NOT NULL,
