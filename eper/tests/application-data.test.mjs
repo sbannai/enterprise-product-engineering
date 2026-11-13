@@ -40,3 +40,14 @@ test("model versions cannot be overwritten in place", async t => {\n  const serv
   const service=await fixture(t); await service.create(context,"Order","order-01",{customerId:"c1",total:12,status:"NEW"});
   assert.ok((await service.query(context,"Order",{limit:10})).length===1);
 });
+
+test("relationships must resolve to records in the same tenant and application", async t => {
+  const service=await fixture(t);
+  await service.registerModel({tenantId:"tenant-a",applicationId:"app-a",entityType:"Customer",version:1,status:"ACTIVE",
+    fields:[{id:"name",type:"string",required:true}]});
+  await service.registerModel({...model,version:2,relationships:[{field:"customerId",targetEntity:"Customer",cardinality:"one"}]});
+  await assert.rejects(()=>service.create(context,"Order","order-missing",{customerId:"customer-404",total:10,status:"NEW"}),/RELATIONSHIP_TARGET_NOT_FOUND/);
+  await service.create(context,"Customer","customer-01",{name:"A"});
+  await service.create(context,"Order","order-linked",{customerId:"customer-01",total:10,status:"NEW"});
+  await assert.rejects(()=>service.get({...context,applicationId:"app-b"},"Order","order-linked"),/MODEL_NOT_ACTIVE/);
+});
