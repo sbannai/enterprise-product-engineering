@@ -59,7 +59,8 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
   async putModel(model: ApplicationDataModel): Promise<void> {
     await this.transaction(async session => {
       const id=this.key([model.tenantId,model.applicationId,model.entityType,String(model.version)]);
-      await this.models().replaceOne({ _id:id }, { ...model, _id:id }, { upsert:true, session });
+      try { await this.models().insertOne({ ...model, _id:id }, { session }); }
+      catch (error) { if ((error as { code?: number }).code === 11000) throw new Error("APPLICATION_DATA_SCHEMA_VERSION_IMMUTABLE"); throw error; }
     });
   }
   async create(record: ApplicationDataRecord, context: ApplicationDataContext): Promise<ApplicationDataRecord> {
