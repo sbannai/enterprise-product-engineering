@@ -8,7 +8,7 @@ import {
 const selection = {
   tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "storage.upload.grant",
   connectionId: "connection-a", providerKey: "storage-provider", connectionVersion: 4,
-  policy: { maxBytes: 1024 }, policySource: "APPLICATION_OVERRIDE", tenantDefaultVersion: 2,
+  policy: { maxBytes: 1024, endpoint: "https://objects.example.com", tlsMode: "verify-full" }, policySource: "APPLICATION_OVERRIDE", tenantDefaultVersion: 2,
 };
 const definition = (overrides = {}) => ({
   providerKey: "storage-provider", displayName: "Storage", adapterKey: "storage.local",
@@ -90,11 +90,12 @@ test("enforces deployment provider, adapter, endpoint and TLS allowlists before 
     [{ allowedProviderKeys: ["other-provider"] }, "PROVIDER_RUNTIME_PROVIDER_NOT_ALLOWED"],
     [{ adapters: [{ ...policy.adapters[0], adapterVersion: "2.0.0" }] }, "PROVIDER_RUNTIME_ADAPTER_NOT_ALLOWED"],
     [{ allowedHosts: ["safe.example.com"] }, "PROVIDER_RUNTIME_ENDPOINT_NOT_ALLOWED"],
+    [{}, "PROVIDER_RUNTIME_ENDPOINT_TLS_REQUIRED"],
   ];
   for (const [override, code] of cases) {
     const calls = [];
     const f = new ProviderRuntimeResolutionService(
-      { async resolve() { return { ...selection, policy: { endpoint: "https://objects.example.com" } }; } },
+      { async resolve() { return { ...selection, policy: { endpoint: "https://objects.example.com", tlsMode: "verify-full" } }; } },
       { async get() { return definition(); } },
       { resolve(input) { calls.push(input); return {}; } },
       { ...policy, ...override },
