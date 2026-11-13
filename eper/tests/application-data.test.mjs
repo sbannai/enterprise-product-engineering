@@ -51,3 +51,10 @@ test("relationships must resolve to records in the same tenant and application",
   await service.create(context,"Order","order-linked",{customerId:"customer-01",total:10,status:"NEW"});
   await assert.rejects(()=>service.get({...context,applicationId:"app-b"},"Order","order-linked"),/MODEL_NOT_ACTIVE/);
 });
+
+test("draft schema versions do not displace the active transaction schema", async t => {
+  const service=await fixture(t);
+  await service.registerModel({...model,version:2,status:"DRAFT",fields:[...model.fields,{id:"notes",type:"string"}]});
+  const saved=await service.create(context,"Order","order-draft-safe",{customerId:"c1",total:8,status:"NEW"});
+  assert.equal(saved.schemaVersion,1);
+});
