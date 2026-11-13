@@ -182,7 +182,7 @@ test("missing registration and missing configuration fail closed without adapter
 
 
 test("activation fails closed when adapter dependency declaration is absent", async () => {
-  const { service, calls } = fixture({ dependencyIds: undefined });
+  const { service, calls } = fixture({ dependencyIds: null });
   await assert.rejects(
     service.activate({ ...scope, peripheralId: "peripheral-1", expectedVersion: 7 }),
     /EPER_PERIPHERAL_DEPENDENCY_DECLARATION_REQUIRED/,
