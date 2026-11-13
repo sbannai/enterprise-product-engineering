@@ -74,6 +74,7 @@ test("production rejects synthetic storage drivers", () => {
   assert.throws(
     () => createProviderStorageRuntimeComposition(input({
       environment: "production",
+      deploymentPolicy: { ...input().deploymentPolicy, environment: "production" },
       registrations: [{ ...input().registrations[0], synthetic: true }],
     })),
     error => error instanceof ProviderStorageRuntimeCompositionError &&
