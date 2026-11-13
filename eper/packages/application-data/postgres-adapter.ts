@@ -50,6 +50,10 @@ export class PostgresApplicationDataAdapter implements ApplicationDataAdapter {
     if (!((from==="DRAFT"&&to==="ACTIVE")||(from==="ACTIVE"&&to==="RETIRED"))) throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_INVALID");
     await withTenantTransaction(this.pool,t,async({client})=>{
       await client.query("SELECT set_config('eper.application_id',$1,true)",[a]);
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`${t}:${a}:${e}:schema-activation`]);
+      if (to === "ACTIVE") {
+        await client.query("UPDATE eper_application_data_models SET status='RETIRED',updated_at=now() WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND status='ACTIVE'", [t,a,e]);
+      }
       const result=await client.query("UPDATE eper_application_data_models SET status=$6,updated_at=now() WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND version=$4 AND status=$5",[t,a,e,v,from,to]);
       if (!result.rowCount) throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_CONFLICT");
     });
