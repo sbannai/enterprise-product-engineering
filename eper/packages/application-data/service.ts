@@ -110,9 +110,16 @@ export class ApplicationDataService {
     }
   }
   async create(context: ApplicationDataContext, entityType: string, id: string, data: Record<string, unknown>): Promise<ApplicationDataRecord> {
-    const model = await this.activeModel(context, entityType); validId(id, "APPLICATION_DATA_RECORD_ID_INVALID");
+    this.validateContext(context);
+    validId(entityType, "APPLICATION_DATA_ENTITY_INVALID");
+    validId(id, "APPLICATION_DATA_RECORD_ID_INVALID");
     validateApplicationDataIdempotencyKey(context.idempotencyKey);
-    const validated = validateData(model.fields, data); await this.validateRelationships(context, model, validated);
+    if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("APPLICATION_DATA_PAYLOAD_INVALID");
+    const requestData=clone(data);
+    const replay=await this.adapter.getIdempotentCreate(context,entityType,id,requestData);
+    if (replay) return clone(replay);
+    const model = await this.activeModel(context, entityType);
+    const validated = validateData(model.fields, requestData); await this.validateRelationships(context, model, validated);
     const now = new Date().toISOString();
     return this.adapter.create({ tenantId: context.tenantId, applicationId: context.applicationId, entityType,
       id, schemaVersion: model.version, version: 1, state: "ACTIVE", data: validated, createdAt: now, updatedAt: now }, context, model.relationships);
