@@ -49,7 +49,7 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
   }
   async getModel(t: string, a: string, e: string, v?: number): Promise<ApplicationDataModel | undefined> {
     const r=await this.models().findOne({ _id:this.key([t,a,e,String(v ?? "latest")]), ...this.scope(t,a,e), ...(v === undefined ? {} : { version:v }) });
-    if (r) return this.clean(r) as ApplicationDataModel;
+    if (r) return this.clean(r) as unknown as ApplicationDataModel;
     if (v !== undefined) return undefined;
     const latest = await this.models().find({ ...this.scope(t,a,e) }).sort({ version:-1 }).limit(1).toArray();
     return latest[0] ? this.clean(latest[0]) as ApplicationDataModel : undefined;
@@ -82,7 +82,7 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
       }
       const next={ ...current, ...patch, version:expected+1, updatedAt:new Date().toISOString() };
       await this.records().replaceOne({ _id, version:expected },next,{session});
-      const saved=this.clean(next) as ApplicationDataRecord;
+      const saved=this.clean(next) as unknown as ApplicationDataRecord;
       await this.evidence(session,c,"APPLICATION_DATA_UPDATED",saved); return saved;
     });
   }
