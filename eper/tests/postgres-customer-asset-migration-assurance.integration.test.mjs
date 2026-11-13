@@ -230,9 +230,14 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
     const checksumSha256 = createHash("sha256").update(bytes).digest("hex");
     const repository = new PostgresCustomerAssetRepository(pool);
     let childPool;
+    let childIdentityLock;
     let roleCreated = false;
     let uploadSessionId;
     try {
+      // This fixed certificate CN maps to one PostgreSQL LOGIN. Serialize tests
+      // that provision it so the full parallel test suite cannot race identity rows.
+      childIdentityLock = await pool.connect();
+      await childIdentityLock.query("SELECT pg_advisory_lock(hashtext('eper:scan-child-ci-login')::bigint)");
       await pool.query(
         "INSERT INTO public.eper_customer_asset_upload_expiry_worker_tenant_scope(login_role, tenant_id, enabled) VALUES (session_user, $1, true) ON CONFLICT (login_role, tenant_id) DO UPDATE SET enabled = true, updated_at = now()",
         [tenantId],
@@ -422,6 +427,10 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
       }
       await pool.query("DELETE FROM public.eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2", [tenantId, assetId]).catch(() => {});
       await pool.query("DELETE FROM public.eper_customer_asset_upload_expiry_worker_tenant_scope WHERE login_role = session_user AND tenant_id = $1", [tenantId]).catch(() => {});
+      if (childIdentityLock) {
+        await childIdentityLock.query("SELECT pg_advisory_unlock(hashtext('eper:scan-child-ci-login')::bigint)").catch(() => {});
+        childIdentityLock.release();
+      }
       await pool.end();
     }
   });
