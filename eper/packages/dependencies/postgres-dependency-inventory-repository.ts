@@ -162,7 +162,7 @@ export class PostgresDependencyInventoryRepository {
    await c.query("COMMIT");return {installationId:id,version:Number(r.rows[0].version)};
   }catch(e){await this.rollback(c);throw e;}finally{c.release();}
  }
- private async insertNotice(c:AuditSqlClient,input:DependencyAuditContext,dependencyId:string,n:{verification:DependencyNoticeVerification;source:string|null;reference:string|null;recordedAt?:string|null;evidenceDigest?:string|null;notes?:string|null}):Promise<void>{
+ private async insertNotice(c:AuditSqlClient,input:DependencyAuditContext,dependencyId:string,n:{verification:DependencyNoticeVerification;source:string|null;reference:string|null;recordedAt?:string|null;effectiveAt?:string|null;requiredMinimumVersion?:string|null;evidenceDigest?:string|null;notes?:string|null}):Promise<void>{
   if(n.verification==="verified"&&(!n.source?.trim()||!n.reference?.trim()))throw new Error("DEPENDENCY_VERIFIED_NOTICE_REQUIRED");
   if(n.evidenceDigest&&!/^[a-f0-9]{64}$/.test(n.evidenceDigest))throw new Error("DEPENDENCY_NOTICE_DIGEST_INVALID");
   await c.query(`INSERT INTO eper_dependency_notice_evidence
