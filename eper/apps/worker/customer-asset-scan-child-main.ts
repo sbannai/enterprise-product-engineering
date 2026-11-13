@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { resolve, relative, sep } from "node:path";
+import { isAbsolute, resolve, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { CustomerAssetScanChildRuntime, type CustomerAssetScanChildRuntimeDependencies } from "../../packages/assets/customer-asset-scan-child-runtime.js";
 import {
@@ -27,8 +27,7 @@ function resolveCompositionPath(value: string): string {
   const root = resolve(process.cwd(), "dist/packages/assets/scanners");
   const candidate = resolve(process.cwd(), value);
   const rel = relative(root, candidate);
-  if (!value.startsWith("./dist/packages/assets/scanners/") ||
-      !rel || rel === ".." || rel.startsWith(".." + sep) || !candidate.endsWith(".js")) {
+  if (!isAbsolute(value) || !rel || rel === ".." || rel.startsWith(".." + sep) || !candidate.endsWith(".js")) {
     throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_PATH_INVALID");
   }
   return candidate;
