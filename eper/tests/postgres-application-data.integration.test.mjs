@@ -97,3 +97,23 @@ test("PostgreSQL update idempotency replays the committed version and prevents d
     assert.equal(records[0].data.total,30);
   } finally { await pool.end(); }
 });
+
+test("PostgreSQL delete idempotency replays after removal without duplicate evidence", {skip:!enabled}, async () => {
+  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL,max:3});
+  const suffix=randomUUID().replace(/-/g,"");
+  const context={tenantId:"data-del-"+suffix,applicationId:"app-del-"+suffix,actorId:"actor-del",correlationId:"corr-del-"+suffix,requirementId:"APP_DATA_DEL_CI",idempotencyKey:"delete-"+suffix};
+  try {
+    const service=new ApplicationDataService(new PostgresApplicationDataAdapter(pool));
+    await service.registerModel({tenantId:context.tenantId,applicationId:context.applicationId,entityType:"Order",version:1,status:"ACTIVE",
+      fields:[{id:"total",type:"number",required:true}]});
+    await service.create({...context,idempotencyKey:undefined},"Order","order-"+suffix,{total:25});
+    await service.delete(context,"Order","order-"+suffix,1);
+    await service.delete(context,"Order","order-"+suffix,1);
+    assert.equal(await service.get({...context,idempotencyKey:undefined},"Order","order-"+suffix),undefined);
+    await assert.rejects(()=>service.delete(context,"Order","another-"+suffix,1),/IDEMPOTENCY_KEY_REUSED/);
+    const audit=await pool.query("SELECT count(*)::int AS count FROM audit_evidence WHERE tenant_id=$1 AND correlation_id=$2",[context.tenantId,context.correlationId]);
+    const outbox=await pool.query("SELECT count(*)::int AS count FROM transactional_outbox WHERE tenant_id=$1 AND correlation_id=$2",[context.tenantId,context.correlationId]);
+    assert.equal(audit.rows[0].count,1);
+    assert.equal(outbox.rows[0].count,1);
+  } finally { await pool.end(); }
+});
