@@ -1,4 +1,6 @@
 import type { ApplicationCapabilityBoundary, ApplicationCapabilityScope } from "../addon-entitlements/application-capability-boundary.js";
+import { evaluateDependencyCompatibility } from "../dependencies/compatibility.js";
+import type { PostgresDependencyInventoryRepository } from "../dependencies/postgres-dependency-inventory-repository.js";
 import {
   PeripheralAdapterRegistry,
   type PeripheralConnectionContext,
@@ -56,6 +58,7 @@ export class ApplicationPeripheralService {
     private readonly repository: PostgresPeripheralRepository,
     private readonly adapters: PeripheralAdapterRegistry,
     private readonly authorizer: PeripheralActionAuthorizer,
+    private readonly dependencyInventory?: PostgresDependencyInventoryRepository,
   ) {}
 
   async list(input: PeripheralServiceScope): Promise<PeripheralRegistration[]> {
@@ -97,7 +100,10 @@ export class ApplicationPeripheralService {
       });
       // Vendor-mandated dependency policy is evaluated before any durable ACTIVE
       // transition or physical adapter I/O. A blocked dependency stays inactive.
-      this.adapters.assertDependenciesCompatible({
+      await this.assertPersistedDependenciesCompatible({
+        tenantId: input.tenantId,
+        applicationId: input.applicationId,
+        peripheralId: input.peripheralId,
         adapterKey: configuration.adapterKey,
         adapterVersion: configuration.adapterVersion,
         kind: current.kind,
@@ -198,6 +204,48 @@ export class ApplicationPeripheralService {
         nextStatus: "SUSPENDED",
       });
     });
+  }
+
+  private async assertPersistedDependenciesCompatible(input: {
+    tenantId:string; applicationId:string; peripheralId:string; adapterKey:string;
+    adapterVersion:string; kind:PeripheralKind; evaluatedAt:string;
+  }):Promise<void>{
+    const ids = this.adapters.dependencyIds?.({
+      adapterKey:input.adapterKey,adapterVersion:input.adapterVersion,kind:input.kind,
+    }) ?? [];
+    // Compatibility for older adapter test doubles only. Real registry declarations
+    // are resolved against the durable tenant/application inventory.
+    if(ids.length===0){
+      this.adapters.assertDependenciesCompatible({
+        adapterKey:input.adapterKey,adapterVersion:input.adapterVersion,kind:input.kind,
+        evaluatedAt:input.evaluatedAt,
+      });
+      return;
+    }
+    if(!this.dependencyInventory)throw new Error("EPER_DEPENDENCY_INVENTORY_NOT_CONFIGURED");
+    const scope={tenantId:input.tenantId,applicationId:input.applicationId};
+    const policies=await Promise.all(ids.map(id=>this.dependencyInventory!.get(scope,id)));
+    const installations=await this.dependencyInventory.listInstallations(scope);
+    for(let i=0;i<ids.length;i++){
+      const id=ids[i];
+      const policy=policies[i];
+      if(!policy||policy.policyStatus!=="active")throw new Error("EPER_PERIPHERAL_DEPENDENCY_POLICY_UNAVAILABLE:"+id);
+      const candidates=installations.filter(row=>row.dependencyId===id&&row.installationStatus!=="retired");
+      const device=candidates.filter(row=>row.scopeType==="device"&&row.scopeId===input.peripheralId);
+      const application=candidates.filter(row=>row.scopeType==="application"&&row.scopeId===input.applicationId);
+      const selected=device.length?device:application;
+      if(selected.length!==1)throw new Error("EPER_PERIPHERAL_DEPENDENCY_INSTALLATION_"+(selected.length===0?"MISSING":"AMBIGUOUS")+":"+id);
+      const installation=selected[0];
+      if(installation.installationStatus==="blocked"||installation.installationStatus==="upgrade_pending"){
+        throw new Error("EPER_PERIPHERAL_DEPENDENCY_INSTALLATION_NOT_READY:"+id);
+      }
+      const result=evaluateDependencyCompatibility({
+        policy,installation:{installedVersion:installation.installedVersion,
+          operatingSystem:installation.operatingSystem,runtime:installation.runtime,
+          deviceModel:installation.deviceModel},evaluatedAt:input.evaluatedAt,
+      });
+      if(result.blocking)throw new Error("EPER_PERIPHERAL_DEPENDENCY_BLOCKED:"+id+":"+result.status);
+    }
   }
 
   private actorScope(input: PeripheralServiceScope) {
