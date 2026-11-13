@@ -46,3 +46,21 @@ CREATE POLICY eper_application_data_records_tenant_policy ON eper_application_da
      AND application_id = current_setting('eper.application_id', true))
   WITH CHECK (tenant_id = current_setting('eper.tenant_id', true)
      AND application_id = current_setting('eper.application_id', true));
+
+-- Create-operation idempotency responses are committed with the record, audit evidence and outbox event.
+CREATE TABLE IF NOT EXISTS eper_application_data_idempotency (
+  tenant_id text NOT NULL,
+  application_id text NOT NULL,
+  idempotency_key text NOT NULL,
+  request_hash char(64) NOT NULL CHECK (request_hash ~ '^[0-9a-f]{64}$'),
+  response jsonb NOT NULL CHECK (jsonb_typeof(response)='object'),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (tenant_id, application_id, idempotency_key)
+);
+ALTER TABLE eper_application_data_idempotency ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS eper_application_data_idempotency_tenant_policy ON eper_application_data_idempotency;
+CREATE POLICY eper_application_data_idempotency_tenant_policy ON eper_application_data_idempotency
+  USING (tenant_id = current_setting('eper.tenant_id', true)
+     AND application_id = current_setting('eper.application_id', true))
+  WITH CHECK (tenant_id = current_setting('eper.tenant_id', true)
+     AND application_id = current_setting('eper.application_id', true));
