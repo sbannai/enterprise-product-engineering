@@ -210,3 +210,14 @@ test("capability composition rejects malformed dependency ID declarations", () =
   assert.ok(diagnostics.some(item =>
     item.code === "composition.dependency.declaration_invalid" && item.nodeId === "notify"));
 });
+
+
+test("platform workflow catalogue does not embed mutable dependency policy or installation snapshots", () => {
+  for (const descriptor of WORKFLOW_CAPABILITY_CATALOGUE) {
+    assert.equal(Object.hasOwn(descriptor, "dependencies"), false);
+    if (descriptor.dependencyIds !== undefined) {
+      assert.ok(Array.isArray(descriptor.dependencyIds));
+      assert.ok(descriptor.dependencyIds.every(id => typeof id === "string" && id.length > 0));
+    }
+  }
+});
