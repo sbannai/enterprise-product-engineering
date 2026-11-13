@@ -1,3 +1,5 @@
+import { evaluateDependencyCompatibility, type DependencyPolicy, type DependencyInstallation } from "../dependencies/compatibility.js";
+
 /**
  * Optional application-scoped peripheral capability.
  * Importing this package performs no discovery, connection or I/O.
@@ -47,11 +49,18 @@ export type PeripheralCommandResult =
   | { readonly outcome: "REJECTED"; readonly code: string }
   | { readonly outcome: "NEEDS_ATTENTION"; readonly code: string };
 
+export interface PeripheralAdapterDependency {
+  readonly policy: DependencyPolicy;
+  readonly installation: DependencyInstallation;
+}
+
 export interface PeripheralAdapterRegistration {
   readonly adapterKey: string;
   readonly adapterVersion: string;
   readonly kinds: readonly PeripheralKind[];
   readonly adapter: PeripheralAdapter;
+  /** Every vendor-managed dependency used by this adapter must be declared here. */
+  readonly dependencies?: readonly PeripheralAdapterDependency[];
 }
 
 /** Exact-match registry. Resolution never opens a connection or falls back to another adapter. */
