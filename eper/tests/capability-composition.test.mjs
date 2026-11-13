@@ -193,3 +193,36 @@ test("shared lifecycle gate rejects priority routing rather than persisting a fa
     }],
   }), /WORKFLOW_CAPABILITY_COMPOSITION_INVALID:workflow.adapter.priority_routing_not_representable/);
 });
+
+
+test("capability composition blocks a vendor dependency after its mandatory-update cutoff", () => {
+  const dependency = {
+    policy: {
+      dependencyId: "vendor.workflow.sdk", vendor: "Example Vendor", componentKind: "sdk",
+      supportedVersions: { minimum: "2.0.0", maximum: "4.0.0" },
+      requiredMinimumVersion: "3.5.0", supportState: "supported", mandatoryUpdate: true,
+      effectiveAt: "2026-11-10T00:00:00Z", downgradePolicy: "allowed",
+      notice: { verification: "verified", source: "vendor bulletin", reference: "VB-42", recordedAt: "2026-11-01T00:00:00Z" },
+    },
+    installation: { installedVersion: "3.1.0", operatingSystem: "linux", runtime: "node-22" },
+  };
+  const withDependency = catalogue.map(item => item.typeId === "integration.notify"
+    ? { ...item, dependencies: [dependency] } : item);
+  const diagnostics = validateCapabilityComposition(base, withDependency, { evaluatedAt: "2026-11-13T00:00:00Z" });
+  assert.ok(diagnostics.some(item => item.code === "composition.dependency.blocked" && item.nodeId === "notify"));
+});
+
+test("capability composition permits a compatible vendor dependency", () => {
+  const dependency = {
+    policy: {
+      dependencyId: "vendor.workflow.sdk", vendor: "Example Vendor", componentKind: "sdk",
+      supportedVersions: { minimum: "2.0.0", maximum: "4.0.0" },
+      supportState: "supported", mandatoryUpdate: false, downgradePolicy: "allowed",
+      notice: { verification: "verified", source: "vendor compatibility matrix", reference: "CM-8", recordedAt: "2026-11-01T00:00:00Z" },
+    },
+    installation: { installedVersion: "3.1.0", operatingSystem: "linux", runtime: "node-22" },
+  };
+  const withDependency = catalogue.map(item => item.typeId === "integration.notify"
+    ? { ...item, dependencies: [dependency] } : item);
+  assert.deepEqual(validateCapabilityComposition(base, withDependency, { evaluatedAt: "2026-11-13T00:00:00Z" }), []);
+});
