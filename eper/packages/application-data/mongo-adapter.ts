@@ -11,6 +11,7 @@ interface MongoCollectionLike<T extends Record<string, unknown>> {
   updateOne(filter: Record<string, unknown>, update: Record<string, unknown>, options?: Record<string, unknown>): Promise<MongoResult>;
   updateMany(filter: Record<string, unknown>, update: Record<string, unknown>, options?: Record<string, unknown>): Promise<MongoResult>;
   deleteOne(filter: Record<string, unknown>, options?: Record<string, unknown>): Promise<MongoResult>;
+  createIndex?(keys: Record<string, 1 | -1>, options?: Record<string, unknown>): Promise<string>;
 }
 interface MongoSessionLike { withTransaction<T>(work: () => Promise<T>): Promise<T>; endSession(): Promise<void>; }
 interface MongoDatabaseLike {
@@ -28,6 +29,16 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
   }
   private records() { return this.db.collection<StoredRecord>("eper_application_data_records"); }
   private models() { return this.db.collection<StoredModel>("eper_application_data_models"); }
+  /** Run during deployment/bootstrap; the partial unique index is the cross-process guard for active schemas. */
+  async ensureIndexes(): Promise<void> {
+    const createIndex = this.models().createIndex;
+    if (!createIndex) throw new Error("MONGODB_INDEX_MANAGEMENT_REQUIRED");
+    await createIndex.call(this.models(), { tenantId:1, applicationId:1, entityType:1 }, {
+      name:"eper_application_data_one_active_model",
+      unique:true,
+      partialFilterExpression:{ status:"ACTIVE" }
+    });
+  }
   private audits() { return this.db.collection<Record<string, unknown>>("eper_application_data_audit"); }
   private outbox() { return this.db.collection<Record<string, unknown>>("eper_application_data_outbox"); }
   private scope(t: string, a: string, e: string) { return { tenantId: t, applicationId: a, entityType: e }; }
