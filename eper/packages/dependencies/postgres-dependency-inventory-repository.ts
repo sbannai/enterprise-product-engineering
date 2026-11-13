@@ -132,7 +132,9 @@ export class PostgresDependencyInventoryRepository {
      JSON.stringify(p.compatibleOperatingSystems??[]),JSON.stringify(p.compatibleRuntimes??[]),
      JSON.stringify(p.compatibleDeviceModels??[]),input.actorId]);
    if(!next.rows[0])throw new Error("DEPENDENCY_POLICY_SAVE_EMPTY");
-   if(notice)await this.insertNotice(c,input,p.dependencyId,notice);
+   if(notice)await this.insertNotice(c,input,p.dependencyId,{...notice,
+    effectiveAt:notice.effectiveAt??effectiveAt,
+    requiredMinimumVersion:notice.requiredMinimumVersion??p.requiredMinimumVersion??null});
    await this.audit(c,input,"dependency.policy.save",p.dependencyId,{version:Number(next.rows[0].version),mandatoryUpdate:p.mandatoryUpdate});
    const persisted=await c.query<PolicyRow>(this.policySelect()+` WHERE p.tenant_id=$1 AND p.application_id=$2 AND p.dependency_id=$3`,[input.tenantId,input.applicationId,p.dependencyId]);
    if(!persisted.rows[0])throw new Error("DEPENDENCY_POLICY_READ_AFTER_SAVE_FAILED");
