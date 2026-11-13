@@ -18,6 +18,12 @@ export type ProviderStorageRuntimeRegistration<TCredentials> =
     synthetic: boolean;
   };
 
+export type ProviderStorageSecretResolverRegistration<TCredentials> = ProviderSecretResolverPort<TCredentials> & {
+  /** Exact deployment-owned secret-manager identity; never inferred from the implementation. */
+  adapterKey: string;
+  adapterVersion: string;
+};
+
 export type ProviderStorageRuntimeCompositionInput<TCredentials> = {
   enabled: boolean;
   deploymentPolicy: ProviderRuntimeDeploymentPolicy;
@@ -26,7 +32,7 @@ export type ProviderStorageRuntimeCompositionInput<TCredentials> = {
   dispatch?: Pick<ProviderDispatchConfigurationService, "resolve">;
   catalogue?: Pick<PostgresProviderCatalogueRepository, "get">;
   connections?: Pick<PostgresProviderConnectionRepository, "getRuntimeSecretReference" | "assertDispatchAuthorization">;
-  secretResolver?: ProviderSecretResolverPort<TCredentials>;
+  secretResolver?: ProviderStorageSecretResolverRegistration<TCredentials>;
   dependencyInventory?: DependencyInventoryReader;
   scannerIdentity?: string;
   allowedHosts?: readonly string[];
@@ -48,7 +54,8 @@ export class ProviderStorageRuntimeCompositionError extends Error {
     | "PROVIDER_STORAGE_RUNTIME_ALLOWED_HOSTS_INVALID"
     | "PROVIDER_STORAGE_RUNTIME_DRIVER_INVALID"
     | "PROVIDER_STORAGE_RUNTIME_DEPENDENCY_INVENTORY_REQUIRED"
-    | "PROVIDER_STORAGE_RUNTIME_DEPLOYMENT_POLICY_REQUIRED") {
+    | "PROVIDER_STORAGE_RUNTIME_DEPLOYMENT_POLICY_REQUIRED"
+    | "PROVIDER_STORAGE_RUNTIME_SECRET_MANAGER_NOT_ALLOWED") {
     super(code);
     this.name = "ProviderStorageRuntimeCompositionError";
   }
@@ -81,6 +88,12 @@ export function createProviderStorageRuntimeComposition<TCredentials>(
   }
   if (!input.dispatch || !input.catalogue || !input.connections || !input.secretResolver) {
     throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_DEPENDENCIES_REQUIRED");
+  }
+  // The configured secret-manager key/version must identify the resolver that
+  // is actually composed. A generic resolve() port alone is not sufficient.
+  if (input.secretResolver.adapterKey !== input.deploymentPolicy.secretManager.adapterKey ||
+      input.secretResolver.adapterVersion !== input.deploymentPolicy.secretManager.adapterVersion) {
+    throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_SECRET_MANAGER_NOT_ALLOWED");
   }
   if (!Array.isArray(input.registrations) || input.registrations.length === 0) {
     throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_REGISTRATIONS_REQUIRED");
