@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ApplicationDataAdapter, ApplicationDataContext, ApplicationDataModel, ApplicationDataQuery, ApplicationDataRecord, ApplicationDataRelationship } from "./contracts.js";
-import { applicationDataCreateHash, applicationDataUpdateHash } from "./idempotency.js";
+import { applicationDataCreateHash, applicationDataUpdateHash, applicationDataDeleteHash } from "./idempotency.js";
 
 interface MongoResult { acknowledged?: boolean; matchedCount?: number; deletedCount?: number; }
 interface MongoCursor<T> { sort(spec: Record<string, 1 | -1>): MongoCursor<T>; limit(value: number): MongoCursor<T>; toArray(): Promise<T[]>; }
@@ -213,21 +213,57 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
       return saved;
     });
   }
+  async getIdempotentDelete(c: ApplicationDataContext, e: string, id: string, expected: number): Promise<boolean> {
+    if (!c.idempotencyKey) return false;
+    const prior=await this.idempotency().findOne({_id:this.key([c.tenantId,c.applicationId,c.idempotencyKey])});
+    if (!prior) return false;
+    const requestHash=applicationDataDeleteHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected});
+    if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+    return !!prior.response && typeof prior.response==="object" && (prior.response as Record<string,unknown>).deleted===true;
+  }
   async delete(c: ApplicationDataContext, e: string, id: string, expected: number): Promise<void> {
-    await this.transaction(async session => {
-      const _id=this.key([c.tenantId,c.applicationId,e,id]);
-      const current=await this.records().findOne({ _id,version:expected },{session});
-      if (!current) {
-        const exists=await this.records().findOne({ _id },{session});
-        throw new Error(exists ? "APPLICATION_DATA_VERSION_CONFLICT" : "APPLICATION_DATA_RECORD_NOT_FOUND");
-      }
-      const guard=await this.records().updateOne({_id},{$inc:{_relationshipGuard:1}},{session});
-      if (!guard.matchedCount) throw new Error("APPLICATION_DATA_RECORD_NOT_FOUND");
-      await this.assertNotReferenced(session,c,e,id);
-      const deleted=await this.records().deleteOne({ _id,version:expected },{session});
-      if (!deleted.deletedCount) throw new Error("APPLICATION_DATA_VERSION_CONFLICT");
-      await this.evidence(session,c,"APPLICATION_DATA_DELETED",this.clean(current) as unknown as ApplicationDataRecord);
-    });
+    const key=c.idempotencyKey;
+    const requestHash=key ? applicationDataDeleteHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected}) : undefined;
+    const idempotencyId=key ? this.key([c.tenantId,c.applicationId,key]) : undefined;
+    try {
+      await this.transaction(async session => {
+        if (key && requestHash && idempotencyId) {
+          const prior=await this.idempotency().findOne({_id:idempotencyId},{session});
+          if (prior) {
+            if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+            if ((prior.response as Record<string,unknown>)?.deleted===true) return;
+            throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+          }
+        }
+        const _id=this.key([c.tenantId,c.applicationId,e,id]);
+        const current=await this.records().findOne({ _id,version:expected },{session});
+        if (!current) {
+          const exists=await this.records().findOne({ _id },{session});
+          throw new Error(exists ? "APPLICATION_DATA_VERSION_CONFLICT" : "APPLICATION_DATA_RECORD_NOT_FOUND");
+        }
+        const guard=await this.records().updateOne({_id},{$inc:{_relationshipGuard:1}},{session});
+        if (!guard.matchedCount) throw new Error("APPLICATION_DATA_RECORD_NOT_FOUND");
+        await this.assertNotReferenced(session,c,e,id);
+        const deleted=await this.records().deleteOne({ _id,version:expected },{session});
+        if (!deleted.deletedCount) throw new Error("APPLICATION_DATA_VERSION_CONFLICT");
+        await this.evidence(session,c,"APPLICATION_DATA_DELETED",this.clean(current) as unknown as ApplicationDataRecord);
+        if (key && requestHash && idempotencyId) {
+          try {
+            await this.idempotency().insertOne({_id:idempotencyId,tenantId:c.tenantId,applicationId:c.applicationId,
+              idempotencyKey:key,requestHash,response:{deleted:true},createdAt:new Date().toISOString()},{session});
+          } catch (error) {
+            if ((error as {code?:number}).code===11000) throw new Error("APPLICATION_DATA_IDEMPOTENCY_RACE");
+            throw error;
+          }
+        }
+      });
+    } catch (error) {
+      if (!(error instanceof Error) || error.message!=="APPLICATION_DATA_IDEMPOTENCY_RACE" || !idempotencyId || !requestHash) throw error;
+      const prior=await this.idempotency().findOne({_id:idempotencyId});
+      if (!prior) throw error;
+      if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+      if ((prior.response as Record<string,unknown>)?.deleted!==true) throw error;
+    }
   }
   async query(c: ApplicationDataContext, e: string, q: ApplicationDataQuery): Promise<ApplicationDataRecord[]> {
     const rows=await this.records().find({ ...this.scope(c.tenantId,c.applicationId,e), ...(q.state ? {state:q.state}:{}), ...(q.afterId ? {id:{$gt:q.afterId}}:{}) })
