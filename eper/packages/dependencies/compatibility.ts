@@ -162,8 +162,9 @@ export function evaluateDependencyCompatibility(input: {
 }): DependencyCompatibilityDecision {
   const { policy, installation } = input;
   const evaluatedAt = Date.parse(input.evaluatedAt);
-  if (!policy.dependencyId || !policy.vendor || !Number.isFinite(evaluatedAt) ||
-      !validRange(policy.supportedVersions) ||
+  if (!policy.dependencyId || !policy.vendor || !policy.notice ||
+      !["verified", "unverified", "not_provided"].includes(policy.notice.verification) ||
+      !Number.isFinite(evaluatedAt) || !validRange(policy.supportedVersions) ||
       !parseVersion(installation.installedVersion) ||
       (installation.proposedVersion !== undefined && !parseVersion(installation.proposedVersion)) ||
       (policy.requiredMinimumVersion !== undefined && !parseVersion(policy.requiredMinimumVersion)) ||
