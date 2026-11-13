@@ -98,6 +98,19 @@ export class PostgresApplicationDataAdapter implements ApplicationDataAdapter {
     await client.query("INSERT INTO audit_evidence(tenant_id,evidence_id,requirement_id,action,principal_id,correlation_id,occurred_at,payload,canonicalization_version,integrity_hash) VALUES($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::jsonb,1,$9)", [context.tenantId,id,context.requirementId,action,context.actorId,context.correlationId,occurredAt,JSON.stringify(payload),integrityHash]);
     await enqueueOutboxEvent({ tenantId:context.tenantId, client }, { eventId:id, tenantId:context.tenantId, aggregateType:"application_data_record", aggregateId:record.id, eventType:action, correlationId:context.correlationId, payload });
   }
+  async getIdempotentCreate(context: ApplicationDataContext, entityType: string, id: string, data: Record<string, unknown>): Promise<ApplicationDataRecord | undefined> {
+    const key=context.idempotencyKey;
+    if (!key) return undefined;
+    const requestHash=applicationDataCreateHash({tenantId:context.tenantId,applicationId:context.applicationId,entityType,id,data});
+    return this.scope(context,async client=>{
+      const result=await client.query<Row>("SELECT request_hash,response FROM eper_application_data_idempotency WHERE tenant_id=$1 AND application_id=$2 AND idempotency_key=$3",
+        [context.tenantId,context.applicationId,key]);
+      const prior=result.rows[0];
+      if (!prior) return undefined;
+      if (String(prior.request_hash)!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+      return json<ApplicationDataRecord>(prior.response);
+    });
+  }
   async create(record: ApplicationDataRecord, context: ApplicationDataContext, relationships?: import("./contracts.js").ApplicationDataRelationship[]): Promise<ApplicationDataRecord> {
     return this.scope(context, async client => {
       await this.lockRelationshipTargets(client,context,relationships,record.data);
