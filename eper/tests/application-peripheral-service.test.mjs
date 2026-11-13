@@ -16,7 +16,7 @@ const configuration = {
   adapterKey: "synthetic.local", adapterVersion: "1.0.0", settings: { mode: "test" },
 };
 
-function fixture({ connect = async () => {}, disconnect = async () => {}, noRegistration = false, noConfiguration = false, failDegradedPersist = false, initialStatus = "CONFIGURED", initialVersion = 7, authorize = async () => {}, dependencyError = null } = {}) {
+function fixture({ connect = async () => {}, disconnect = async () => {}, noRegistration = false, noConfiguration = false, failDegradedPersist = false, initialStatus = "CONFIGURED", initialVersion = 7, authorize = async () => {}, dependencyError = null, dependencyIds = [], dependencyInventory = null } = {}) {
   const calls = [];
   let current = registration({ status: initialStatus, version: initialVersion });
   const config = configuration;
@@ -67,7 +67,7 @@ function fixture({ connect = async () => {}, disconnect = async () => {}, noRegi
   const authorizer = {
     async authorize(input) { calls.push(["authorize", input.action]); await authorize(input); },
   };
-  return { service: new ApplicationPeripheralService(capabilities, repository, adapters, authorizer), calls };
+  return { service: new ApplicationPeripheralService(capabilities, repository, adapters, authorizer, dependencyInventory), calls };
 }
 
 test("role authorization denial blocks entitlement lookup and registration", async () => {
@@ -196,4 +196,50 @@ test("vendor dependency policy is checked before ACTIVE persistence and adapter 
   assert.ok(dependencyCheck >= 0);
   assert.equal(calls.some(call => call[0] === "transition"), false);
   assert.equal(calls.some(call => call[0] === "connect"), false);
+});
+
+test("persisted vendor cutoff blocks activation before ACTIVE persistence and hardware I/O", async () => {
+  const policy = {
+    dependencyId:"vendor.scanner.sdk",vendor:"Vendor",componentKind:"sdk",
+    supportedVersions:{minimum:"1.0.0"},requiredMinimumVersion:"2.0.0",
+    supportState:"supported",mandatoryUpdate:true,effectiveAt:"2026-01-01T00:00:00.000Z",
+    downgradePolicy:"allowed",
+    notice:{verification:"verified",source:"vendor bulletin",reference:"NOTICE-22",recordedAt:"2025-12-01T00:00:00.000Z"},
+    policyStatus:"active",version:2,
+  };
+  const installation = {
+    dependencyId:"vendor.scanner.sdk",installationId:"install-1",scopeType:"device",
+    scopeId:"peripheral-1",installedVersion:"1.4.0",operatingSystem:"Linux",
+    runtime:"node",installationStatus:"observed",version:1,
+  };
+  const inventory = {
+    async get(scope,id) { assert.deepEqual(scope,{tenantId:"tenant-a",applicationId:"app-a"}); return id===policy.dependencyId?policy:null; },
+    async listInstallations(scope) { assert.deepEqual(scope,{tenantId:"tenant-a",applicationId:"app-a"}); return [installation]; },
+  };
+  const {service,calls}=fixture({dependencyIds:[policy.dependencyId],dependencyInventory:inventory});
+  await assert.rejects(
+    service.activate({...scope,peripheralId:"peripheral-1",expectedVersion:7}),
+    /EPER_PERIPHERAL_DEPENDENCY_BLOCKED:vendor\.scanner\.sdk:blocked_at_cutoff/,
+  );
+  assert.equal(calls.some(call=>call[0]==="transition"),false);
+  assert.equal(calls.some(call=>call[0]==="connect"),false);
+});
+
+test("persisted dependency activation fails closed for ambiguous installation scope", async () => {
+  const policy = {
+    dependencyId:"vendor.scanner.sdk",vendor:"Vendor",componentKind:"sdk",
+    supportedVersions:{minimum:"1.0.0"},supportState:"supported",mandatoryUpdate:false,
+    downgradePolicy:"allowed",
+    notice:{verification:"not_provided",source:null,reference:null,recordedAt:null},
+    policyStatus:"active",version:1,
+  };
+  const row = {dependencyId:policy.dependencyId,installationId:"i1",scopeType:"device",
+    scopeId:"peripheral-1",installedVersion:"1.2.0",operatingSystem:"Linux",runtime:"node",
+    installationStatus:"observed",version:1};
+  const inventory = {async get(){return policy;},async listInstallations(){return [row,{...row,installationId:"i2"}];}};
+  const {service,calls}=fixture({dependencyIds:[policy.dependencyId],dependencyInventory:inventory});
+  await assert.rejects(service.activate({...scope,peripheralId:"peripheral-1",expectedVersion:7}),
+    /EPER_PERIPHERAL_DEPENDENCY_INSTALLATION_AMBIGUOUS:vendor\.scanner\.sdk/);
+  assert.equal(calls.some(call=>call[0]==="transition"),false);
+  assert.equal(calls.some(call=>call[0]==="connect"),false);
 });
