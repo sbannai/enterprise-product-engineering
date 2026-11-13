@@ -46,6 +46,14 @@ export class PostgresApplicationDataAdapter implements ApplicationDataAdapter {
       await client.query("INSERT INTO eper_application_data_models(tenant_id,application_id,entity_type,version,status,fields,relationships) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb)", [model.tenantId,model.applicationId,model.entityType,model.version,model.status,JSON.stringify(model.fields),JSON.stringify(model.relationships ?? [])]);
     });
   }
+  async transitionModelStatus(t: string, a: string, e: string, v: number, from: ApplicationDataModel["status"], to: ApplicationDataModel["status"]): Promise<void> {
+    if (!((from==="DRAFT"&&to==="ACTIVE")||(from==="ACTIVE"&&to==="RETIRED"))) throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_INVALID");
+    await withTenantTransaction(this.pool,t,async({client})=>{
+      await client.query("SELECT set_config('eper.application_id',$1,true)",[a]);
+      const result=await client.query("UPDATE eper_application_data_models SET status=$6,updated_at=now() WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND version=$4 AND status=$5",[t,a,e,v,from,to]);
+      if (!result.rowCount) throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_CONFLICT");
+    });
+  }
   private async evidence(client: import("pg").PoolClient, context: ApplicationDataContext, action: string, record: ApplicationDataRecord): Promise<void> {
     const id = randomUUID(); const occurredAt = new Date().toISOString();
     const payload = { entityType:record.entityType, recordId:record.id, applicationId:record.applicationId, version:record.version };
