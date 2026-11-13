@@ -40,7 +40,8 @@ test("policy updates use optimistic versions and notice evidence remains append-
 test("dependency installation inventory reads are tenant/application scoped and deterministic",async()=>{
  const ts=await readFile(source,"utf8");
  assert.match(ts,/async listInstallations\(scope:DependencyScope,dependencyId\?:string\)/);
- assert.match(ts,/FROM eper_dependency_installation[\\s\\S]*WHERE tenant_id=\\$1 AND application_id=\\$2/);
+ assert.ok(ts.includes("FROM eper_dependency_installation"));
+ assert.ok(ts.includes("WHERE tenant_id=$1 AND application_id=$2"));
  assert.match(ts,/ORDER BY dependency_id,scope_type,scope_id,installation_id/);
  assert.match(ts,/await this\.setScope\(c,scope\)/);
  assert.match(ts,/return r\.rows\.map\(mapInstallation\)/);
