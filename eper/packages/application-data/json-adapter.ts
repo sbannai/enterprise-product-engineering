@@ -16,7 +16,7 @@ export class JsonFileApplicationDataAdapter implements ApplicationDataAdapter {
       throw new Error("APPLICATION_DATA_FILE_INVALID");
     }
   }
-  private async write(value: { models: ApplicationDataModel[]; records: ApplicationDataRecord[]; idempotency: Array<{ tenantId:string; applicationId:string; key:string; requestHash:string; response:ApplicationDataRecord }> }): Promise<void> {
+  private async write(value: { models: ApplicationDataModel[]; records: ApplicationDataRecord[]; idempotency: Array<{ tenantId:string; applicationId:string; key:string; requestHash:string; response:ApplicationDataRecord | { deleted: true } }> }): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true });
     const temp = this.filePath + ".tmp";
     await writeFile(temp, JSON.stringify(value), { encoding: "utf8", mode: 0o600 });
