@@ -45,6 +45,9 @@ export function createDependencyGatedCapabilityInvoker(
           !invocation.scope.correlationId.trim() || typeof execute !== "function") {
         throw new Error("CAPABILITY_DEPENDENCY_INVOCATION_INVALID");
       }
+      if (!Array.isArray(invocation.dependencyIds)) {
+        throw new Error("CAPABILITY_DEPENDENCY_DECLARATION_INVALID");
+      }
       await assertDependencyRuntimeCompatible({
         repository,
         scope: invocation.scope,
