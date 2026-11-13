@@ -95,6 +95,14 @@ export class ApplicationPeripheralService {
         adapterVersion: configuration.adapterVersion,
         kind: current.kind,
       });
+      // Vendor-mandated dependency policy is evaluated before any durable ACTIVE
+      // transition or physical adapter I/O. A blocked dependency stays inactive.
+      this.adapters.assertDependenciesCompatible({
+        adapterKey: configuration.adapterKey,
+        adapterVersion: configuration.adapterVersion,
+        kind: current.kind,
+        evaluatedAt: new Date().toISOString(),
+      });
       const active = await this.repository.transition({
         ...this.auditInput(input),
         peripheralId: input.peripheralId,
