@@ -34,7 +34,10 @@ export function createDependencyGatedCapabilityInvoker(
     throw new Error("CAPABILITY_DEPENDENCY_INVOKER_CONFIGURATION_INVALID");
   }
   return {
-    async invoke<TInput, TResult>(invocation, execute) {
+    async invoke<TInput, TResult>(
+      invocation: DependencyGatedCapabilityInvocation<TInput, TResult>,
+      execute: (input: TInput) => Promise<TResult>,
+    ): Promise<TResult> {
       if (!invocation || typeof invocation.capabilityId !== "string" ||
           !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(invocation.capabilityId) ||
           !invocation.scope || typeof invocation.scope.actorId !== "string" ||
