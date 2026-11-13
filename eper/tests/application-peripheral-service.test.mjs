@@ -243,7 +243,7 @@ test("user-scoped dependency installation takes precedence over application defa
   const inventory={async get(){return policy;},async listInstallations(){return rows;}};
   const {service,calls}=fixture({dependencyIds:[dependencyId],dependencyInventory:inventory});
   await assert.rejects(
-    service.activate({...scope,userId:"operator-1",peripheralId:"peripheral-1",expectedVersion:7}),
+    service.activate({...scope,actorId:"operator-1",userId:"spoofed-user",peripheralId:"peripheral-1",expectedVersion:7}),
     /DEPENDENCY_VERSION_INVALID|EPER_PERIPHERAL_DEPENDENCY_BLOCKED/,
   );
   assert.equal(calls.some(call=>call[0]==="transition"),false);
