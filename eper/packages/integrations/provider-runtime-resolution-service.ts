@@ -1,6 +1,7 @@
 import type { ProviderDefinition, PostgresProviderCatalogueRepository } from "./postgres-provider-catalogue-repository.js";
 import type { ProviderDispatchConfigurationService, ProviderDispatchSelection } from "./provider-dispatch-configuration-service.js";
 import type { ProviderRuntimeAdapterRegistry } from "./provider-runtime-adapter-registry.js";
+import { assertProviderRuntimeDeploymentAllowed, type ProviderRuntimeDeploymentPolicy } from "./provider-runtime-deployment-policy.js";
 
 export type ResolvedProviderRuntime<TAdapter> = {
   selection: ProviderDispatchSelection;
@@ -31,6 +32,7 @@ export class ProviderRuntimeResolutionService<TAdapter> {
     private readonly dispatch: Pick<ProviderDispatchConfigurationService, "resolve">,
     private readonly catalogue: Pick<PostgresProviderCatalogueRepository, "get">,
     private readonly adapters: Pick<ProviderRuntimeAdapterRegistry<TAdapter>, "resolve">,
+    private readonly deploymentPolicy?: ProviderRuntimeDeploymentPolicy,
   ) {}
 
   async resolve(input: {
@@ -53,7 +55,7 @@ export class ProviderRuntimeResolutionService<TAdapter> {
     if (!definition.capabilities.includes(input.capability)) {
       throw new ProviderRuntimeResolutionError("PROVIDER_RUNTIME_CATALOGUE_CAPABILITY_MISMATCH");
     }
-    const adapter = this.adapters.resolve({
+    // The deployment-owned trust policy is enforced before the executable adapter\n    // is resolved. Endpoint is server-owned connection policy, never request data.\n    if (this.deploymentPolicy?.enabled) {\n      const endpoint = selection.policy.endpoint;\n      if (typeof endpoint !== "string") {\n        throw new Error("PROVIDER_RUNTIME_ENDPOINT_NOT_ALLOWED");\n      }\n      const admitted = this.deploymentPolicy.adapters.find(item =>\n        item.adapterKey === definition.adapterKey && item.adapterVersion === definition.adapterVersion &&\n        item.capabilities.includes(input.capability));\n      assertProviderRuntimeDeploymentAllowed(this.deploymentPolicy, {\n        providerKey: selection.providerKey,\n        adapterKey: definition.adapterKey,\n        adapterVersion: definition.adapterVersion,\n        capability: input.capability,\n        endpoint,\n        tlsMode: this.deploymentPolicy.tlsMode,\n        synthetic: admitted?.synthetic ?? false,\n      });\n    } else if (this.deploymentPolicy && !this.deploymentPolicy.enabled) {\n      throw new Error("PROVIDER_RUNTIME_PROVIDER_NOT_ALLOWED");\n    }\n    const adapter = this.adapters.resolve({
       adapterKey: definition.adapterKey,
       adapterVersion: definition.adapterVersion,
       capability: input.capability,
