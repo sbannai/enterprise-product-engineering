@@ -85,3 +85,20 @@ test("activating a new schema retires the previous active version", async t => {
   assert.equal((await service["adapter"].getModel("tenant-a","app-a","Order",1)).status,"RETIRED");
   assert.equal((await service["adapter"].getActiveModel("tenant-a","app-a","Order")).version,2);
 });
+
+test("create idempotency returns the original result and rejects key reuse with different data", async t => {
+  const service=await fixture(t);
+  const requestContext={...context,idempotencyKey:"checkout-attempt-0001"};
+  const first=await service.create(requestContext,"Order","order-retry-01",{customerId:"c1",total:12,status:"NEW"});
+  const replay=await service.create(requestContext,"Order","order-retry-01",{customerId:"c1",total:12,status:"NEW"});
+  assert.deepEqual(replay,first);
+  assert.equal((await service.query(context,"Order",{limit:10})).length,1);
+  await assert.rejects(()=>service.create(requestContext,"Order","order-retry-02",{customerId:"c1",total:99,status:"NEW"}),/IDEMPOTENCY_KEY_REUSED/);
+  assert.equal((await service.query(context,"Order",{limit:10})).length,1);
+});
+
+test("create without an idempotency key retains ordinary duplicate-record protection", async t => {
+  const service=await fixture(t);
+  await service.create(context,"Order","order-plain-01",{customerId:"c1",total:12,status:"NEW"});
+  await assert.rejects(()=>service.create(context,"Order","order-plain-01",{customerId:"c1",total:12,status:"NEW"}),/RECORD_EXISTS/);
+});
