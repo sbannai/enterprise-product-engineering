@@ -53,7 +53,8 @@ test("relationships must resolve to records in the same tenant and application",
   const service=await fixture(t);
   await service.registerModel({tenantId:"tenant-a",applicationId:"app-a",entityType:"Customer",version:1,status:"ACTIVE",
     fields:[{id:"name",type:"string",required:true}]});
-  await service.registerModel({...model,version:2,relationships:[{field:"customerId",targetEntity:"Customer",cardinality:"one"}]});
+  await service.registerModel({...model,version:2,status:"DRAFT",relationships:[{field:"customerId",targetEntity:"Customer",cardinality:"one"}]});
+  await service.activateModel("tenant-a","app-a","Order",2);
   await assert.rejects(()=>service.create(context,"Order","order-missing",{customerId:"customer-404",total:10,status:"NEW"}),/RELATIONSHIP_TARGET_NOT_FOUND/);
   await service.create(context,"Customer","customer-01",{name:"A"});
   await service.create(context,"Order","order-linked",{customerId:"customer-01",total:10,status:"NEW"});
