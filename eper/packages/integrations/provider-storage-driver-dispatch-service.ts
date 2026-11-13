@@ -94,8 +94,9 @@ export class ProviderStorageDispatchError extends Error {
 
 /**
  * Last-mile, fail-closed invocation boundary for storage provider drivers.
- * Runtime selection and connection-version revalidation happen immediately
- * before secret resolution. Credentials remain local to this call and are
+ * Runtime selection and connection-version revalidation happen before secret
+ * resolution; persisted vendor dependencies are checked before driver entry.
+ * Credentials remain local to this call and are
  * never returned, persisted, or logged by this service.
  */
 export class ProviderStorageDriverDispatchService<TCredentials> {
@@ -164,6 +165,7 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
         throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_DEPENDENCY_BLOCKED");
       }
     }
+    if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
     const context = {
       tenantId: selection.tenantId,
       applicationId: selection.applicationId,
