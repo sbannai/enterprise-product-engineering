@@ -18,9 +18,8 @@ export async function assertTrustedCustomerAssetScanCompositionModule(value: str
   if (!rel || rel === ".." || rel.startsWith(".." + sep)) {
     throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_PATH_INVALID");
   }
-  let directory;
   try {
-    directory = await lstat(root);
+    const directory = await lstat(root);
     if (!directory.isDirectory() || directory.isSymbolicLink() || (directory.mode & 0o022) !== 0 ||
         await realpath(root) !== root) {
       throw new Error("unsafe composition directory");
