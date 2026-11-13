@@ -1,6 +1,8 @@
 import { createRequire } from "node:module";
+import { lstat, readFile } from "node:fs/promises";
 import { isAbsolute, resolve, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import { CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE } from "../../packages/assets/customer-asset-scan-child-spiffe-identity.js";
 import { CustomerAssetScanChildRuntime, type CustomerAssetScanChildRuntimeDependencies } from "../../packages/assets/customer-asset-scan-child-runtime.js";
 import {
   isCustomerAssetScanChildStart,
@@ -43,6 +45,16 @@ async function readStartMessage(): Promise<unknown> {
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
+async function readDeploymentFile(path: string, privateKey = false): Promise<string> {
+  if (!isAbsolute(path) || path.split("/").includes("..")) throw new Error("CUSTOMER_ASSET_SCAN_CHILD_CERTIFICATE_PATH_INVALID");
+  const metadata = await lstat(path);
+  if (!metadata.isFile() || metadata.isSymbolicLink() ||
+      (metadata.mode & (privateKey ? 0o077 : 0o022)) !== 0 ||
+      metadata.size < 1 || metadata.size > 1_048_576) {
+    throw new Error("CUSTOMER_ASSET_SCAN_CHILD_CERTIFICATE_FILE_INVALID");
+  }
+  return readFile(path, "utf8");
+}
 function emitFailure(start: unknown, code: CustomerAssetScanChildFailure["code"]): void {
   const candidate = start && typeof start === "object" ? start as Record<string, unknown> : {};
   const jobToken = typeof candidate.jobToken === "string" ? candidate.jobToken : "invalid";
@@ -51,6 +63,15 @@ function emitFailure(start: unknown, code: CustomerAssetScanChildFailure["code"]
     version: 3, type: "failure", jobToken, claimGeneration, code,
   }));
 }
+
+const protocolWrite = process.stdout.write.bind(process.stdout);
+process.stdout.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
+  process.stderr.write(chunk as never, ...(args as never[]));
+  return true;
+}) as typeof process.stdout.write;
+console.log = console.error;
+console.info = console.error;
+console.debug = console.error;
 
 const start = await readStartMessage();
 if (!isCustomerAssetScanChildStart(start)) {
@@ -61,16 +82,24 @@ if (!isCustomerAssetScanChildStart(start)) {
   const controller = new AbortController();
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => controller.abort());
   try {
+    if (required("EPER_SCANNER_CHILD_SPIFFE_AUDIENCE") !== CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE) {
+      throw new Error("CUSTOMER_ASSET_SCAN_CHILD_AUDIENCE_INVALID");
+    }
     const compositionPath = resolveCompositionPath(required("EPER_SCANNER_CHILD_COMPOSITION_MODULE"));
+    const compositionMetadata = await lstat(compositionPath);
+    if (!compositionMetadata.isFile() || compositionMetadata.isSymbolicLink() ||
+        (compositionMetadata.mode & 0o022) !== 0 || compositionMetadata.size < 1) {
+      throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_FILE_INVALID");
+    }
     const require = createRequire(import.meta.url);
     const pg = require("pg") as { Pool: new (options: Record<string, unknown>) => {
       end(): Promise<void>;
       query<T extends Record<string, unknown>>(text: string, values?: readonly unknown[]): Promise<{ rows: T[] }>;
     }};
     const databasePort = boundedInteger("PGPORT", 5432, 1, 65535);
-    const ca = await import("node:fs/promises").then(fs => fs.readFile(required("PGSSLROOTCERT"), "utf8"));
-    const cert = await import("node:fs/promises").then(fs => fs.readFile(required("PGSSLCERT"), "utf8"));
-    const key = await import("node:fs/promises").then(fs => fs.readFile(required("PGSSLKEY"), "utf8"));
+    const ca = await readDeploymentFile(required("PGSSLROOTCERT"));
+    const cert = await readDeploymentFile(required("PGSSLCERT"));
+    const key = await readDeploymentFile(required("PGSSLKEY"), true);
     const createdPool = new pg.Pool({
       host: required("PGHOST"), port: databasePort, database: required("PGDATABASE"),
       user: required("PGUSER"), max: 2, connectionTimeoutMillis: 5000,
@@ -94,7 +123,7 @@ if (!isCustomerAssetScanChildStart(start)) {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const result = await runtime.execute(start, controller.signal);
-      process.stdout.write(JSON.stringify(result));
+      protocolWrite(JSON.stringify(result));
       if (result.type === "failure") process.exitCode = 1;
     } finally {
       clearTimeout(timer);
