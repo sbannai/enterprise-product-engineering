@@ -6,6 +6,7 @@ import {
 } from "../dist/packages/integrations/provider-storage-driver-contract.js";
 
 const base = {
+  dependencyIds: [],
   capabilities: {
     idempotentCreateByUploadSessionId: true,
     lookupByUploadSessionId: true,
@@ -71,4 +72,14 @@ test("permits omitted optional operations only when capability is explicitly fal
     scanObject: undefined,
   };
   assert.equal(assertProviderStorageDriver(driver), driver);
+});
+
+
+test("rejects malformed or duplicate server-owned dependency declarations", () => {
+  assert.throws(() => assertProviderStorageDriver({ ...base, dependencyIds: ["bad id"] }),
+    error => error instanceof ProviderStorageDriverContractError &&
+      error.code === "PROVIDER_DRIVER_INVALID");
+  assert.throws(() => assertProviderStorageDriver({ ...base, dependencyIds: ["sdk", "sdk"] }),
+    error => error instanceof ProviderStorageDriverContractError &&
+      error.code === "PROVIDER_DRIVER_INVALID");
 });
