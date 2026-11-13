@@ -60,43 +60,22 @@ test("lifecycle rejects skipping configuration and retired peripherals never rea
 });
 
 
-test("adapter dependency gate blocks a vendor-mandated version after its effective cutoff", () => {
+test("adapter without an explicit dependency ID list is not treated as dependency-free", () => {
   const registry = new PeripheralAdapterRegistry([{
     adapterKey: "vendor.scanner", adapterVersion: "1.0.0",
     kinds: ["barcode_scanner"], adapter,
-    dependencies: [{
-      policy: {
-        dependencyId: "vendor.scanner.sdk", vendor: "Example Vendor", componentKind: "sdk",
-        supportedVersions: { minimum: "2.0.0", maximum: "4.0.0" },
-        requiredMinimumVersion: "3.5.0", supportState: "supported", mandatoryUpdate: true,
-        effectiveAt: "2026-11-10T00:00:00Z", downgradePolicy: "allowed",
-        notice: { verification: "verified", source: "vendor bulletin", reference: "VB-42", recordedAt: "2026-11-01T00:00:00Z" },
-      },
-      installation: { installedVersion: "3.1.0", operatingSystem: "linux", runtime: "node-22" },
-    }],
   }]);
-  assert.throws(() => registry.assertDependenciesCompatible({
+  assert.equal(registry.dependencyIds({
     adapterKey: "vendor.scanner", adapterVersion: "1.0.0", kind: "barcode_scanner",
-    evaluatedAt: "2026-11-13T00:00:00Z",
-  }), /EPER_PERIPHERAL_DEPENDENCY_BLOCKED:vendor.scanner.sdk:blocked_at_cutoff/);
+  }), undefined);
 });
 
-test("adapter dependency gate allows a compatible declared vendor dependency", () => {
+test("legacy in-memory dependency snapshots cannot substitute for persisted dependency IDs", () => {
   const registry = new PeripheralAdapterRegistry([{
     adapterKey: "vendor.scanner", adapterVersion: "1.0.0",
     kinds: ["barcode_scanner"], adapter,
-    dependencies: [{
-      policy: {
-        dependencyId: "vendor.scanner.sdk", vendor: "Example Vendor", componentKind: "sdk",
-        supportedVersions: { minimum: "2.0.0", maximum: "4.0.0" },
-        supportState: "supported", mandatoryUpdate: false, downgradePolicy: "allowed",
-        notice: { verification: "verified", source: "vendor compatibility matrix", reference: "CM-8", recordedAt: "2026-11-01T00:00:00Z" },
-      },
-      installation: { installedVersion: "3.1.0", operatingSystem: "linux", runtime: "node-22" },
-    }],
   }]);
-  assert.doesNotThrow(() => registry.assertDependenciesCompatible({
+  assert.equal(registry.dependencyIds({
     adapterKey: "vendor.scanner", adapterVersion: "1.0.0", kind: "barcode_scanner",
-    evaluatedAt: "2026-11-13T00:00:00Z",
-  }));
+  }), undefined);
 });
