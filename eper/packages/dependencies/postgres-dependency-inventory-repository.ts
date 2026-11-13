@@ -30,6 +30,33 @@ export interface RecordDependencyInstallationInput extends DependencyAuditContex
   deviceModel?: string; installationStatus?: "observed" | "upgrade_pending" | "blocked" | "retired";
 }
 export interface StoredDependencyPolicy extends DependencyPolicy { version: number; policyStatus: "draft" | "active" | "retired"; }
+export interface StoredDependencyInstallation {
+  dependencyId: string;
+  installationId: string;
+  scopeType: "application" | "workstation" | "device" | "user" | "gateway";
+  scopeId: string;
+  installedVersion: string;
+  operatingSystem: string;
+  runtime: string;
+  deviceModel?: string;
+  installationStatus: "observed" | "upgrade_pending" | "blocked" | "retired";
+  lastVerifiedAt?: string;
+  version: number;
+}
+type InstallationRow = {
+  dependency_id:string; installation_id:string; scope_type:StoredDependencyInstallation["scopeType"];
+  scope_id:string; installed_version:string; operating_system:string; runtime:string;
+  device_model:string|null; installation_status:StoredDependencyInstallation["installationStatus"];
+  last_verified_at:Date|string|null; version:number|string;
+};
+function mapInstallation(row:InstallationRow):StoredDependencyInstallation {
+  return {
+    dependencyId:row.dependency_id,installationId:row.installation_id,scopeType:row.scope_type,
+    scopeId:row.scope_id,installedVersion:row.installed_version,operatingSystem:row.operating_system,
+    runtime:row.runtime,deviceModel:row.device_model??undefined,installationStatus:row.installation_status,
+    lastVerifiedAt:iso(row.last_verified_at)??undefined,version:Number(row.version),
+  };
+}
 type PolicyRow = {
   dependency_id:string; vendor:string; component_kind:DependencyComponentKind;
   supported_versions:DependencyVersionRange|string; required_minimum_version:string|null;
@@ -93,6 +120,23 @@ export class PostgresDependencyInventoryRepository {
   try{await c.query("BEGIN READ ONLY");await this.setScope(c,scope);
    const r=await c.query<PolicyRow>(this.policySelect()+` WHERE p.tenant_id=$1 AND p.application_id=$2 AND p.dependency_id=$3`,[scope.tenantId,scope.applicationId,dependencyId]);
    await c.query("COMMIT");return r.rows[0]?mapPolicy(r.rows[0]):null;
+  }catch(e){await this.rollback(c);throw e;}finally{c.release();}
+ }
+ async listInstallations(scope:DependencyScope,dependencyId?:string):Promise<StoredDependencyInstallation[]>{
+  this.validateScope(scope);
+  if(dependencyId!==undefined)requiredText(dependencyId,160,"dependency_id");
+  const c=await this.pool.connect();
+  try{
+   await c.query("BEGIN READ ONLY");
+   await this.setScope(c,scope);
+   const r=await c.query<InstallationRow>(`SELECT dependency_id,installation_id,scope_type,scope_id,
+    installed_version,operating_system,runtime,device_model,installation_status,last_verified_at,version
+    FROM eper_dependency_installation
+    WHERE tenant_id=$1 AND application_id=$2 AND ($3::text IS NULL OR dependency_id=$3)
+    ORDER BY dependency_id,scope_type,scope_id,installation_id`,
+    [scope.tenantId,scope.applicationId,dependencyId??null]);
+   await c.query("COMMIT");
+   return r.rows.map(mapInstallation);
   }catch(e){await this.rollback(c);throw e;}finally{c.release();}
  }
  async savePolicy(input:SaveDependencyPolicyInput):Promise<StoredDependencyPolicy>{
