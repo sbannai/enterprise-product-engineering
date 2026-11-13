@@ -119,6 +119,16 @@ test("update idempotency replays the original versioned mutation and rejects cha
   assert.equal((await service.get(context,"Order","order-update-retry")).version,2);
 });
 
+test("delete idempotency replays a committed delete and rejects key reuse", async t => {
+  const service=await fixture(t);
+  await service.create(context,"Order","order-delete-retry",{customerId:"c1",total:12,status:"NEW"});
+  const requestContext={...context,idempotencyKey:"delete-attempt-0001"};
+  await service.delete(requestContext,"Order","order-delete-retry",1);
+  await service.delete(requestContext,"Order","order-delete-retry",1);
+  assert.equal(await service.get(context,"Order","order-delete-retry"),undefined);
+  await assert.rejects(()=>service.delete(requestContext,"Order","another-order",1),/IDEMPOTENCY_KEY_REUSED/);
+});
+
 test("create without an idempotency key retains ordinary duplicate-record protection", async t => {
   const service=await fixture(t);
   await service.create(context,"Order","order-plain-01",{customerId:"c1",total:12,status:"NEW"});
