@@ -32,7 +32,7 @@ export class ProviderRuntimeResolutionService<TAdapter> {
     private readonly dispatch: Pick<ProviderDispatchConfigurationService, "resolve">,
     private readonly catalogue: Pick<PostgresProviderCatalogueRepository, "get">,
     private readonly adapters: Pick<ProviderRuntimeAdapterRegistry<TAdapter>, "resolve">,
-    private readonly deploymentPolicy?: ProviderRuntimeDeploymentPolicy,
+    private readonly deploymentPolicy: ProviderRuntimeDeploymentPolicy,
   ) {}
 
   async resolve(input: {
