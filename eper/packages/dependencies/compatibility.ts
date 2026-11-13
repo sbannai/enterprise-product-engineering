@@ -69,18 +69,18 @@ interface ParsedVersion {
   readonly prerelease: readonly (string | number)[];
 }
 
-const SEMVER = /^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-([0-9A-Za-z.-]+))?(?:\\+[0-9A-Za-z.-]+)?$/;
+const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\\+[0-9A-Za-z.-]+)?$/;
 
 function parseVersion(value: string): ParsedVersion | null {
   const match = SEMVER.exec(value);
   if (!match) return null;
   const prerelease = match[4] ? match[4].split(".") : [];
-  if (prerelease.some(part => !part || (/^0\\d+$/.test(part)))) return null;
+  if (prerelease.some(part => !part || (/^0\d+$/.test(part)))) return null;
   return {
     major: Number(match[1]),
     minor: Number(match[2]),
     patch: Number(match[3]),
-    prerelease: prerelease.map(part => /^\\d+$/.test(part) ? Number(part) : part),
+    prerelease: prerelease.map(part => /^\d+$/.test(part) ? Number(part) : part),
   };
 }
 
