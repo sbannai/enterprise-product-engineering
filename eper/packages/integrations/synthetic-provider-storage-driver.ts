@@ -41,6 +41,8 @@ type StoredObject = {
 export class SyntheticProviderStorageDriver
 implements ProviderStorageDriver<SyntheticStorageCredentials> {
   readonly synthetic = true;
+  /** This metadata-only simulator has no vendor-managed runtime dependency. */
+  readonly dependencyIds: readonly string[] = Object.freeze([]);
   readonly capabilities = Object.freeze({
     idempotentCreateByUploadSessionId: true,
     lookupByUploadSessionId: true,
