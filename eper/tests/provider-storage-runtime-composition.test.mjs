@@ -15,6 +15,7 @@ const capabilities = {
 };
 function driver() {
   return {
+    dependencyIds: [],
     capabilities,
     async createUploadGrant() { return { kind: "unknown", reason: "transport" }; },
     async lookupUpload() { return { kind: "not_found" }; },
