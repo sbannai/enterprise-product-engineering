@@ -145,7 +145,7 @@ test("expected upload checksum migration is additive, repeatable and fails close
 
 
 const scanChildIsolationMigration = await readFile(new URL("../packages/audit/migrations/046_customer_asset_scan_child_readonly_input.sql", import.meta.url), "utf8");
-const scanChildProviderBindingMigration = await readFile(new URL("../packages/audit/migrations/052_customer_asset_scan_child_provider_binding.sql", import.meta.url), "utf8");
+const scanChildProviderBindingMigration = await readFile(new URL("../packages/audit/migrations/053_customer_asset_scan_child_provider_binding.sql", import.meta.url), "utf8");
 
 test("scanner child input resolver binds the authenticated LOGIN identity to one tenant, application, worker and service", () => {
   assert.ok(scanChildIsolationMigration.includes("CREATE TABLE IF NOT EXISTS public.eper_customer_asset_scan_child_identities"));
