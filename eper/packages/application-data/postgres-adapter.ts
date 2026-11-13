@@ -59,6 +59,34 @@ export class PostgresApplicationDataAdapter implements ApplicationDataAdapter {
       if (!result.rowCount) throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_CONFLICT");
     });
   }
+  /** Lock referenced rows in the same transaction. FOR KEY SHARE serializes with deletion's FOR UPDATE lock. */
+  private async lockRelationshipTargets(client: import("pg").PoolClient, context: ApplicationDataContext,
+    relationships: import("./contracts.js").ApplicationDataRelationship[] | undefined, data: Record<string, unknown>): Promise<void> {
+    for (const relation of relationships ?? []) {
+      const value = data[relation.field];
+      if (value === undefined || value === null) continue;
+      const ids = relation.cardinality === "one" ? [value] : value;
+      if (!Array.isArray(ids)) throw new Error("APPLICATION_DATA_RELATIONSHIP_VALUE_INVALID:" + relation.field);
+      for (const id of ids) {
+        const target = await client.query("SELECT 1 FROM eper_application_data_records WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND record_id=$4 FOR KEY SHARE",
+          [context.tenantId,context.applicationId,relation.targetEntity,id]);
+        if (!target.rowCount) throw new Error("APPLICATION_DATA_RELATIONSHIP_TARGET_NOT_FOUND:" + relation.field);
+      }
+    }
+  }
+  /** The target row is locked FOR UPDATE before scanning references, closing the insert/delete race. */
+  private async assertNotReferenced(client: import("pg").PoolClient, context: ApplicationDataContext, entityType: string, id: string): Promise<void> {
+    const models = await client.query<Row>("SELECT entity_type,relationships FROM eper_application_data_models WHERE tenant_id=$1 AND application_id=$2 AND status IN ('ACTIVE','RETIRED')",
+      [context.tenantId,context.applicationId]);
+    for (const model of models.rows) {
+      const relationships = json<import("./contracts.js").ApplicationDataRelationship[]>(model.relationships ?? []);
+      for (const relation of relationships.filter(item => item.targetEntity === entityType)) {
+        const reference = await client.query("SELECT 1 FROM eper_application_data_records WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND ((data -> $4) = to_jsonb($5::text) OR ((data -> $4) ? $5)) LIMIT 1",
+          [context.tenantId,context.applicationId,String(model.entity_type),relation.field,id]);
+        if (reference.rowCount) throw new Error("APPLICATION_DATA_RECORD_REFERENCED");
+      }
+    }
+  }
   private async evidence(client: import("pg").PoolClient, context: ApplicationDataContext, action: string, record: ApplicationDataRecord): Promise<void> {
     const id = randomUUID(); const occurredAt = new Date().toISOString();
     const payload = { entityType:record.entityType, recordId:record.id, applicationId:record.applicationId, version:record.version };
@@ -67,8 +95,9 @@ export class PostgresApplicationDataAdapter implements ApplicationDataAdapter {
     await client.query("INSERT INTO audit_evidence(tenant_id,evidence_id,requirement_id,action,principal_id,correlation_id,occurred_at,payload,canonicalization_version,integrity_hash) VALUES($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::jsonb,1,$9)", [context.tenantId,id,context.requirementId,action,context.actorId,context.correlationId,occurredAt,JSON.stringify(payload),integrityHash]);
     await enqueueOutboxEvent({ tenantId:context.tenantId, client }, { eventId:id, tenantId:context.tenantId, aggregateType:"application_data_record", aggregateId:record.id, eventType:action, correlationId:context.correlationId, payload });
   }
-  async create(record: ApplicationDataRecord, context: ApplicationDataContext): Promise<ApplicationDataRecord> {
+  async create(record: ApplicationDataRecord, context: ApplicationDataContext, relationships?: import("./contracts.js").ApplicationDataRelationship[]): Promise<ApplicationDataRecord> {
     return this.scope(context, async client => {
+      await this.lockRelationshipTargets(client,context,relationships,record.data);
       const key = context.idempotencyKey;
       const requestHash = key ? applicationDataCreateHash(record) : undefined;
       if (key && requestHash) {
@@ -92,8 +121,9 @@ export class PostgresApplicationDataAdapter implements ApplicationDataAdapter {
   async get(c: ApplicationDataContext, e: string, id: string): Promise<ApplicationDataRecord | undefined> {
     return this.scope(c, async client => { const r=await client.query<Row>("SELECT * FROM eper_application_data_records WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND record_id=$4",[c.tenantId,c.applicationId,e,id]); return r.rows[0] ? mapRecord(r.rows[0]) : undefined; });
   }
-  async update(c: ApplicationDataContext, e: string, id: string, expected: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }): Promise<ApplicationDataRecord> {
+  async update(c: ApplicationDataContext, e: string, id: string, expected: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }, relationships?: import("./contracts.js").ApplicationDataRelationship[]): Promise<ApplicationDataRecord> {
     return this.scope(c, async client => {
+      if (patch.data) await this.lockRelationshipTargets(client,c,relationships,patch.data);
       const r=await client.query<Row>("UPDATE eper_application_data_records SET state=COALESCE($5,state),data=COALESCE($6::jsonb,data),version=version+1,updated_at=now() WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND record_id=$4 AND version=$7 RETURNING *",[c.tenantId,c.applicationId,e,id,patch.state ?? null,patch.data === undefined ? null : JSON.stringify(patch.data),expected]);
       if (!r.rows[0]) { const exists=await client.query("SELECT 1 FROM eper_application_data_records WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND record_id=$4",[c.tenantId,c.applicationId,e,id]); throw new Error(exists.rowCount ? "APPLICATION_DATA_VERSION_CONFLICT" : "APPLICATION_DATA_RECORD_NOT_FOUND"); }
       const saved=mapRecord(r.rows[0]); await this.evidence(client,c,"APPLICATION_DATA_UPDATED",saved); return saved;
@@ -101,6 +131,9 @@ export class PostgresApplicationDataAdapter implements ApplicationDataAdapter {
   }
   async delete(c: ApplicationDataContext, e: string, id: string, expected: number): Promise<void> {
     await this.scope(c, async client => {
+      const locked=await client.query("SELECT 1 FROM eper_application_data_records WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND record_id=$4 FOR UPDATE",[c.tenantId,c.applicationId,e,id]);
+      if (!locked.rowCount) throw new Error("APPLICATION_DATA_RECORD_NOT_FOUND");
+      await this.assertNotReferenced(client,c,e,id);
       const r=await client.query<Row>("DELETE FROM eper_application_data_records WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND record_id=$4 AND version=$5 RETURNING *",[c.tenantId,c.applicationId,e,id,expected]);
       if (!r.rows[0]) { const exists=await client.query("SELECT 1 FROM eper_application_data_records WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND record_id=$4",[c.tenantId,c.applicationId,e,id]); throw new Error(exists.rowCount ? "APPLICATION_DATA_VERSION_CONFLICT" : "APPLICATION_DATA_RECORD_NOT_FOUND"); }
       await this.evidence(client,c,"APPLICATION_DATA_DELETED",mapRecord(r.rows[0]));
