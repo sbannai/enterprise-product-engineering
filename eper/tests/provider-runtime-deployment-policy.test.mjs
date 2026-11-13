@@ -166,3 +166,29 @@ test("deployment config rejects unsupported schema versions and ambiguous file p
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+
+test("production deployment config rejects symlinks and group/world-writable files", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-provider-config-"));
+  const file = join(directory, "provider-runtime.json");
+  const link = join(directory, "provider-runtime-link.json");
+  try {
+    writeFileSync(file, JSON.stringify(configuration), { mode: 0o600 });
+    symlinkSync(file, link);
+    const productionEnv = {
+      EPER_PROVIDER_STORAGE_RUNTIME_ENABLED: "true",
+      NODE_ENV: "production",
+      EPER_ENVIRONMENT: "production",
+    };
+    assert.throws(() => readProviderRuntimeDeploymentPolicy({
+      ...productionEnv, EPER_PROVIDER_STORAGE_RUNTIME_CONFIG_FILE: link,
+    }), error => error.code === "PROVIDER_RUNTIME_CONFIG_SOURCE_INVALID");
+
+    chmodSync(file, 0o622);
+    assert.throws(() => readProviderRuntimeDeploymentPolicy({
+      ...productionEnv, EPER_PROVIDER_STORAGE_RUNTIME_CONFIG_FILE: file,
+    }), error => error.code === "PROVIDER_RUNTIME_CONFIG_SOURCE_INVALID");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
