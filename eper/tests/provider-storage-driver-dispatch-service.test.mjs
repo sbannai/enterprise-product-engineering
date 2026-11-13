@@ -308,6 +308,7 @@ const compatibleDependencyPolicy = {
   componentKind: "sdk",
   supportedVersions: { minimum: "1.0.0", maximum: "2.0.0" },
   supportState: "supported",
+  policyStatus: "active",
   mandatoryUpdate: false,
   downgradePolicy: "allowed",
   notice: { verification: "not_provided", source: null, reference: null, recordedAt: null },
