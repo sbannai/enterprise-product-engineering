@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import type { ApplicationDataRecord } from "./contracts.js";
 
-/** Hash only the semantic create request; generated timestamps and tracing metadata must not break retries. */
-export function applicationDataCreateHash(record: ApplicationDataRecord): string {
+/** Hash only stable caller intent. Schema version and generated metadata must not break retries after schema activation. */
+export function applicationDataCreateHash(record: Pick<ApplicationDataRecord, "tenantId" | "applicationId" | "entityType" | "id" | "data">): string {
   const canonical = (value: unknown): string => {
     if (value === null || typeof value !== "object") return JSON.stringify(value);
     if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
@@ -14,8 +14,6 @@ export function applicationDataCreateHash(record: ApplicationDataRecord): string
     applicationId: record.applicationId,
     entityType: record.entityType,
     id: record.id,
-    schemaVersion: record.schemaVersion,
-    state: record.state,
     data: record.data
   };
   return createHash("sha256").update(canonical(request)).digest("hex");
