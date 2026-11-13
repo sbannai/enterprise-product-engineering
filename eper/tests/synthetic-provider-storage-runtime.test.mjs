@@ -8,6 +8,13 @@ const capabilities = ["storage.upload.grant", "storage.upload.lookup", "storage.
   "storage.object.verify", "storage.download.grant", "storage.object.scan"];
 const context = { tenantId: "tenant-a", applicationId: "app-a", connectionId: "conn-a",
   providerKey: "synthetic-storage", credentials: { synthetic: true, marker: "ephemeral-test-only" } };
+const deploymentPolicy = {
+  enabled: true, environment: "test", scannerIdentity: "synthetic-scanner-v1",
+  allowedHosts: ["uploads.synthetic.invalid"], allowedProviderKeys: ["synthetic-storage"],
+  secretManager: { adapterKey: "synthetic-secret", adapterVersion: "1.0.0" },
+  tlsMode: "verify-full", runtimeLimits: { requestTimeoutMs: 30000, maxObjectBytes: 1048576, maxConcurrentOperations: 2 },
+  adapters: [{ adapterKey: "synthetic-storage", adapterVersion: "1.0.0", capabilities, synthetic: true }],
+};
 const upload = { tenantId: "tenant-a", applicationId: "app-a", actorId: "actor-a",
   assetId: "asset-a", uploadSessionId: "session-a", fileName: "proof.txt",
   mimeType: "text/plain", sizeBytes: 12 };
@@ -122,7 +129,7 @@ test("existing runtime composition accepts the dedicated synthetic driver only o
   const registration = { adapterKey: "synthetic-storage", adapterVersion: "1.0.0",
     capabilities, adapter: driver, synthetic: true };
   const dependencies = {
-    enabled: true, environment: "test", registrations: [registration],
+    enabled: true, deploymentPolicy, environment: "test", registrations: [registration],
     dispatch: { async resolve() { throw new Error("not called"); } },
     catalogue: { async get() { return null; } },
     connections: { async getRuntimeSecretReference() { throw new Error("not called"); },
@@ -131,6 +138,6 @@ test("existing runtime composition accepts the dedicated synthetic driver only o
     scannerIdentity: "synthetic-scanner-v1", allowedHosts: ["uploads.synthetic.invalid"],
   };
   assert.equal(createProviderStorageRuntimeComposition(dependencies).enabled, true);
-  assert.throws(() => createProviderStorageRuntimeComposition({ ...dependencies, environment: "production" }),
+  assert.throws(() => createProviderStorageRuntimeComposition({ ...dependencies, environment: "production", deploymentPolicy: { ...deploymentPolicy, environment: "production" } }),
     error => error.code === "PROVIDER_STORAGE_RUNTIME_SYNTHETIC_DRIVER_FORBIDDEN");
 });
