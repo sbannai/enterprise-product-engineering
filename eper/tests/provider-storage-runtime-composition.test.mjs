@@ -25,6 +25,17 @@ function driver() {
     async scanObject() { return { kind: "timeout" }; },
   };
 }
+const deploymentPolicy = {
+  enabled: true, environment: "test", scannerIdentity: "scanner-test",
+  allowedHosts: ["storage.example.com"], allowedProviderKeys: ["provider-test"],
+  secretManager: { adapterKey: "secret-port", adapterVersion: "1.0.0" },
+  tlsMode: "verify-full", runtimeLimits: { requestTimeoutMs: 30000, maxObjectBytes: 1048576, maxConcurrentOperations: 4 },
+  adapters: [{ adapterKey: "storage-test", adapterVersion: "1.0.0", capabilities: [
+    "storage.upload.grant", "storage.upload.lookup", "storage.upload.renew",
+    "storage.object.verify", "storage.download.grant", "storage.object.scan",
+  ], synthetic: false }],
+};
+
 function input(overrides = {}) {
   return {
     enabled: true,
