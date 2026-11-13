@@ -100,12 +100,12 @@ export class ApplicationDataService {
       throw new Error("APPLICATION_DATA_PATCH_INVALID");
     }
     const normalized = { ...patch, ...(patch.data === undefined ? {} : { data: validateData(model.fields, patch.data) }) };
-    return this.adapter.update(context, entityType, id, expectedVersion, normalized, context);
+    return this.adapter.update(context, entityType, id, expectedVersion, normalized);
   }
   async delete(context: ApplicationDataContext, entityType: string, id: string, expectedVersion: number): Promise<void> {
     await this.activeModel(context, entityType); validId(id, "APPLICATION_DATA_RECORD_ID_INVALID");
     if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) throw new Error("APPLICATION_DATA_EXPECTED_VERSION_INVALID");
-    return this.adapter.delete(context, entityType, id, expectedVersion, context);
+    return this.adapter.delete(context, entityType, id, expectedVersion);
   }
   async query(context: ApplicationDataContext, entityType: string, query: ApplicationDataQuery = {}): Promise<ApplicationDataRecord[]> {
     await this.activeModel(context, entityType);
