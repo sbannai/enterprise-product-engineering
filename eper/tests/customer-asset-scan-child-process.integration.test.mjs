@@ -101,3 +101,18 @@ test("child bootstrap returns a structured failure for malformed IPC input", () 
   assert.equal(response.code, "SCANNER_BOOTSTRAP_FAILED");
   assert.equal(child.stderr.includes('"type":"failure"'), false);
 });
+
+test("child bootstrap returns a structured failure when IPC exceeds the byte limit", () => {
+  const child = spawnSync(process.execPath, ["dist/apps/worker/customer-asset-scan-child-main.js"], {
+    input: "x".repeat(16_385),
+    encoding: "utf8",
+    env: process.env,
+    timeout: 5_000,
+  });
+  assert.equal(child.error, undefined);
+  assert.equal(child.status, 1);
+  const response = JSON.parse(child.stdout.trim());
+  assert.equal(response.type, "failure");
+  assert.equal(response.code, "SCANNER_BOOTSTRAP_FAILED");
+  assert.equal(child.stderr.includes('"type":"failure"'), false);
+});
