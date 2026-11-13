@@ -72,7 +72,7 @@ const MAX_EDGES = 1000;
 export function validateCapabilityComposition(
   graph: CapabilityComposition,
   catalogue: readonly CapabilityDescriptor[],
-  options: { evaluatedAt: string } = { evaluatedAt: new Date().toISOString() },
+  options?: { evaluatedAt: string },
 ): CompositionDiagnostic[] {
   const diagnostics: CompositionDiagnostic[] = [];
   const add = (code: string, message: string, extra: Partial<CompositionDiagnostic> = {}) =>
@@ -109,8 +109,12 @@ export function validateCapabilityComposition(
       add("composition.configuration.invalid", "Complete the building block settings before continuing.", { nodeId: node.id });
       continue;
     }
+    if ((descriptor.dependencies?.length ?? 0) > 0 && !options?.evaluatedAt) {
+      add("composition.dependency.evaluation_time_missing", "A trusted evaluation time is required to validate vendor dependency deadlines.", { nodeId: node.id });
+    }
     for (const dependency of descriptor.dependencies ?? []) {
       try {
+        if (!options?.evaluatedAt) continue;
         const compatibility = evaluateDependencyCompatibility({
           policy: dependency.policy,
           installation: dependency.installation,
