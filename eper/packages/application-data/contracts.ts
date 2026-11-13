@@ -54,6 +54,7 @@ export interface ApplicationDataAdapter {
   transitionModelStatus(tenantId: string, applicationId: string, entityType: string, version: number, from: ApplicationDataModel["status"], to: ApplicationDataModel["status"]): Promise<void>;
   getIdempotentCreate(context: ApplicationDataContext, entityType: string, id: string, data: Record<string, unknown>): Promise<ApplicationDataRecord | undefined>;
   getIdempotentUpdate(context: ApplicationDataContext, entityType: string, id: string, expectedVersion: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }): Promise<ApplicationDataRecord | undefined>;
+  getIdempotentDelete(context: ApplicationDataContext, entityType: string, id: string, expectedVersion: number): Promise<boolean>;
   create(record: ApplicationDataRecord, context: ApplicationDataContext, relationships?: ApplicationDataRelationship[]): Promise<ApplicationDataRecord>;
   get(context: ApplicationDataContext, entityType: string, id: string): Promise<ApplicationDataRecord | undefined>;
   update(context: ApplicationDataContext, entityType: string, id: string, expectedVersion: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }, relationships?: ApplicationDataRelationship[]): Promise<ApplicationDataRecord>;
