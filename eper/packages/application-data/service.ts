@@ -130,14 +130,21 @@ export class ApplicationDataService {
   }
   async update(context: ApplicationDataContext, entityType: string, id: string, expectedVersion: number,
     patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }): Promise<ApplicationDataRecord> {
-    const model = await this.activeModel(context, entityType); validId(id, "APPLICATION_DATA_RECORD_ID_INVALID");
+    this.validateContext(context); validId(entityType,"APPLICATION_DATA_ENTITY_INVALID"); validId(id, "APPLICATION_DATA_RECORD_ID_INVALID");
+    validateApplicationDataIdempotencyKey(context.idempotencyKey);
     if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) throw new Error("APPLICATION_DATA_EXPECTED_VERSION_INVALID");
-    if (!patch || typeof patch !== "object" || Array.isArray(patch) || Object.keys(patch).some(k => !["state", "data"].includes(k))) {
+    if (!patch || typeof patch !== "object" || Array.isArray(patch) || Object.keys(patch).some(k => !["state", "data"].includes(k)) ||
+        (patch.state !== undefined && !["ACTIVE","ARCHIVED"].includes(patch.state)) ||
+        (patch.data !== undefined && (!patch.data || typeof patch.data !== "object" || Array.isArray(patch.data)))) {
       throw new Error("APPLICATION_DATA_PATCH_INVALID");
     }
-    const validated = patch.data === undefined ? undefined : validateData(model.fields, patch.data);
+    const requestPatch=clone(patch);
+    const replay=await this.adapter.getIdempotentUpdate(context,entityType,id,expectedVersion,requestPatch);
+    if (replay) return clone(replay);
+    const model = await this.activeModel(context, entityType);
+    const validated = requestPatch.data === undefined ? undefined : validateData(model.fields, requestPatch.data);
     if (validated) await this.validateRelationships(context, model, validated);
-    const normalized = { ...patch, ...(validated === undefined ? {} : { data: validated }) };
+    const normalized = { ...requestPatch, ...(validated === undefined ? {} : { data: validated }) };
     return this.adapter.update(context, entityType, id, expectedVersion, normalized, model.relationships);
   }
   async delete(context: ApplicationDataContext, entityType: string, id: string, expectedVersion: number): Promise<void> {
