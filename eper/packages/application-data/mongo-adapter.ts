@@ -56,6 +56,10 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
     const latest = await this.models().find({ ...this.scope(t,a,e) }).sort({ version:-1 }).limit(1).toArray();
     return latest[0] ? this.clean(latest[0]) as unknown as ApplicationDataModel : undefined;
   }
+  async getActiveModel(t: string, a: string, e: string): Promise<ApplicationDataModel | undefined> {
+    const rows=await this.models().find({ ...this.scope(t,a,e), status:"ACTIVE" }).sort({version:-1}).limit(1).toArray();
+    return rows[0] ? this.clean(rows[0]) as unknown as ApplicationDataModel : undefined;
+  }
   async putModel(model: ApplicationDataModel): Promise<void> {
     await this.transaction(async session => {
       const id=this.key([model.tenantId,model.applicationId,model.entityType,String(model.version)]);
