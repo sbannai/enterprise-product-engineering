@@ -77,3 +77,59 @@ test("propagates exact-version registry rejection without fallback", async () =>
     tenantId: "tenant-a", applicationId: "app-a", capability: "storage.upload.grant",
   }), /PROVIDER_RUNTIME_VERSION_MISMATCH/);
 });
+
+const deploymentPolicy = {
+  enabled: true,
+  environment: "test",
+  allowedProviderKeys: ["storage-provider"],
+  adapters: [{
+    adapterKey: "storage.local",
+    adapterVersion: "1.2.0",
+    capabilities: ["storage.upload.grant"],
+    synthetic: false,
+  }],
+  allowedHosts: ["objects.example.com"],
+  tlsMode: "verify-full",
+  secretManager: { adapterKey: "vault-port", adapterVersion: "1.0.0" },
+  runtimeLimits: { requestTimeoutMs: 30_000, maxObjectBytes: 1_073_741_824, maxConcurrentOperations: 8 },
+};
+
+test("enforces deployment provider, adapter, endpoint and TLS allowlists before adapter resolution", async () => {
+  const cases = [
+    [{ allowedProviderKeys: ["other-provider"] }, "PROVIDER_RUNTIME_PROVIDER_NOT_ALLOWED"],
+    [{ adapters: [{ ...deploymentPolicy.adapters[0], adapterVersion: "2.0.0" }] }, "PROVIDER_RUNTIME_ADAPTER_NOT_ALLOWED"],
+    [{ allowedHosts: ["safe.example.com"] }, "PROVIDER_RUNTIME_ENDPOINT_NOT_ALLOWED"],
+    [{}, "PROVIDER_RUNTIME_ENDPOINT_TLS_REQUIRED", { endpoint: "https://objects.example.com", tlsMode: "" }],
+  ];
+  for (const [override, code, connectionPolicy = {
+    endpoint: "https://objects.example.com", tlsMode: "verify-full",
+  }] of cases) {
+    const calls = [];
+    const f = new ProviderRuntimeResolutionService(
+      { async resolve() { return { ...selection, policy: connectionPolicy }; } },
+      { async get() { return definition(); } },
+      { resolve(input) { calls.push(input); return {}; } },
+      { ...deploymentPolicy, ...override },
+    );
+    await assert.rejects(
+      () => f.resolve({ tenantId: "tenant-a", applicationId: "app-a", capability: "storage.upload.grant" }),
+      error => error.code === code,
+    );
+    assert.equal(calls.length, 0, "adapter registry must not be reached after a policy rejection");
+  }
+});
+
+test("requires a server-owned HTTPS endpoint when deployment policy is enabled", async () => {
+  let adapterLookups = 0;
+  const f = new ProviderRuntimeResolutionService(
+    { async resolve() { return { ...selection, policy: { tlsMode: "verify-full" } }; } },
+    { async get() { return definition(); } },
+    { resolve() { adapterLookups += 1; throw new Error("must not resolve adapter"); } },
+    deploymentPolicy,
+  );
+  await assert.rejects(
+    () => f.resolve({ tenantId: "tenant-a", applicationId: "app-a", capability: "storage.upload.grant" }),
+    /PROVIDER_RUNTIME_ENDPOINT_NOT_ALLOWED/,
+  );
+  assert.equal(adapterLookups, 0);
+});
