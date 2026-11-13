@@ -86,6 +86,27 @@ export class PeripheralAdapterRegistry {
     if (!registration.kinds.includes(input.kind)) throw new Error("PERIPHERAL_ADAPTER_KIND_UNSUPPORTED");
     return registration.adapter;
   }
+  /** Evaluate every declared vendor dependency before peripheral activation. */
+  assertDependenciesCompatible(input: {
+    adapterKey: string;
+    adapterVersion: string;
+    kind: PeripheralKind;
+    evaluatedAt: string;
+  }): void {
+    const registration = this.adapters.get(this.key(input.adapterKey, input.adapterVersion));
+    if (!registration) throw new Error("PERIPHERAL_ADAPTER_NOT_REGISTERED");
+    if (!registration.kinds.includes(input.kind)) throw new Error("PERIPHERAL_ADAPTER_KIND_UNSUPPORTED");
+    for (const dependency of registration.dependencies ?? []) {
+      const result = evaluateDependencyCompatibility({
+        policy: dependency.policy,
+        installation: dependency.installation,
+        evaluatedAt: input.evaluatedAt,
+      });
+      if (result.blocking) {
+        throw new Error("EPER_PERIPHERAL_DEPENDENCY_BLOCKED:" + result.dependencyId + ":" + result.status);
+      }
+    }
+  }
   private key(adapterKey: string, version: string): string { return adapterKey + "@" + version; }
 }
 
