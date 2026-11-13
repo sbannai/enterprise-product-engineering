@@ -55,7 +55,29 @@ export class ProviderRuntimeResolutionService<TAdapter> {
     if (!definition.capabilities.includes(input.capability)) {
       throw new ProviderRuntimeResolutionError("PROVIDER_RUNTIME_CATALOGUE_CAPABILITY_MISMATCH");
     }
-    // The deployment-owned trust policy is enforced before the executable adapter\n    // is resolved. Endpoint is server-owned connection policy, never request data.\n    if (this.deploymentPolicy?.enabled) {\n      const endpoint = selection.policy.endpoint;\n      if (typeof endpoint !== "string") {\n        throw new Error("PROVIDER_RUNTIME_ENDPOINT_NOT_ALLOWED");\n      }\n      const admitted = this.deploymentPolicy.adapters.find(item =>\n        item.adapterKey === definition.adapterKey && item.adapterVersion === definition.adapterVersion &&\n        item.capabilities.includes(input.capability));\n      assertProviderRuntimeDeploymentAllowed(this.deploymentPolicy, {\n        providerKey: selection.providerKey,\n        adapterKey: definition.adapterKey,\n        adapterVersion: definition.adapterVersion,\n        capability: input.capability,\n        endpoint,\n        tlsMode: this.deploymentPolicy.tlsMode,\n        synthetic: admitted?.synthetic ?? false,\n      });\n    } else if (this.deploymentPolicy && !this.deploymentPolicy.enabled) {\n      throw new Error("PROVIDER_RUNTIME_PROVIDER_NOT_ALLOWED");\n    }\n    const adapter = this.adapters.resolve({
+    // The deployment-owned trust policy is enforced before the executable adapter
+    // is resolved. Endpoint is server-owned connection policy, never request data.
+    if (this.deploymentPolicy?.enabled) {
+      const endpoint = selection.policy.endpoint;
+      if (typeof endpoint !== "string") {
+        throw new Error("PROVIDER_RUNTIME_ENDPOINT_NOT_ALLOWED");
+      }
+      const admitted = this.deploymentPolicy.adapters.find(item =>
+        item.adapterKey === definition.adapterKey && item.adapterVersion === definition.adapterVersion &&
+        item.capabilities.includes(input.capability));
+      assertProviderRuntimeDeploymentAllowed(this.deploymentPolicy, {
+        providerKey: selection.providerKey,
+        adapterKey: definition.adapterKey,
+        adapterVersion: definition.adapterVersion,
+        capability: input.capability,
+        endpoint,
+        tlsMode: this.deploymentPolicy.tlsMode,
+        synthetic: admitted?.synthetic ?? false,
+      });
+    } else if (this.deploymentPolicy && !this.deploymentPolicy.enabled) {
+      throw new Error("PROVIDER_RUNTIME_PROVIDER_NOT_ALLOWED");
+    }
+    const adapter = this.adapters.resolve({
       adapterKey: definition.adapterKey,
       adapterVersion: definition.adapterVersion,
       capability: input.capability,
