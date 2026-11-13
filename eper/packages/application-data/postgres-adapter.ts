@@ -2,7 +2,7 @@ import { randomUUID, createHash } from "node:crypto";
 import type { Pool } from "pg";
 import { withTenantTransaction, enqueueOutboxEvent } from "../capabilities/postgres-transaction.js";
 import type { ApplicationDataAdapter, ApplicationDataContext, ApplicationDataModel, ApplicationDataQuery, ApplicationDataRecord } from "./contracts.js";
-import { applicationDataCreateHash, applicationDataUpdateHash } from "./idempotency.js";
+import { applicationDataCreateHash, applicationDataUpdateHash, applicationDataDeleteHash } from "./idempotency.js";
 
 type Row = Record<string, unknown>;
 function json<T>(value: unknown): T { return (typeof value === "string" ? JSON.parse(value) : value) as T; }
@@ -170,14 +170,41 @@ export class PostgresApplicationDataAdapter implements ApplicationDataAdapter {
       return saved;
     });
   }
+  async getIdempotentDelete(c: ApplicationDataContext, e: string, id: string, expected: number): Promise<boolean> {
+    if (!c.idempotencyKey) return false;
+    const requestHash=applicationDataDeleteHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected});
+    return this.scope(c,async client=>{
+      const result=await client.query<Row>("SELECT request_hash,response FROM eper_application_data_idempotency WHERE tenant_id=$1 AND application_id=$2 AND idempotency_key=$3",
+        [c.tenantId,c.applicationId,c.idempotencyKey]);
+      const prior=result.rows[0];
+      if (!prior) return false;
+      if (String(prior.request_hash)!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+      return json<{deleted:boolean}>(prior.response).deleted===true;
+    });
+  }
   async delete(c: ApplicationDataContext, e: string, id: string, expected: number): Promise<void> {
     await this.scope(c, async client => {
+      if (c.idempotencyKey) {
+        const requestHash=applicationDataDeleteHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected});
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",[`application-data:${c.tenantId}:${c.applicationId}:${c.idempotencyKey}`]);
+        const prior=await client.query<Row>("SELECT request_hash,response FROM eper_application_data_idempotency WHERE tenant_id=$1 AND application_id=$2 AND idempotency_key=$3",[c.tenantId,c.applicationId,c.idempotencyKey]);
+        if (prior.rows[0]) {
+          if (String(prior.rows[0].request_hash)!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+          if (json<{deleted:boolean}>(prior.rows[0].response).deleted===true) return;
+          throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+        }
+      }
       const locked=await client.query("SELECT 1 FROM eper_application_data_records WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND record_id=$4 FOR UPDATE",[c.tenantId,c.applicationId,e,id]);
       if (!locked.rowCount) throw new Error("APPLICATION_DATA_RECORD_NOT_FOUND");
       await this.assertNotReferenced(client,c,e,id);
       const r=await client.query<Row>("DELETE FROM eper_application_data_records WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND record_id=$4 AND version=$5 RETURNING *",[c.tenantId,c.applicationId,e,id,expected]);
       if (!r.rows[0]) { const exists=await client.query("SELECT 1 FROM eper_application_data_records WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND record_id=$4",[c.tenantId,c.applicationId,e,id]); throw new Error(exists.rowCount ? "APPLICATION_DATA_VERSION_CONFLICT" : "APPLICATION_DATA_RECORD_NOT_FOUND"); }
       await this.evidence(client,c,"APPLICATION_DATA_DELETED",mapRecord(r.rows[0]));
+      if (c.idempotencyKey) {
+        const requestHash=applicationDataDeleteHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected});
+        await client.query("INSERT INTO eper_application_data_idempotency(tenant_id,application_id,idempotency_key,request_hash,response) VALUES($1,$2,$3,$4,$5::jsonb)",
+          [c.tenantId,c.applicationId,c.idempotencyKey,requestHash,JSON.stringify({deleted:true})]);
+      }
     });
   }
   async query(c: ApplicationDataContext, e: string, q: ApplicationDataQuery): Promise<ApplicationDataRecord[]> {
