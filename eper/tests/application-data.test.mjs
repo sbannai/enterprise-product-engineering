@@ -36,7 +36,15 @@ test("workflow binding invokes registered operations without exposing a storage 
   assert.equal(result.result.id,"order-01");
   await assert.rejects(()=>activity.execute(context,{entityType:"Order",operation:"create",recordIdField:"id",dataField:"payload"},{id:"order-02",payload:{bad:true}}),/UNKNOWN_FIELD/);
 });
-test("model versions cannot be overwritten in place", async t => {\n  const service=await fixture(t);\n  await assert.rejects(()=>service.registerModel({...model,fields:[...model.fields,{id:"notes",type:"string"}]}),/SCHEMA_VERSION_IMMUTABLE/);\n});\ntest("workflow data operations require an authorization decision", async t => {\n  const service=await fixture(t); const activity=new ApplicationDataWorkflowActivity(service, async () => { throw new Error("DENIED"); });\n  await assert.rejects(()=>activity.execute(context,{entityType:"Order",operation:"query"},{ }),/DENIED/);\n});\ntest("JSON adapter is explicitly a local file adapter", async t => {
+test("model versions cannot be overwritten in place", async t => {
+  const service=await fixture(t);
+  await assert.rejects(()=>service.registerModel({...model,fields:[...model.fields,{id:"notes",type:"string"}]}),/SCHEMA_VERSION_IMMUTABLE/);
+});
+test("workflow data operations require an authorization decision", async t => {
+  const service=await fixture(t); const activity=new ApplicationDataWorkflowActivity(service, async () => { throw new Error("DENIED"); });
+  await assert.rejects(()=>activity.execute(context,{entityType:"Order",operation:"query"},{ }),/DENIED/);
+});
+test("JSON adapter is explicitly a local file adapter", async t => {
   const service=await fixture(t); await service.create(context,"Order","order-01",{customerId:"c1",total:12,status:"NEW"});
   assert.ok((await service.query(context,"Order",{limit:10})).length===1);
 });
