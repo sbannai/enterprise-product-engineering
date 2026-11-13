@@ -59,7 +59,9 @@ export interface PeripheralAdapterRegistration {
   readonly adapterVersion: string;
   readonly kinds: readonly PeripheralKind[];
   readonly adapter: PeripheralAdapter;
-  /** Every vendor-managed dependency used by this adapter must be declared here. */
+  /** Stable IDs for dependencies whose authoritative policy and installation live in the tenant inventory. */
+  readonly dependencyIds?: readonly string[];
+  /** Legacy deterministic test seam; production activation must use persisted inventory. */
   readonly dependencies?: readonly PeripheralAdapterDependency[];
 }
 
@@ -85,6 +87,14 @@ export class PeripheralAdapterRegistry {
     if (!registration) throw new Error("PERIPHERAL_ADAPTER_NOT_REGISTERED");
     if (!registration.kinds.includes(input.kind)) throw new Error("PERIPHERAL_ADAPTER_KIND_UNSUPPORTED");
     return registration.adapter;
+  }
+  dependencyIds(input: { adapterKey: string; adapterVersion: string; kind: PeripheralKind }): readonly string[] {
+    const registration = this.adapters.get(this.key(input.adapterKey, input.adapterVersion));
+    if (!registration) throw new Error("PERIPHERAL_ADAPTER_NOT_REGISTERED");
+    if (!registration.kinds.includes(input.kind)) throw new Error("PERIPHERAL_ADAPTER_KIND_UNSUPPORTED");
+    const ids = registration.dependencyIds ?? registration.dependencies?.map(item => item.policy.dependencyId) ?? [];
+    if (new Set(ids).size !== ids.length || ids.some(id => !id.trim())) throw new Error("PERIPHERAL_ADAPTER_DEPENDENCY_IDS_INVALID");
+    return Object.freeze([...ids]);
   }
   /** Evaluate every declared vendor dependency before peripheral activation. */
   assertDependenciesCompatible(input: {
