@@ -134,3 +134,28 @@ test("create without an idempotency key retains ordinary duplicate-record protec
   await service.create(context,"Order","order-plain-01",{customerId:"c1",total:12,status:"NEW"});
   await assert.rejects(()=>service.create(context,"Order","order-plain-01",{customerId:"c1",total:12,status:"NEW"}),/RECORD_EXISTS/);
 });
+
+
+test("workflow data mutations require stable idempotency and replay the committed result", async t => {
+  const service=await fixture(t);
+  const activity=new ApplicationDataWorkflowActivity(service,async()=>{});
+  const binding={entityType:"Order",operation:"create",recordIdField:"recordId",dataField:"order"};
+  const input={recordId:"workflow-order-01",order:{customerId:"c1",total:42,status:"NEW"}};
+  await assert.rejects(()=>activity.execute(context,binding,input),/WORKFLOW_IDEMPOTENCY_KEY_REQUIRED/);
+  const requestContext={...context,idempotencyKey:"wf-instance-01-activity-01"};
+  const first=await activity.execute(requestContext,binding,input);
+  const replay=await activity.execute(requestContext,binding,input);
+  assert.deepEqual(replay,first);
+  await assert.rejects(()=>activity.execute(requestContext,binding,{
+    ...input,order:{customerId:"c1",total:43,status:"NEW"}
+  }),/IDEMPOTENCY_KEY_REUSED/);
+});
+
+test("workflow data update requires an explicit patch payload", async t => {
+  const service=await fixture(t);
+  const activity=new ApplicationDataWorkflowActivity(service,async()=>{});
+  const requestContext={...context,idempotencyKey:"wf-instance-02-activity-01"};
+  await assert.rejects(()=>activity.execute(requestContext,{
+    entityType:"Order",operation:"update",recordIdField:"recordId",expectedVersionField:"version"
+  },{recordId:"order-01",version:1}),/WORKFLOW_INPUT_INVALID/);
+});
