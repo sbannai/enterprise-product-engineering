@@ -58,3 +58,11 @@ test("activity intent process executes deduplicated scopes and stops cleanly on 
   assert.equal(pass.retrying, 1);
   assert.equal(pass.errors, 0);
 });
+
+test("activity intent process drains bounded batches instead of executing only one record per poll", () => {
+  assert.match(source, /maxExecutionsPerContext\?: number/);
+  assert.match(source, /maxExecutionsPerContext = options\.maxExecutionsPerContext \?\? 25/);
+  assert.match(source, /attempt < this\.maxExecutionsPerContext/);
+  assert.match(source, /total\.executions \+= 1/);
+  assert.match(source, /if \(result\.status === "idle"\)/);
+});
