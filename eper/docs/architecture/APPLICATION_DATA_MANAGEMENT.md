@@ -34,7 +34,7 @@ This is a shared platform capability extension to authoritative records, validat
 
 ## Current implementation limitations to close before production adoption
 
-1. The workflow activity is a reusable service boundary, but it is not wired into the published workflow capability catalogue or runtime executor. The intent worker only executes and records an intent result; it does not hold or advance a workflow instance. The transition transaction does not yet enqueue an application-data intent. The atomic enqueue → hold → execute → advance handshake is outstanding.
+1. The workflow activity is a reusable service boundary, but it is not wired into the published workflow capability catalogue or runtime executor. The transition service now fails closed when an instance has an intent that is not marked `advanced`; this prevents manual progression past an unreconciled intent. The intent worker still only executes and records the result; transition-time enqueue, instance hold, and atomic worker completion/advance are outstanding.
 2. A governed model-authoring API/UI and a policy-backed model-registration permission are not yet included.
 3. PostgreSQL and MongoDB enforce declared relationship targets and restrict deletion while referenced using adapter-specific transaction guards. The local JSON adapter checks references but cannot guarantee concurrency safety. Cross-entity cascade semantics are not implemented.
 4. Automatic schema migration, soft-delete retention policy, backup/restore procedures and adapter conformance tests against live MongoDB instances remain follow-up gates.
