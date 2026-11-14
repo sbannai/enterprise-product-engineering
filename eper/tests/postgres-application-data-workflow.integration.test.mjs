@@ -350,6 +350,7 @@ test("PostgreSQL model authoring enforces versioning and atomically audits schem
     );
     assert.deepEqual(audit.rows.map(row => row.action).sort(), [
       "APPLICATION_DATA_MODEL_ACTIVATED",
+      "APPLICATION_DATA_MODEL_ACTIVATED",
       "APPLICATION_DATA_MODEL_DRAFT_CREATED",
       "APPLICATION_DATA_MODEL_DRAFT_CREATED",
       "APPLICATION_DATA_MODEL_RETIRED",
@@ -360,7 +361,7 @@ test("PostgreSQL model authoring enforces versioning and atomically audits schem
         WHERE tenant_id=$1 AND correlation_id=$2`,
       [tenantId, correlationId],
     );
-    assert.equal(outbox.rows.length, 5);
+    assert.equal(outbox.rows.length, 6);
   } finally {
     await pool.end();
   }
