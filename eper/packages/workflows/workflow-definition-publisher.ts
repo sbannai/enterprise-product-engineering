@@ -89,7 +89,7 @@ function validateDefinition(value: WorkflowDefinition): void {
       if (!field || typeof field.id !== "string" ||
           !/^[a-zA-Z0-9._-]{1,128}$/.test(field.id) || fieldIds.has(field.id) ||
           (field.label !== undefined && (typeof field.label !== "string" || !field.label.trim() || field.label.length > 200)) ||
-          !["text", "textarea", "number", "date", "select", "checkbox"].includes(field.type) ||
+          !["text", "textarea", "number", "date", "select", "checkbox", "json"].includes(field.type) ||
           (field.required !== undefined && typeof field.required !== "boolean") ||
           (field.options !== undefined && (!Array.isArray(field.options) || field.options.length > 100 ||
             field.options.some(option => typeof option !== "string" || option.length > 200))) ||
