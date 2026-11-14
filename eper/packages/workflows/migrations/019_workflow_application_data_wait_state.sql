@@ -14,6 +14,9 @@ ALTER TABLE eper_workflow_instances
   CHECK (status IN ('running','waiting_for_data','completed','rejected','cancelled','failed'));
 
 ALTER TABLE eper_workflow_instances
+  DROP CONSTRAINT IF EXISTS eper_workflow_instances_check;
+
+ALTER TABLE eper_workflow_instances
   DROP CONSTRAINT IF EXISTS eper_workflow_instances_completion_state_check;
 
 ALTER TABLE eper_workflow_instances
