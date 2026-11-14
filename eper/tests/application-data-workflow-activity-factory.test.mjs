@@ -33,3 +33,30 @@ test("PostgreSQL record mutation authorization fails closed when the grant was r
   workflowPermission: "workflow:act",
  }), /APPLICATION_DATA_WORKFLOW_PERMISSION_REVOKED/);
 });
+
+test("PostgreSQL adapter checks workflow authorization on the same connection before reading a record", async () => {
+ const { PostgresApplicationDataAdapter } = await import("../dist/packages/application-data/postgres-adapter.js");
+ const statements = [];
+ const client = {
+  async query(sql, values) {
+   statements.push({ sql: String(sql), values });
+   if (String(sql).includes("FROM eper_workflow_actor_role_assignment")) {
+    return { rows: [{ role_id: "operator" }], rowCount: 1 };
+   }
+   return { rows: [], rowCount: 0 };
+  },
+  release() {},
+ };
+ const pool = { async connect() { return client; } };
+ const adapter = new PostgresApplicationDataAdapter(pool, true);
+ await adapter.get({
+  tenantId: "tenant-a", applicationId: "app-a", actorId: "actor-a",
+  correlationId: "corr-a", requirementId: "REQ-001", workflowRoleId: "operator",
+  workflowPermission: "workflow:act",
+ }, "Order", "order-1");
+ const authorizationIndex = statements.findIndex(item => item.sql.includes("FROM eper_workflow_actor_role_assignment"));
+ const recordReadIndex = statements.findIndex(item => item.sql.includes("FROM eper_application_data_records"));
+ assert.ok(authorizationIndex > statements.findIndex(item => item.sql === "BEGIN"));
+ assert.ok(recordReadIndex > authorizationIndex);
+ assert.equal(statements.at(-1).sql, "COMMIT");
+});
