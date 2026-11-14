@@ -7,6 +7,7 @@ test("application-data executor receives scoped, least-privilege database grants
   assert.match(sql, /CREATE ROLE eper_application_data_executor_access[\s\S]*NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS/);
   assert.match(sql, /GRANT SELECT \(tenant_id, application_id, assignment_status\)[\s\S]*eper_tenant_application_assignment/);
   assert.match(sql, /GRANT SELECT ON eper_workflow_application_data_intents/);
+  assert.match(sql, /GRANT SELECT ON eper_actor_application_assignment,[\s\S]*eper_workflow_actor_role_assignment, eper_workflow_role_definition/);
   assert.match(sql, /GRANT UPDATE \(intent_status, attempts, available_at, locked_at, locked_by,[\s\S]*ON eper_workflow_application_data_intents/);
   assert.match(sql, /GRANT SELECT ON eper_application_data_models/);
   assert.match(sql, /GRANT SELECT, INSERT, UPDATE, DELETE ON eper_application_data_records/);
