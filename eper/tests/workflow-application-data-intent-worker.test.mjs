@@ -50,7 +50,7 @@ test("intent worker executes its injected activity with trusted context and reco
   assert.equal(execution.input.id, "order-1");
   assert.ok(statements.some(item => item.sql.includes("FOR UPDATE SKIP LOCKED")));
   assert.ok(statements.some(item => item.sql.includes("claim_generation = $8")));
-  // Workflow-instance advancement is intentionally not asserted: runtime handshake is not wired yet.
+  // The worker only executes and records the durable intent; the reconciler owns workflow advancement.
 });
 
 test("intent worker returns idle when no pending or expired lease is available", async () => {
