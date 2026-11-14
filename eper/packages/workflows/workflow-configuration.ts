@@ -19,6 +19,15 @@ export interface WorkflowField {
   required?: boolean;
   options?: string[];
 }
+export interface WorkflowApplicationDataBinding {
+  requirementId: string;
+  entityType: string;
+  operation: "create" | "update" | "delete";
+  recordIdField?: string;
+  expectedVersionField?: string;
+  dataField?: string;
+  resultKey?: string;
+}
 export interface WorkflowActivity {
   id: string;
   title: string;
@@ -29,6 +38,8 @@ export interface WorkflowActivity {
   fields: WorkflowField[];
   /** Rule IDs evaluated in priority order to choose a permitted outgoing transition. */
   routingRuleIds?: string[];
+  /** Governed application-data mutation executed by the workflow worker after activity authorization. */
+  applicationDataBinding?: WorkflowApplicationDataBinding;
 }
 export type WorkflowRuleOperator = "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "in" | "contains" | "exists";
 export type WorkflowRuleExpression =
@@ -244,7 +255,17 @@ export class WorkflowConfigurationService {
             !["workflow:act", "workflow:approve"].includes(activity.permission) ||
             !Array.isArray(activity.nextActivityIds) ||
             activity.nextActivityIds.some((id) => typeof id !== "string" || !activityIds.includes(id)) ||
-            !Array.isArray(activity.fields)) {
+            !Array.isArray(activity.fields) ||
+            (activity.applicationDataBinding !== undefined && (
+              !activity.applicationDataBinding ||
+              !/^[a-zA-Z0-9._-]{1,128}$/.test(activity.applicationDataBinding.requirementId) ||
+              !/^[a-zA-Z][a-zA-Z0-9._-]{1,128}$/.test(activity.applicationDataBinding.entityType) ||
+              !["create", "update", "delete"].includes(activity.applicationDataBinding.operation) ||
+              (activity.applicationDataBinding.recordIdField !== undefined && !this.validId(activity.applicationDataBinding.recordIdField)) ||
+              (activity.applicationDataBinding.expectedVersionField !== undefined && !this.validId(activity.applicationDataBinding.expectedVersionField)) ||
+              (activity.applicationDataBinding.dataField !== undefined && !this.validId(activity.applicationDataBinding.dataField)) ||
+              (activity.applicationDataBinding.resultKey !== undefined && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(activity.applicationDataBinding.resultKey))
+            ))) {
           throw new WorkflowConfigurationError("invalid_or_duplicate_workflow_activity");
         }
         if (!this.roles.some((role) => role.id === activity.roleId)) {
