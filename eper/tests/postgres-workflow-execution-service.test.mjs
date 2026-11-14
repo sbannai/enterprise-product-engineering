@@ -31,7 +31,7 @@ function canonical(value) {
 const digest = createHash("sha256").update(canonical(definition)).digest("hex");
 const now = "2026-10-31T12:05:00.000Z";
 
-function fixture({ tenantStatus = "active", actorStatus = "active", roleAllowed = true, outstandingIntent = false } = {}) {
+function fixture({ tenantStatus = "active", actorStatus = "active", roleAllowed = true, outstandingIntent = false, outstandingIntentStatus = "pending" } = {}) {
   const calls = [];
   const row = {
     tenant_id: context.tenantId, application_id: context.applicationId,
@@ -44,7 +44,7 @@ function fixture({ tenantStatus = "active", actorStatus = "active", roleAllowed 
     async query(sql, values = []) {
       calls.push({ sql, values });
       if (sql.includes("FROM eper_workflow_application_data_intents")) {
-        return { rows: outstandingIntent ? [{ intent_id: "22222222-2222-4222-8222-222222222222", intent_status: "pending" }] : [], rowCount: outstandingIntent ? 1 : 0 };
+        return { rows: outstandingIntent ? [{ intent_id: "22222222-2222-4222-8222-222222222222", intent_status: outstandingIntentStatus }] : [], rowCount: outstandingIntent ? 1 : 0 };
       }
       if (sql.includes("SELECT * FROM eper_workflow_instances")) return { rows: [row], rowCount: 1 };
       if (sql.includes("FROM eper_workflow_definition_versions")) return { rows: [{ definition }], rowCount: 1 };
@@ -149,3 +149,23 @@ test("workflow transition fails closed while an application-data intent is unrec
   assert.ok(calls.some(call => call.sql === "ROLLBACK"));
   assert.equal(calls.some(call => call.sql.includes("UPDATE eper_workflow_instances")), false);
 });
+
+
+for (const status of ["pending", "processing", "succeeded", "failed", "dead_letter"]) {
+  test(`workflow transition blocks an application-data intent in ${status} state`, async () => {
+    const { calls, pool } = fixture({ outstandingIntent: true, outstandingIntentStatus: status });
+    await assert.rejects(
+      new PostgresWorkflowExecutionService(pool).transition({
+        ...context,
+        instanceId: "11111111-1111-4111-8111-111111111111",
+        expectedVersion: 1,
+        idempotencyKey: "transition-key-" + status.padEnd(16, "0"),
+        action: "submit",
+        payload: {},
+      }),
+      /WORKFLOW_EXECUTION_APPLICATION_DATA_PENDING/,
+    );
+    assert.ok(calls.some(call => call.sql === "ROLLBACK"));
+    assert.equal(calls.some(call => call.sql.includes("UPDATE eper_workflow_instances")), false);
+  });
+}
