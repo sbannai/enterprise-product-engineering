@@ -5,7 +5,7 @@ import { ApplicationDataActivityIntentProcess } from "../dist/packages/workflows
 
 const source = await readFile(new URL("../packages/workflows/application-data-activity-intent-process.ts", import.meta.url), "utf8");
 
-test("activity intent process continuously executes one intent per authorized application scope", () => {
+test("activity intent process drains bounded intents per authorized application scope", () => {
   assert.match(source, /listActiveContexts\(signal\)/);
   assert.match(source, /worker\.runOnce\(context\.tenantId, context\.applicationId\)/);
   assert.match(source, /new Map<string, WorkflowOutboxContext>/);
@@ -34,9 +34,9 @@ test("activity intent process executes deduplicated scopes and stops cleanly on 
   const worker = {
     async runOnce(tenantId, applicationId) {
       calls.push([tenantId, applicationId]);
-      return calls.length === 1
-        ? { status: "succeeded", intentId: "intent-0001", result: {} }
-        : { status: "retrying", intentId: "intent-0002", errorCode: "RETRY" };
+      if (calls.length === 1) return { status: "succeeded", intentId: "intent-0001", result: {} };
+      if (calls.length === 2) return { status: "retrying", intentId: "intent-0002", errorCode: "RETRY" };
+      return { status: "idle" };
     },
   };
   const contexts = {
@@ -53,7 +53,7 @@ test("activity intent process executes deduplicated scopes and stops cleanly on 
     onPass(result) { pass = result; controller.abort(); },
   });
   await process.run(controller.signal);
-  assert.deepEqual(calls, [["tenant-01", "app-01"], ["tenant-02", "app-02"]]);
+  assert.deepEqual(calls, [["tenant-01", "app-01"], ["tenant-01", "app-01"], ["tenant-01", "app-01"], ["tenant-02", "app-02"]]);
   assert.equal(pass.contextsVisited, 2);
   assert.equal(pass.succeeded, 1);
   assert.equal(pass.retrying, 1);
