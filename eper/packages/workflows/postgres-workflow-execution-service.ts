@@ -600,6 +600,7 @@ export class PostgresWorkflowExecutionService {
       if (!current) throw new WorkflowExecutionError("WORKFLOW_EXECUTION_CURRENT_ACTIVITY_NOT_FOUND", 500);
 
       let actorRole: string;
+      let activityPermission: "workflow:act" | "workflow:approve" | null = null;
       let nextActivityId: string | null = null;
       let nextStatus: WorkflowInstanceStatus = "running";
       let nextData = parseObject(instance.data);
@@ -614,6 +615,7 @@ export class PostgresWorkflowExecutionService {
         nextStatus = "rejected";
       } else {
         const requiredPermission = input.action === "approve" ? "workflow:approve" : "workflow:act";
+        activityPermission = requiredPermission;
         if (input.action === "approve" && current.type !== "APPROVAL") {
           throw new WorkflowExecutionError("WORKFLOW_EXECUTION_APPROVE_REQUIRES_APPROVAL", 422);
         }
@@ -655,12 +657,12 @@ export class PostgresWorkflowExecutionService {
         await client.query(
           `INSERT INTO eper_workflow_application_data_intents
             (tenant_id, application_id, intent_id, instance_id, activity_execution_id,
-             activity_id, actor_id, correlation_id, requirement_id, idempotency_key,
+             activity_id, actor_id, actor_role_id, required_permission, correlation_id, requirement_id, idempotency_key,
              request_fingerprint, entity_type, operation, binding, input)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb)`,
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17::jsonb)`,
           [input.tenantId, input.applicationId, randomUUID(), input.instanceId,
-            activityExecutionId, current.id, input.actorId, input.correlationId,
-            dataBinding.requirementId, activityIdempotencyKey, intentFingerprint,
+            activityExecutionId, current.id, input.actorId, actorRole, activityPermission,
+            input.correlationId, dataBinding.requirementId, activityIdempotencyKey, intentFingerprint,
             dataBinding.entityType, dataBinding.operation, JSON.stringify(binding), JSON.stringify(payload)],
         );
         nextStatus = "waiting_for_data";
