@@ -24,3 +24,37 @@ test("activity intent process bounds context count and polling configuration", (
   assert.match(source, /maxContextsPerPass < 1/);
   assert.match(source, /maxContextsPerPass > 10_000/);
 });
+
+test("activity intent process executes deduplicated scopes and stops cleanly on abort", async () => {
+  const { ApplicationDataActivityIntentProcess } = await import("../dist/packages/workflows/application-data-activity-intent-process.js");
+  const controller = new AbortController();
+  const calls = [];
+  let pass;
+  const worker = {
+    async runOnce(tenantId, applicationId) {
+      calls.push([tenantId, applicationId]);
+      return calls.length === 1
+        ? { status: "succeeded", intentId: "intent-0001", result: {} }
+        : { status: "retrying", intentId: "intent-0002", errorCode: "RETRY" };
+    },
+  };
+  const contexts = {
+    async listActiveContexts() {
+      return [
+        { tenantId: "tenant-01", applicationId: "app-01" },
+        { tenantId: "tenant-01", applicationId: "app-01" },
+        { tenantId: "tenant-02", applicationId: "app-02" },
+      ];
+    },
+  };
+  const process = new ApplicationDataActivityIntentProcess(worker, contexts, {
+    idlePollMs: 50,
+    onPass(result) { pass = result; controller.abort(); },
+  });
+  await process.run(controller.signal);
+  assert.deepEqual(calls, [["tenant-01", "app-01"], ["tenant-02", "app-02"]]);
+  assert.equal(pass.contextsVisited, 2);
+  assert.equal(pass.succeeded, 1);
+  assert.equal(pass.retrying, 1);
+  assert.equal(pass.errors, 0);
+});
