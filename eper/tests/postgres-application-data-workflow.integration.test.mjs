@@ -98,11 +98,19 @@ test("PostgreSQL workflow application-data activity writes once and advances onc
           },
         }, {
           id: "read-order", title: "Read persisted order", type: "TASK",
-          roleId, permission: "workflow:act", nextActivityIds: ["confirm-order"],
+          roleId, permission: "workflow:act", nextActivityIds: ["query-orders"],
           fields: [{ id: "orderId", type: "text", required: true }],
           applicationDataBinding: {
             requirementId: "APP_DATA_WORKFLOW_ORDER_GET",
             entityType, operation: "get", recordIdField: "orderId",
+          },
+        }, {
+          id: "query-orders", title: "Query customer orders", type: "TASK",
+          roleId, permission: "workflow:act", nextActivityIds: ["confirm-order"],
+          fields: [{ id: "limit", type: "number", required: true }],
+          applicationDataBinding: {
+            requirementId: "APP_DATA_WORKFLOW_ORDER_QUERY",
+            entityType, operation: "query", resultKey: "orders",
           },
         }, {
           id: "confirm-order", title: "Confirm order", type: "TASK",
@@ -177,6 +185,23 @@ test("PostgreSQL workflow application-data activity writes once and advances onc
       assert.equal(readAdvanced.status, "advanced");
       if (readAdvanced.status !== "advanced") throw new Error("APPLICATION_DATA_WORKFLOW_READ_NOT_ADVANCED");
       assert.equal(readAdvanced.resultingVersion, readWaiting.version + 1);
+
+      const queryWaiting = await execution.transition({
+        tenantId, applicationId, actorId, correlationId, environment,
+        instanceId: started.instanceId, expectedVersion: readAdvanced.resultingVersion,
+        idempotencyKey: "query-" + suffix, action: "submit", payload: { limit: 10 },
+      });
+      assert.equal(queryWaiting.status, "waiting_for_data");
+      assert.equal(queryWaiting.currentActivityId, "query-orders");
+      const queryExecuted = await worker.runOnce(tenantId, applicationId);
+      assert.equal(queryExecuted.status, "succeeded");
+      assert.equal(queryExecuted.result.orders.length, 1);
+      assert.equal(queryExecuted.result.orders[0].id, recordId);
+      const queryAdvanced = await reconciler.runOnce(tenantId, applicationId);
+      assert.equal(queryAdvanced.status, "advanced");
+      if (queryAdvanced.status !== "advanced") throw new Error("APPLICATION_DATA_WORKFLOW_QUERY_NOT_ADVANCED");
+      assert.equal(queryAdvanced.resultingVersion, queryWaiting.version + 1);
+
       const restartedReconciler = new ApplicationDataIntentReconciler(pool, {
         workerId: "data-wf-reconcile-restart-" + suffix, environment, maxAttempts: 3,
       });
@@ -201,13 +226,14 @@ test("PostgreSQL workflow application-data activity writes once and advances onc
         );
         assert.equal(instance.rows.length, 1);
         assert.equal(instance.rows[0].status, "running");
-        assert.equal(Number(instance.rows[0].version), readWaiting.version + 1);
+        assert.equal(Number(instance.rows[0].version), queryWaiting.version + 1);
         assert.equal(instance.rows[0].current_activity_id, "confirm-order");
         assert.equal(instance.rows[0].pending_activity_execution_id, null);
         const workflowData = typeof instance.rows[0].data === "string"
           ? JSON.parse(instance.rows[0].data) : instance.rows[0].data;
-        assert.equal(workflowData.result.id, recordId);
-        assert.equal(workflowData.result.data.total, 42.5);
+        assert.equal(workflowData.orders.length, 1);
+        assert.equal(workflowData.orders[0].id, recordId);
+        assert.equal(workflowData.orders[0].data.total, 42.5);
         const intents = await verify.query(
           `SELECT intent_status, reconciliation_status
              FROM eper_workflow_application_data_intents
