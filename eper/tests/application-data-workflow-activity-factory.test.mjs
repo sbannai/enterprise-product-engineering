@@ -100,7 +100,9 @@ test("MongoDB workflow grant resolver scopes active grants and binds lookup to t
  await ensureMongoWorkflowAuthorizationIndexes(database);
  assert.equal(lookup.index.options.name, "eper_workflow_authorization_active_grant_scope");
  const indexedCollections = [];
- const factoryDatabase = { collection(name) {
+ const factoryDatabase = {
+  client: { startSession() { return { async withTransaction(work) { return work(); }, async endSession() {} }; } },
+  collection(name) {
   indexedCollections.push(name);
   return { async createIndex() { return name + "-index"; }, async updateOne() { return { matchedCount: 0 }; } };
  }};
