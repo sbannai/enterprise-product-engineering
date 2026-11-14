@@ -6,7 +6,7 @@ export type WorkflowPermission =
   | "role:assign"
   | "access:manage";
 
-export type WorkflowFieldType = "text" | "textarea" | "number" | "date" | "select" | "checkbox";
+export type WorkflowFieldType = "text" | "textarea" | "number" | "date" | "select" | "checkbox" | "json";
 export function workflowPermissionGranted(granted: readonly WorkflowPermission[], permission: WorkflowPermission): boolean {
   return granted.includes(permission) ||
     ((permission === "workflow:view" || permission === "workflow:act") && granted.includes("workflow:admin"));
