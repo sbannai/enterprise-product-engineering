@@ -21,7 +21,7 @@ interface IntentRow {
   requirement_id: string;
   idempotency_key: string;
   entity_type: string;
-  operation: "create" | "update" | "delete";
+  operation: "create" | "get" | "update" | "delete" | "query";
   binding: ApplicationDataWorkflowBinding | string;
   input: Record<string, unknown> | string;
   claim_generation: number | string;
@@ -48,7 +48,7 @@ export function applicationDataIntentFingerprint(intent: {
   tenantId: string; applicationId: string; instanceId: string; activityExecutionId: string;
   actorId: string; actorRoleId: string; requiredPermission: "workflow:act" | "workflow:approve";
   correlationId: string; requirementId: string; idempotencyKey: string;
-  entityType: string; operation: "create" | "update" | "delete";
+  entityType: string; operation: "create" | "get" | "update" | "delete" | "query";
   binding: ApplicationDataWorkflowBinding; input: Record<string, unknown>;
 }): string {
   return createHash("sha256").update(canonical(intent)).digest("hex");
