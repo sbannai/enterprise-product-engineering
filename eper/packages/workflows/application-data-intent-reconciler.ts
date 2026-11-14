@@ -196,8 +196,10 @@ export class ApplicationDataIntentReconciler {
       }
       const data = asObject(instance.data);
       const result = asObject(currentIntent.result);
-      const resultKey = activity.applicationDataBinding.resultKey;
-      const nextData = resultKey ? { ...data, [resultKey]: result } : data;
+      // The executor returns the binding result under "result" when no custom key is configured.
+      // Preserve that default here so workflow routing and subsequent activities receive the committed data.
+      const resultKey = activity.applicationDataBinding.resultKey ?? "result";
+      const nextData = { ...data, [resultKey]: result[resultKey] ?? result };
       const routing = resolveWorkflowNextActivity(definition, activity, nextData);
       const nextStatus = routing.targetActivityId === null ? "completed" : "running";
       const nextVersion = Number(instance.version) + 1;
