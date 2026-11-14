@@ -4,10 +4,10 @@ import { PostgresApplicationDataModelAuthoringService } from "../dist/packages/a
 
 const context = {
  tenantId: "tenant-a", applicationId: "app-a", actorId: "admin-a", roleId: "application-admin",
- correlationId: "corr-model-01", requirementId: "REQ-463", environment: "sandbox",
+ correlationId: "corr-model-01", requirementId: "REQ-46301", environment: "sandbox",
 };
 
-function fixture({ allowed = true, currentVersion = 1 } = {}) {
+function fixture({ allowed = true, currentVersion = 1, activeModels = [] } = {}) {
  const statements = [];
  const client = {
   async query(sql, values = []) {
@@ -16,6 +16,7 @@ function fixture({ allowed = true, currentVersion = 1 } = {}) {
    if (statement.startsWith("SELECT r.role_id FROM eper_workflow_actor_role_assignment")) {
     return { rows: allowed ? [{ role_id: "application-admin" }] : [], rowCount: allowed ? 1 : 0 };
    }
+   if (statement.includes("status='ACTIVE' FOR UPDATE")) return { rows: activeModels, rowCount: activeModels.length };
    if (statement.startsWith("SELECT version FROM eper_application_data_models")) {
     return { rows: currentVersion ? [{ version: currentVersion }] : [], rowCount: currentVersion ? 1 : 0 };
    }
@@ -72,4 +73,27 @@ test("model authoring rejects stale schema versions and invalid relationship dec
   fields: [{ id: "customerId", type: "number" }],
   relationships: [{ field: "customerId", targetEntity: "Customer", cardinality: "one" }],
  }), /APPLICATION_DATA_RELATIONSHIP_INVALID/);
+});
+
+ 
+test("activating a draft retires and audits the prior active schema in the same transaction", async () => {
+ const previous = {
+  tenant_id: "tenant-a", application_id: "app-a", entity_type: "Order",
+  version: 2, status: "ACTIVE", fields: [{ id: "total", type: "number" }],
+  relationships: [],
+ };
+ const { pool, statements } = fixture({ activeModels: [previous] });
+ const service = new PostgresApplicationDataModelAuthoringService(pool);
+ await service.activate(context, "Order", 3);
+ const lockActive = statements.findIndex(item => item.sql.includes("status='ACTIVE' FOR UPDATE"));
+ const retire = statements.findIndex(item => item.sql.startsWith("UPDATE eper_application_data_models SET status='RETIRED'"));
+ const audits = statements.filter(item => item.sql.startsWith("INSERT INTO eper_audit_events"));
+ const outbox = statements.filter(item => item.sql.startsWith("INSERT INTO transactional_outbox"));
+ const activate = statements.findIndex(item => item.sql.includes("SET status=$5"));
+ assert.ok(lockActive > 0);
+ assert.ok(retire > lockActive);
+ assert.equal(audits.length, 2);
+ assert.equal(outbox.length, 2);
+ assert.ok(activate > retire);
+ assert.equal(statements.at(-2).sql, "COMMIT");
 });
