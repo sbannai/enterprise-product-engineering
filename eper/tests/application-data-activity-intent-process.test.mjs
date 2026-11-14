@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";\nimport { ApplicationDataActivityIntentProcess } from "../dist/packages/workflows/application-data-activity-intent-process.js";
+import { readFile } from "node:fs/promises";
+import { ApplicationDataActivityIntentProcess } from "../dist/packages/workflows/application-data-activity-intent-process.js";
 
 const source = await readFile(new URL("../packages/workflows/application-data-activity-intent-process.ts", import.meta.url), "utf8");
 
