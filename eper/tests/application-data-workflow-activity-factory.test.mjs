@@ -12,7 +12,8 @@ test("built-in PostgreSQL activity revalidates the exact workflow role and permi
  assert.match(source,/eper_workflow_role_definition/);
  assert.match(source,/FOR SHARE OF r,aa,ta,rd/);
  assert.match(source,/APPLICATION_DATA_WORKFLOW_PERMISSION_REVOKED/);
- assert.match(source,/PostgresApplicationDataAdapter\(input\.pool, true\)/);\n assert.match(source,/APPLICATION_DATA_WORKFLOW_PERMISSION_REVOKED/);
+ assert.match(source,/PostgresApplicationDataAdapter\(input\.pool, true\)/);
+ assert.match(source,/APPLICATION_DATA_WORKFLOW_PERMISSION_REVOKED/);
 });
 
 test("PostgreSQL record mutation authorization locks the exact active role grant", async () => {
