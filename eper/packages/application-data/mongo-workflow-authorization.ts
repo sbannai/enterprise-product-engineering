@@ -56,8 +56,12 @@ export async function ensureMongoWorkflowAuthorizationIndexes(database: unknown)
     throw new Error("MONGODB_INDEX_MANAGEMENT_REQUIRED");
   }
   await collection.createIndex(
-    { tenantId: 1, applicationId: 1, actorId: 1, roleId: 1, status: 1 },
-    { name: "eper_workflow_authorization_grant_scope" },
+    { tenantId: 1, applicationId: 1, actorId: 1, roleId: 1 },
+    {
+      name: "eper_workflow_authorization_active_grant_scope",
+      unique: true,
+      partialFilterExpression: { status: "active" },
+    },
   );
 }
 
