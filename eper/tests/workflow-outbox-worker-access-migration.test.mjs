@@ -33,6 +33,7 @@ test("workflow migrations preserve the ordered worker-access, claim-generation, 
   const applicationDataIntentAuthorization = names.indexOf("024_application_data_intent_authorization.sql");
   const applicationDataExecutorRowLocks = names.indexOf("025_application_data_executor_authorization_row_locks.sql");
   const applicationDataReconciliationDeadLetter = names.indexOf("026_application_data_reconciliation_dead_letter.sql");
+  const applicationDataReadIntents = names.indexOf("027_application_data_read_intents.sql");
   assert.notEqual(workerAccess, -1, "worker-access migration must exist");
   assert.notEqual(claimGeneration, -1, "claim-generation migration must exist");
   assert.notEqual(permissionCatalogue, -1, "permission-catalogue migration must exist");
@@ -45,6 +46,7 @@ test("workflow migrations preserve the ordered worker-access, claim-generation, 
   assert.notEqual(applicationDataIntentAuthorization, -1, "application-data intent authorization migration must exist");
   assert.notEqual(applicationDataExecutorRowLocks, -1, "application-data executor row-lock privilege migration must exist");
   assert.notEqual(applicationDataReconciliationDeadLetter, -1, "bounded reconciliation dead-letter migration must exist");
+  assert.notEqual(applicationDataReadIntents, -1, "application-data read-intent migration must exist");
   assert.equal(names[workerAccess - 1], "014_workflow_definition_drafts.sql");
   assert.equal(names[workerAccess + 1], "016_workflow_outbox_claim_generation.sql");
   assert.equal(names[claimGeneration + 1], "017_workflow_role_permission_catalogue.sql");
@@ -57,5 +59,6 @@ test("workflow migrations preserve the ordered worker-access, claim-generation, 
   assert.equal(names[applicationDataExecutorAccess + 1], "024_application_data_intent_authorization.sql");
   assert.equal(names[applicationDataIntentAuthorization + 1], "025_application_data_executor_authorization_row_locks.sql");
   assert.equal(names[applicationDataExecutorRowLocks + 1], "026_application_data_reconciliation_dead_letter.sql");
-  assert.equal(names.at(-1), "026_application_data_reconciliation_dead_letter.sql");
+  assert.equal(names[applicationDataReconciliationDeadLetter + 1], "027_application_data_read_intents.sql");
+  assert.equal(names.at(-1), "027_application_data_read_intents.sql");
 });
