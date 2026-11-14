@@ -20,3 +20,16 @@ test("workflow application-data intent migration provides durable idempotent wor
   assert.match(sql, /intent_status = 'processing' AND locked_at IS NOT NULL AND locked_by IS NOT NULL/);
   assert.match(sql, /intent_status IN .*'succeeded','advanced'.* AND result IS NOT NULL/);
 });
+
+test("workflow instance wait state is pinned to one activity execution intent", async () => {
+  const sql = await readFile(new URL("../packages/workflows/migrations/019_workflow_application_data_wait_state.sql", import.meta.url), "utf8");
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS pending_activity_execution_id uuid/);
+  assert.match(sql, /'waiting_for_data'/);
+  assert.match(sql, /status = 'waiting_for_data' AND pending_activity_execution_id IS NOT NULL/);
+  assert.match(sql, /status <> 'waiting_for_data' AND pending_activity_execution_id IS NULL/);
+  assert.match(sql, /FOREIGN KEY \(tenant_id, application_id, instance_id, pending_activity_execution_id\)/);
+  assert.match(sql, /REFERENCES eper_workflow_application_data_intents/);
+  assert.match(sql, /activity_execution_id\)/);
+  assert.match(sql, /DEFERRABLE INITIALLY DEFERRED/);
+  assert.match(sql, /DROP CONSTRAINT IF EXISTS eper_workflow_instances_check/);
+});
