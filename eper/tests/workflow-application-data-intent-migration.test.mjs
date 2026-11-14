@@ -69,3 +69,10 @@ test("reconciliation dead-letter migration bounds poison-intent retries", async 
   assert.match(sql, /intent_status = 'succeeded'[\s\S]*reconciliation_status IN \('pending','processing','dead_letter'\)/);
   assert.match(sql, /reconciliation_status = 'dead_letter'/);
 });
+
+test("read-only application-data operations are enabled by a forward-only migration", async () => {
+  const sql = await readFile(new URL("../packages/workflows/migrations/027_application_data_read_intents.sql", import.meta.url), "utf8");
+  assert.match(sql, /DROP CONSTRAINT IF EXISTS eper_workflow_application_data_intents_operation_check/);
+  assert.match(sql, /operation IN \('create','get','update','delete','query'\)/);
+  assert.match(sql, /BEGIN;[\s\S]*COMMIT;/);
+});
