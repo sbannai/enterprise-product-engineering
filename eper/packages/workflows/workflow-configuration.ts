@@ -22,7 +22,7 @@ export interface WorkflowField {
 export interface WorkflowApplicationDataBinding {
   requirementId: string;
   entityType: string;
-  operation: "create" | "update" | "delete";
+  operation: "create" | "get" | "update" | "delete" | "query";
   recordIdField?: string;
   expectedVersionField?: string;
   dataField?: string;
@@ -260,7 +260,7 @@ export class WorkflowConfigurationService {
               !activity.applicationDataBinding ||
               !/^[a-zA-Z0-9._-]{1,128}$/.test(activity.applicationDataBinding.requirementId) ||
               !/^[a-zA-Z][a-zA-Z0-9._-]{1,128}$/.test(activity.applicationDataBinding.entityType) ||
-              !["create", "update", "delete"].includes(activity.applicationDataBinding.operation) ||
+              !["create", "get", "update", "delete", "query"].includes(activity.applicationDataBinding.operation) ||
               (activity.applicationDataBinding.recordIdField !== undefined && !this.validId(activity.applicationDataBinding.recordIdField)) ||
               (activity.applicationDataBinding.expectedVersionField !== undefined && !this.validId(activity.applicationDataBinding.expectedVersionField)) ||
               (activity.applicationDataBinding.dataField !== undefined && !this.validId(activity.applicationDataBinding.dataField)) ||
