@@ -3,7 +3,7 @@ BEGIN;
 ALTER TABLE eper_workflow_application_data_intents
   DROP CONSTRAINT IF EXISTS eper_workflow_app_data_reconciliation_state_check;
 ALTER TABLE eper_workflow_application_data_intents
-  DROP CONSTRAINT IF EXISTS eper_workflow_app_data_reconciliation_status_check;
+  DROP CONSTRAINT IF EXISTS eper_workflow_application_data_intents_reconciliation_status_check;
 ALTER TABLE eper_workflow_application_data_intents
   ADD CONSTRAINT eper_workflow_app_data_reconciliation_status_check
   CHECK (reconciliation_status IN ('pending','processing','completed','dead_letter'));
