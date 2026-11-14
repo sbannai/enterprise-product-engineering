@@ -21,12 +21,24 @@ interface MongoDatabaseLike {
 }
 type StoredRecord = ApplicationDataRecord & Record<string, unknown> & { _id: string };
 type StoredModel = ApplicationDataModel & Record<string, unknown> & { _id: string };
+/** Provider-specific authorization must query MongoDB grants using the same session as the record operation. */
+export type MongoWorkflowAuthorizer = (session: MongoSessionLike, context: ApplicationDataContext) => Promise<void>;
 /** Structural types keep the official MongoDB driver optional. Transactions require a replica set or sharded cluster. */
 export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
   private readonly db: MongoDatabaseLike;
-  constructor(database: unknown) {
+  private readonly authorizeWorkflowGrant?: MongoWorkflowAuthorizer;
+  constructor(database: unknown, authorizeWorkflowGrant?: MongoWorkflowAuthorizer) {
     this.db = database as MongoDatabaseLike;
+    this.authorizeWorkflowGrant = authorizeWorkflowGrant;
     if (!this.db?.client?.startSession) throw new Error("MONGODB_SESSION_SUPPORT_REQUIRED");
+  }
+  private async authorizeWorkflow(session: MongoSessionLike, context: ApplicationDataContext): Promise<void> {
+    const hasWorkflowProvenance = Boolean(context.workflowRoleId || context.workflowPermission);
+    if (!hasWorkflowProvenance) return;
+    if (!context.workflowRoleId || !context.workflowPermission || !this.authorizeWorkflowGrant) {
+      throw new Error("MONGODB_WORKFLOW_AUTHORIZATION_NOT_CONFIGURED");
+    }
+    await this.authorizeWorkflowGrant(session, context);
   }
   private records() { return this.db.collection<StoredRecord>("eper_application_data_records"); }
   private models() { return this.db.collection<StoredModel>("eper_application_data_models"); }
@@ -138,6 +150,7 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
     const idempotencyId = key ? this.key([context.tenantId,context.applicationId,key]) : undefined;
     try {
       return await this.transaction(async session => {
+        await this.authorizeWorkflow(session, context);
         if (key && idempotencyId && requestHash) {
           const prior=await this.idempotency().findOne({_id:idempotencyId},{session});
           if (prior) {
@@ -172,8 +185,13 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
     }
   }
   async get(c: ApplicationDataContext, e: string, id: string): Promise<ApplicationDataRecord | undefined> {
-    const r=await this.records().findOne({ _id:this.key([c.tenantId,c.applicationId,e,id]), ...this.scope(c.tenantId,c.applicationId,e) });
-    return r ? this.clean(r) as unknown as ApplicationDataRecord : undefined;
+    const read = async (session?: MongoSessionLike) => {
+      const r=await this.records().findOne({ _id:this.key([c.tenantId,c.applicationId,e,id]), ...this.scope(c.tenantId,c.applicationId,e) },
+        session ? {session} : {});
+      return r ? this.clean(r) as unknown as ApplicationDataRecord : undefined;
+    };
+    if (!c.workflowRoleId && !c.workflowPermission) return read();
+    return this.transaction(async session => { await this.authorizeWorkflow(session,c); return read(session); });
   }
   async getIdempotentUpdate(c: ApplicationDataContext, e: string, id: string, expected: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }): Promise<ApplicationDataRecord | undefined> {
     const key=c.idempotencyKey;
@@ -190,6 +208,7 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
     const idempotencyId=key ? this.key([c.tenantId,c.applicationId,key]) : undefined;
     try {
       return await this.transaction(async session => {
+        await this.authorizeWorkflow(session, c);
         if (key && requestHash && idempotencyId) {
           const prior=await this.idempotency().findOne({_id:idempotencyId},{session});
           if (prior) {
@@ -237,6 +256,7 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
     const idempotencyId=key ? this.key([c.tenantId,c.applicationId,key]) : undefined;
     try {
       await this.transaction(async session => {
+        await this.authorizeWorkflow(session, c);
         if (key && requestHash && idempotencyId) {
           const prior=await this.idempotency().findOne({_id:idempotencyId},{session});
           if (prior) {
@@ -276,8 +296,13 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
     }
   }
   async query(c: ApplicationDataContext, e: string, q: ApplicationDataQuery): Promise<ApplicationDataRecord[]> {
-    const rows=await this.records().find({ ...this.scope(c.tenantId,c.applicationId,e), ...(q.state ? {state:q.state}:{}), ...(q.afterId ? {id:{$gt:q.afterId}}:{}) })
-      .sort({id:1}).limit(q.limit ?? 50).toArray();
-    return rows.map(row=>this.clean(row) as unknown as ApplicationDataRecord);
+    const read = async (session?: MongoSessionLike) => {
+      const rows=await this.records().find({ ...this.scope(c.tenantId,c.applicationId,e), ...(q.state ? {state:q.state}:{}), ...(q.afterId ? {id:{$gt:q.afterId}:{}) },
+        ...(session ? {session} : {}) })
+        .sort({id:1}).limit(q.limit ?? 50).toArray();
+      return rows.map(row=>this.clean(row) as unknown as ApplicationDataRecord);
+    };
+    if (!c.workflowRoleId && !c.workflowPermission) return read();
+    return this.transaction(async session => { await this.authorizeWorkflow(session,c); return read(session); });
   }
 }
