@@ -9,6 +9,11 @@ const context = {
 
 function fixture({ allowed = true, currentVersion = 1, activeModels = [] } = {}) {
  const statements = [];
+ const draftModel = {
+  tenant_id: "tenant-a", application_id: "app-a", entity_type: "Order",
+  version: 3, status: "DRAFT", fields: [{ id: "total", type: "number" }],
+  relationships: [],
+ };
  const client = {
   async query(sql, values = []) {
    const statement = String(sql).replace(/\s+/g, " ").trim();
@@ -17,6 +22,7 @@ function fixture({ allowed = true, currentVersion = 1, activeModels = [] } = {})
     return { rows: allowed ? [{ role_id: "application-admin" }] : [], rowCount: allowed ? 1 : 0 };
    }
    if (statement.includes("status='ACTIVE' FOR UPDATE")) return { rows: activeModels, rowCount: activeModels.length };
+   if (statement.startsWith("SELECT tenant_id,application_id,entity_type,version,status,fields,relationships FROM eper_application_data_models")) return { rows: [draftModel], rowCount: 1 };
    if (statement.startsWith("SELECT version FROM eper_application_data_models")) {
     return { rows: currentVersion ? [{ version: currentVersion }] : [], rowCount: currentVersion ? 1 : 0 };
    }
