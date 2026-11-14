@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS eper_workflow_application_data_intents (
     (intent_status IN ('succeeded','failed','dead_letter','advanced') AND completed_at IS NOT NULL)
     OR (intent_status IN ('pending','processing') AND completed_at IS NULL)
   ),
-  CHECK ((intent_status = 'succeeded' AND result IS NOT NULL) OR intent_status <> 'succeeded')
+  CHECK ((intent_status IN ('succeeded','advanced') AND result IS NOT NULL) OR intent_status NOT IN ('succeeded','advanced'))
 );
 
 CREATE INDEX IF NOT EXISTS eper_workflow_app_data_intents_claim_idx
