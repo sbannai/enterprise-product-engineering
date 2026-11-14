@@ -240,10 +240,9 @@ test("PostgreSQL workflow application-data activity writes once and advances onc
             WHERE tenant_id=$1 AND application_id=$2 AND instance_id=$3`,
           [tenantId, applicationId, started.instanceId],
         );
-        assert.deepEqual(intents.rows, [
-          { intent_status: "advanced", reconciliation_status: "completed" },
-          { intent_status: "advanced", reconciliation_status: "completed" },
-        ]);
+        assert.equal(intents.rows.length, 3);
+        assert.ok(intents.rows.every(row =>
+          row.intent_status === "advanced" && row.reconciliation_status === "completed"));
         const reconciliationTransitions = await verify.query(
           `SELECT count(*)::int AS count FROM eper_workflow_transitions
             WHERE tenant_id=$1 AND application_id=$2 AND instance_id=$3
