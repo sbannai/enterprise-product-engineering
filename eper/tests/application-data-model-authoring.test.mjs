@@ -82,6 +82,14 @@ test("model authoring rejects stale schema versions and invalid relationship dec
   fields: [{ id: "customerId", type: "number" }],
   relationships: [{ field: "customerId", targetEntity: "Customer", cardinality: "one" }],
  }), /APPLICATION_DATA_RELATIONSHIP_INVALID/);
+ await assert.rejects(() => service.createDraft(context, {
+  entityType: "Order", expectedVersion: 3, fields: [{ type: "number" }],
+ }), /APPLICATION_DATA_FIELD_INVALID/);
+ await assert.rejects(() => service.createDraft(context, {
+  entityType: "Order", expectedVersion: 3,
+  fields: [{ id: "customerId", type: "string" }],
+  relationships: [{ field: "customerId", cardinality: "one" }],
+ }), /APPLICATION_DATA_RELATIONSHIP_INVALID/);
 });
 
  
