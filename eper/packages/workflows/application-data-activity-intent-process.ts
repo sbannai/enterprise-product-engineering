@@ -1,5 +1,6 @@
 import type { ApplicationDataActivityIntentWorker } from "./application-data-activity-intent-worker.js";
-import type { WorkflowOutboxContext, WorkflowOutboxContextSource } from "./workflow-outbox-process.js";
+import type { WorkflowOutboxContext } from "./postgres-workflow-outbox-store.js";
+import type { WorkflowOutboxContextSource } from "./workflow-outbox-process.js";
 
 export interface ApplicationDataActivityIntentProcessOptions {
   idlePollMs?: number;
