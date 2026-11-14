@@ -21,7 +21,7 @@ interface ReconciliationRow {
   idempotency_key: string;
   binding: Record<string, unknown> | string;
   result: Record<string, unknown> | string;
-  reconciliation_claim_generation: number | string;
+  reconciliation_claim_generation: number | string;\n  reconciliation_attempts: number | string;
 }
 interface InstanceRow {
   instance_id: string;
@@ -74,16 +74,16 @@ async function setScope(client: AuditSqlClient, tenantId: string, applicationId:
  */
 export class ApplicationDataIntentReconciler {
   private readonly workerId: string;
-  private readonly leaseMilliseconds: number;
+  private readonly leaseMilliseconds: number;\n  private readonly maxAttempts: number;
 
   constructor(
     private readonly pool: AuditSqlPool,
     private readonly options: ApplicationDataIntentReconcilerOptions,
   ) {
     this.workerId = options.workerId ?? randomUUID();
-    this.leaseMilliseconds = options.leaseMilliseconds ?? 60_000;
+    this.leaseMilliseconds = options.leaseMilliseconds ?? 60_000;\n    this.maxAttempts = options.maxAttempts ?? 8;
     if (!/^[a-zA-Z0-9._:-]{8,128}$/.test(this.workerId) ||
-        !Number.isSafeInteger(this.leaseMilliseconds) || this.leaseMilliseconds < 1000 ||
+        !Number.isSafeInteger(this.leaseMilliseconds) || this.leaseMilliseconds < 1000 ||\n        !Number.isSafeInteger(this.maxAttempts) || this.maxAttempts < 1 || this.maxAttempts > 100 ||
         !["production", "uat", "sandbox"].includes(options.environment)) {
       throw new Error("WORKFLOW_APPLICATION_DATA_RECONCILER_CONFIGURATION_INVALID");
     }
@@ -132,7 +132,7 @@ export class ApplicationDataIntentReconciler {
     }
     if (!intent) return { status: "idle" };
 
-    const completion = await this.pool.connect();
+    const currentIntentForRelease = intent;\n    const completion = await this.pool.connect();
     try {
       await completion.query("BEGIN");
       await setScope(completion, tenantId, applicationId);
@@ -282,9 +282,40 @@ export class ApplicationDataIntentReconciler {
         instanceId: currentIntent.instance_id, resultingVersion: nextVersion };
     } catch (error) {
       try { await completion.query("ROLLBACK"); } catch { /* preserve reconciliation error */ }
+      await this.releaseFailedClaim(currentIntentForRelease, error);
       throw error;
     } finally {
       completion.release();
     }
   }
 }
+  private async releaseFailedClaim(intent: ReconciliationRow, error: unknown): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await setScope(client, intent.tenant_id, intent.application_id);
+      const message = (error instanceof Error ? error.message : "WORKFLOW_APPLICATION_DATA_RECONCILIATION_FAILED").slice(0, 2000);
+      await client.query(
+        `UPDATE eper_workflow_application_data_intents
+            SET reconciliation_status = CASE WHEN reconciliation_attempts >= $6
+                  THEN 'dead_letter' ELSE 'pending' END,
+                reconciliation_available_at = CASE WHEN reconciliation_attempts >= $6
+                  THEN reconciliation_available_at
+                  ELSE NOW() + LEAST(900, power(2, LEAST(reconciliation_attempts, 10))) * INTERVAL '1 second' END,
+                reconciliation_locked_at = NULL, reconciliation_locked_by = NULL,
+                last_error = $7, updated_at = NOW()
+          WHERE tenant_id = $1 AND application_id = $2 AND intent_id = $3
+            AND intent_status = 'succeeded' AND reconciliation_status = 'processing'
+            AND reconciliation_locked_by = $4 AND reconciliation_claim_generation = $5`,
+        [intent.tenant_id, intent.application_id, intent.intent_id, this.workerId,
+          Number(intent.reconciliation_claim_generation), this.maxAttempts, message],
+      );
+      await client.query("COMMIT");
+    } catch (releaseError) {
+      try { await client.query("ROLLBACK"); } catch { /* retain release error */ }
+      throw releaseError;
+    } finally {
+      client.release();
+    }
+  }
+
