@@ -31,8 +31,10 @@ function canonical(value) {
 const digest = createHash("sha256").update(canonical(definition)).digest("hex");
 const now = "2026-10-31T12:05:00.000Z";
 
-function fixture({ tenantStatus = "active", actorStatus = "active", roleAllowed = true, outstandingIntent = false, outstandingIntentStatus = "pending", instanceStatus = "running" } = {}) {
+function fixture({ tenantStatus = "active", actorStatus = "active", roleAllowed = true, outstandingIntent = false, outstandingIntentStatus = "pending", instanceStatus = "running", applicationDataBinding = null } = {}) {
   const calls = [];
+  const configuredDefinition = structuredClone(definition);
+  if (applicationDataBinding) configuredDefinition.activities[0].applicationDataBinding = applicationDataBinding;
   const row = {
     tenant_id: context.tenantId, application_id: context.applicationId,
     instance_id: "11111111-1111-4111-8111-111111111111", workflow_id: definition.id,
@@ -44,6 +46,14 @@ function fixture({ tenantStatus = "active", actorStatus = "active", roleAllowed 
   const client = {
     async query(sql, values = []) {
       calls.push({ sql, values });
+      if (sql.startsWith("UPDATE eper_workflow_instances")) {
+        row.status = values[3];
+        row.current_activity_id = values[4];
+        row.version = values[6];
+        row.pending_activity_execution_id = values[8] ?? null;
+        row.completed_at = values[3] === "running" || values[3] === "waiting_for_data" ? null : now;
+        return { rows: [{ ...row }], rowCount: 1 };
+      }
       if (sql.includes("FROM eper_workflow_application_data_intents")) {
         return { rows: outstandingIntent ? [{ intent_id: "22222222-2222-4222-8222-222222222222", intent_status: outstandingIntentStatus }] : [], rowCount: outstandingIntent ? 1 : 0 };
       }
@@ -51,7 +61,7 @@ function fixture({ tenantStatus = "active", actorStatus = "active", roleAllowed 
         return { rows: [], rowCount: 0 };
       }
       if (sql.includes("SELECT * FROM eper_workflow_instances")) return { rows: [row], rowCount: 1 };
-      if (sql.includes("FROM eper_workflow_definition_versions")) return { rows: [{ definition }], rowCount: 1 };
+      if (sql.includes("FROM eper_workflow_definition_versions")) return { rows: [{ definition: configuredDefinition }], rowCount: 1 };
       if (sql.includes("FROM eper_workflow_actor_role_assignment r")) {
         return { rows: roleAllowed ? [{ role_id: "employee" }] : [], rowCount: roleAllowed ? 1 : 0 };
       }
@@ -188,4 +198,31 @@ test("workflow transition reports a distinct conflict when instance is already w
   assert.ok(calls.some(call => call.sql === "ROLLBACK"));
   assert.equal(calls.some(call => call.sql.includes("FROM eper_workflow_application_data_intents")), false);
   assert.equal(calls.some(call => call.sql.includes("UPDATE eper_workflow_instances")), false);
+});
+
+test("bound application-data activity atomically creates intent and holds workflow in waiting state", async () => {
+  const binding = {
+    requirementId: "REQ-001", entityType: "Order", operation: "create",
+    recordIdField: "orderId", dataField: "order",
+  };
+  const { calls, pool } = fixture({ applicationDataBinding: binding });
+  const result = await new PostgresWorkflowExecutionService(pool).transition({
+    ...context,
+    instanceId: "11111111-1111-4111-8111-111111111111",
+    expectedVersion: 1,
+    idempotencyKey: "transition-data-0001",
+    action: "submit",
+    payload: { orderId: "ORDER-1", order: { total: 125 } },
+  });
+  assert.equal(result.status, "waiting_for_data");
+  assert.equal(result.currentActivityId, "submit-expense");
+  assert.ok(result.pendingActivityExecutionId);
+  const intentIndex = calls.findIndex(call => call.sql.includes("INSERT INTO eper_workflow_application_data_intents"));
+  const instanceIndex = calls.findIndex(call => call.sql.includes("UPDATE eper_workflow_instances"));
+  const idempotencyIndex = calls.findIndex(call => call.sql.includes("INSERT INTO eper_workflow_idempotency"));
+  assert.ok(intentIndex >= 0, "data intent must be inserted");
+  assert.ok(instanceIndex > intentIndex, "workflow hold must follow intent creation in the same transaction");
+  assert.ok(idempotencyIndex > instanceIndex, "idempotency response must be persisted after the waiting state");
+  assert.equal(calls.at(-2).sql, "COMMIT");
+  assert.equal(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_transitions")), true);
 });
