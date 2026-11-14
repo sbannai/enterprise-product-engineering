@@ -59,3 +59,15 @@ test("PostgreSQL adapter checks workflow authorization on the same connection be
  assert.ok(recordReadIndex > authorizationIndex);
  assert.equal(statements.at(-1).sql, "COMMIT");
 });
+
+test("MongoDB workflow data access fails closed and revalidates grants in the same transaction", async () => {
+ const source = await readFile(new URL("../packages/application-data/mongo-adapter.ts", import.meta.url), "utf8");
+ assert.match(source, /export type MongoWorkflowAuthorizer = \(session: MongoSessionLike, context: ApplicationDataContext\) => Promise<void>/);
+ assert.match(source, /MONGODB_WORKFLOW_AUTHORIZATION_NOT_CONFIGURED/);
+ assert.match(source, /private async authorizedRead/);
+ assert.match(source, /await this\.authorizeWorkflow\(session, context\)/);
+ assert.match(source, /await this\.authorizeWorkflow\(session, c\)/);
+ assert.match(source, /return this\.authorizedRead\(context/);
+ assert.match(source, /return this\.authorizedRead\(c/);
+ assert.match(source, /this\.transaction\(async session => \{ await this\.authorizeWorkflow\(session,c\); return read\(session\); \}\)/);
+});
