@@ -344,7 +344,8 @@ export class PostgresWorkflowExecutionService {
                 'eper_workflow_actor_role_assignment',
                 'eper_workflow_role_definition',
                 'eper_workflow_outbox_events',
-                'eper_workflow_outbox_delivery'
+                'eper_workflow_outbox_delivery',
+                'eper_workflow_application_data_intents'
               ]) AS required(table_name)
               JOIN pg_class c ON c.oid = to_regclass('public.' || required.table_name)
              WHERE c.relrowsecurity AND c.relforcerowsecurity
@@ -363,7 +364,7 @@ export class PostgresWorkflowExecutionService {
            ) AS start_key_present`,
       );
       const row = result.rows[0];
-      if (Number(row?.ready_tables) !== 9 || row?.start_key_present !== true) {
+      if (Number(row?.ready_tables) !== 10 || row?.start_key_present !== true) {
         throw new Error("EPER_WORKFLOW_EXECUTION_SCHEMA_NOT_READY");
       }
     } catch (error) {
