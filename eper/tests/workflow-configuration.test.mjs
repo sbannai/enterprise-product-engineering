@@ -59,3 +59,28 @@ test("workflow:admin grants view and act but does not grant approval", () => {
   assert.equal(service.checkAccess("admin-1", "workflow:act").allowed, true);
   assert.equal(service.checkAccess("admin-1", "workflow:approve").allowed, false);
 });
+
+test("workflow configuration accepts only explicit governed application-data mutation bindings", () => {
+  const service = new WorkflowConfigurationService();
+  service.replaceRoles([{ id: "operator", name: "Operator", members: ["operator-1"], permissions: ["workflow:act"] }]);
+  const activity = {
+    id: "save-order", title: "Save order", type: "TASK", roleId: "operator",
+    permission: "workflow:act", nextActivityIds: [], fields: [],
+    applicationDataBinding: {
+      requirementId: "REQ-001", entityType: "Order", operation: "create",
+      recordIdField: "orderId", dataField: "order",
+    },
+  };
+  const [saved] = service.replaceWorkflows([{
+    id: "order-flow", name: "Order flow", status: "DRAFT", activities: [activity],
+  }]);
+  assert.equal(saved.activities[0].applicationDataBinding.operation, "create");
+  assert.throws(() => service.replaceWorkflows([{
+    id: "order-flow", name: "Order flow", status: "DRAFT",
+    activities: [{ ...activity, applicationDataBinding: { ...activity.applicationDataBinding, operation: "query" } }],
+  }]), /invalid_or_duplicate_workflow_activity/);
+  assert.throws(() => service.replaceWorkflows([{
+    id: "order-flow", name: "Order flow", status: "DRAFT",
+    activities: [{ ...activity, applicationDataBinding: { ...activity.applicationDataBinding, requirementId: "" } }],
+  }]), /invalid_or_duplicate_workflow_activity/);
+});
