@@ -7,7 +7,8 @@ export interface ApplicationDataReconciliationWorkerConfig {
   environment: "production" | "uat" | "sandbox";
   idlePollMs: number;
   maxContexts: number;
-  leaseMilliseconds: number;\n  maxAttempts: number;
+  leaseMilliseconds: number;
+  maxAttempts: number;
 }
 
 function required(env: Readonly<Record<string, string | undefined>>, name: string): string {
@@ -62,6 +63,7 @@ export function readApplicationDataReconciliationWorkerConfig(
     environment: environment as ApplicationDataReconciliationWorkerConfig["environment"],
     idlePollMs: bounded(env, "EPER_APPLICATION_DATA_RECONCILIATION_IDLE_POLL_MS", 1_000, 50, 60_000),
     maxContexts: bounded(env, "EPER_APPLICATION_DATA_RECONCILIATION_MAX_CONTEXTS", 1_000, 1, 10_000),
-    leaseMilliseconds: bounded(env, "EPER_APPLICATION_DATA_RECONCILIATION_LEASE_MS", 60_000, 1_000, 3_600_000),\n    maxAttempts: bounded(env, "EPER_APPLICATION_DATA_RECONCILIATION_MAX_ATTEMPTS", 8, 1, 100),
+    leaseMilliseconds: bounded(env, "EPER_APPLICATION_DATA_RECONCILIATION_LEASE_MS", 60_000, 1_000, 3_600_000),
+    maxAttempts: bounded(env, "EPER_APPLICATION_DATA_RECONCILIATION_MAX_ATTEMPTS", 8, 1, 100),
   };
 }
