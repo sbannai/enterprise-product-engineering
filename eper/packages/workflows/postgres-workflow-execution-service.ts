@@ -8,7 +8,7 @@ import {
 import { evaluateWorkflowRoutingRules, type WorkflowActivity, type WorkflowDefinition, type WorkflowField } from "./workflow-configuration.js";
 
 export type WorkflowTransitionAction = "submit" | "approve" | "reject" | "cancel";
-export type WorkflowInstanceStatus = "running" | "completed" | "rejected" | "cancelled" | "failed";
+export type WorkflowInstanceStatus = "running" | "waiting_for_data" | "completed" | "rejected" | "cancelled" | "failed";
 
 export interface WorkflowExecutionContext {
   tenantId: string;
@@ -51,6 +51,7 @@ export interface WorkflowInstanceRecord {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  pendingActivityExecutionId: string | null;
 }
 
 export class WorkflowExecutionError extends Error {
@@ -66,6 +67,7 @@ type InstanceRow = {
   current_activity_id: string | null; business_reference: string | null; data: Record<string, unknown> | string;
   version: number | string; created_by: string; created_at: string | Date;
   updated_at: string | Date; completed_at: string | Date | null;
+  pending_activity_execution_id?: string | null;
   start_request_fingerprint?: string | null;
 };
 type DefinitionVersionRow = {
@@ -108,6 +110,7 @@ function mapInstance(row: InstanceRow): WorkflowInstanceRecord {
     data: parseObject(row.data), version: Number(row.version), createdBy: row.created_by,
     createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString(),
     completedAt: row.completed_at ? new Date(row.completed_at).toISOString() : null,
+    pendingActivityExecutionId: row.pending_activity_execution_id ?? null,
   };
 }
 function validateId(value: string, name: string): void {
@@ -553,6 +556,9 @@ export class PostgresWorkflowExecutionService {
       );
       const instance = selected.rows[0];
       if (!instance) throw new WorkflowExecutionError("WORKFLOW_EXECUTION_INSTANCE_NOT_FOUND", 404);
+      if (instance.status === "waiting_for_data") {
+        throw new WorkflowExecutionError("WORKFLOW_EXECUTION_APPLICATION_DATA_PENDING", 409);
+      }
       if (instance.status !== "running") throw new WorkflowExecutionError("WORKFLOW_EXECUTION_INSTANCE_TERMINAL", 409);
       if (Number(instance.version) !== input.expectedVersion) {
         throw new WorkflowExecutionError("WORKFLOW_EXECUTION_VERSION_CONFLICT", 409);
