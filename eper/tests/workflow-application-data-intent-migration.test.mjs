@@ -61,3 +61,11 @@ test("application-data intent authorization metadata is mandatory as a complete 
   assert.match(sql, /actor_role_id IS NOT NULL[\s\S]*required_permission IS NOT NULL/);
   assert.match(sql, /'workflow:act','workflow:approve'/);
 });
+
+test("reconciliation dead-letter migration bounds poison-intent retries", async () => {
+  const sql = await readFile(new URL("../packages/workflows/migrations/026_application_data_reconciliation_dead_letter.sql", import.meta.url), "utf8");
+  assert.match(sql, /DROP CONSTRAINT IF EXISTS eper_workflow_application_data_intents_reconciliation_status_check/);
+  assert.match(sql, /reconciliation_status IN \('pending','processing','completed','dead_letter'\)/);
+  assert.match(sql, /intent_status = 'succeeded'[\s\S]*reconciliation_status IN \('pending','processing','dead_letter'\)/);
+  assert.match(sql, /reconciliation_status = 'dead_letter'/);
+});
