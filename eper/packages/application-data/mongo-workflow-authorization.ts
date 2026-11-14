@@ -4,6 +4,7 @@ import { MongoApplicationDataAdapter, type MongoSessionLike, type MongoWorkflowA
 interface MongoGrantCollection {
   findOne(filter: Record<string, unknown>, options?: Record<string, unknown>): Promise<Record<string, unknown> | null>;
   updateOne(filter: Record<string, unknown>, update: Record<string, unknown>, options?: Record<string, unknown>): Promise<{ matchedCount?: number }>;
+  createIndex?(keys: Record<string, 1 | -1>, options?: Record<string, unknown>): Promise<string>;
 }
 interface MongoAuthorizationDatabase {
   collection<T extends Record<string, unknown>>(name: string): MongoGrantCollection;
@@ -46,11 +47,7 @@ export function createMongoWorkflowAuthorizer(database: unknown): MongoWorkflowA
 
 /** Create the scoped lookup index during provider bootstrap, not on request paths. */
 export async function ensureMongoWorkflowAuthorizationIndexes(database: unknown): Promise<void> {
-  const db = database as MongoAuthorizationDatabase & {
-    collection<T extends Record<string, unknown>>(name: string): MongoGrantCollection & {
-      createIndex?(keys: Record<string, 1 | -1>, options?: Record<string, unknown>): Promise<string>;
-    };
-  };
+  const db = database as MongoAuthorizationDatabase;
   const collection = db.collection("eper_workflow_authorization_grants");
   if (typeof collection.createIndex !== "function") {
     throw new Error("MONGODB_INDEX_MANAGEMENT_REQUIRED");
