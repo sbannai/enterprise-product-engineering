@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ApplicationDataActivityIntentWorker, applicationDataIntentFingerprint } from "../dist/packages/workflows/application-data-activity-intent-worker.js";
 
-test("intent worker executes the registered binding with trusted context and commits completion", async () => {
+test("intent worker executes its injected activity with trusted context and records intent completion", async () => {
   const statements = [];
   const row = {
     intent_id: "8d8d3f6a-6a8c-4e4d-aea2-9fdd5f1c2c11",
@@ -47,6 +47,7 @@ test("intent worker executes the registered binding with trusted context and com
   assert.equal(execution.input.id, "order-1");
   assert.ok(statements.some(item => item.sql.includes("FOR UPDATE SKIP LOCKED")));
   assert.ok(statements.some(item => item.sql.includes("claim_generation = $8")));
+  // Workflow-instance advancement is intentionally not asserted: runtime handshake is not wired yet.
 });
 
 test("intent worker returns idle when no pending or expired lease is available", async () => {
