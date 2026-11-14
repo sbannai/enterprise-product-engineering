@@ -32,13 +32,13 @@ function required(value: unknown, code: string): asserts value is string {
 }
 
 function validateModelShape(entityType: string, fields: ApplicationDataField[], relationships: ApplicationDataRelationship[]): void {
-  if (!ID.test(entityType) || !Array.isArray(fields) || fields.length > 300 ||
+  if (typeof entityType !== "string" || !ID.test(entityType) || !Array.isArray(fields) || fields.length > 300 ||
       !Array.isArray(relationships) || relationships.length > 300) {
     throw new Error("APPLICATION_DATA_MODEL_INVALID");
   }
   const fieldIds = new Set<string>();
   for (const field of fields) {
-    if (!field || !ID.test(field.id) || fieldIds.has(field.id) ||
+    if (!field || typeof field.id !== "string" || !ID.test(field.id) || fieldIds.has(field.id) ||
         !["string", "number", "boolean", "date", "object", "array"].includes(field.type) ||
         (field.required !== undefined && typeof field.required !== "boolean") ||
         (field.nullable !== undefined && typeof field.nullable !== "boolean") ||
@@ -52,7 +52,7 @@ function validateModelShape(entityType: string, fields: ApplicationDataField[], 
   const relationFields = new Set<string>();
   for (const relation of relationships) {
     const field = fields.find(item => item.id === relation.field);
-    if (!field || relationFields.has(relation.field) || !ID.test(relation.targetEntity) ||
+    if (!field || typeof relation.field !== "string" || typeof relation.targetEntity !== "string" ||\n        relationFields.has(relation.field) || !ID.test(relation.targetEntity) ||
         !["one", "many"].includes(relation.cardinality) ||
         (relation.cardinality === "one" && field.type !== "string") ||
         (relation.cardinality === "many" && field.type !== "array")) {
