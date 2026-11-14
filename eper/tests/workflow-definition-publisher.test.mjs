@@ -228,3 +228,28 @@ test("publisher rejects draft content that differs from the locked revision", as
   assert.ok(calls.some(call => call.sql === "ROLLBACK"));
   assert.equal(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_definition_versions")), false);
 });
+
+test("publisher accepts JSON workflow fields used by governed application-data activities", async () => {
+  const { calls, pool } = fixture();
+  const jsonFieldDefinition = {
+    ...definition,
+    id: "order-workflow",
+    activities: [{
+      id: "create-order",
+      title: "Create order",
+      type: "TASK",
+      roleId: "finance-approver",
+      permission: "workflow:act",
+      nextActivityIds: [],
+      fields: [{ id: "orderData", type: "json", required: true }],
+      applicationDataBinding: {
+        requirementId: "APP_DATA_WORKFLOW_ORDER_CREATE",
+        entityType: "Order",
+        operation: "create",
+        dataField: "orderData",
+      },
+    }],
+  };
+  await new WorkflowDefinitionPublisher(pool).publish(context, jsonFieldDefinition);
+  assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_definition_versions")));
+});
