@@ -18,10 +18,11 @@ test("application-data executor receives scoped, least-privilege database grants
 });
 
 test("executor receives only version-column update privileges for authorization row locks", async () => {
-  const sql = await readFile(new URL("../packages/workflows/migrations/023_application_data_executor_worker_access.sql", import.meta.url), "utf8");
-  assert.match(sql, /GRANT UPDATE \(version\) ON eper_actor_application_assignment,[\s\S]*eper_tenant_application_assignment, eper_workflow_actor_role_assignment,[\s\S]*eper_workflow_role_definition/);
+  const sql = await readFile(new URL("../packages/workflows/migrations/025_application_data_executor_authorization_row_locks.sql", import.meta.url), "utf8");
+  assert.match(sql, /GRANT UPDATE \(version\) ON eper_actor_application_assignment,[\s\S]*eper_tenant_application_assignment,[\s\S]*eper_workflow_actor_role_assignment,[\s\S]*eper_workflow_role_definition/);
   assert.doesNotMatch(sql, /GRANT UPDATE ON eper_actor_application_assignment/);
   assert.doesNotMatch(sql, /GRANT UPDATE ON eper_tenant_application_assignment/);
   assert.doesNotMatch(sql, /GRANT UPDATE ON eper_workflow_actor_role_assignment/);
   assert.doesNotMatch(sql, /GRANT UPDATE ON eper_workflow_role_definition/);
+  assert.match(sql, /COMMIT;\s*$/);
 });
