@@ -26,7 +26,7 @@ test("workflow advancement, outbox, audit and intent advancement share one recon
   const updateInstance = source.indexOf("UPDATE eper_workflow_instances");
   const transition = source.indexOf("INSERT INTO eper_workflow_transitions");
   const outbox = source.indexOf("INSERT INTO eper_workflow_outbox_events");
-  const audit = source.indexOf("appendAuditEventInTransaction");
+  const audit = source.indexOf("await appendAuditEventInTransaction");
   const advanceIntent = source.indexOf("SET intent_status = 'advanced'");
   const commit = source.lastIndexOf('completion.query("COMMIT")');
   assert.ok(updateInstance >= 0 && transition > updateInstance);
