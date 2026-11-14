@@ -33,7 +33,9 @@ CREATE INDEX IF NOT EXISTS eper_application_data_records_data_gin_idx
   ON eper_application_data_records USING gin(data);
 
 ALTER TABLE eper_application_data_models ENABLE ROW LEVEL SECURITY;
+ALTER TABLE eper_application_data_models FORCE ROW LEVEL SECURITY;
 ALTER TABLE eper_application_data_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE eper_application_data_records FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS eper_application_data_models_tenant_policy ON eper_application_data_models;
 CREATE POLICY eper_application_data_models_tenant_policy ON eper_application_data_models
   USING (tenant_id = current_setting('eper.tenant_id', true)
@@ -58,6 +60,7 @@ CREATE TABLE IF NOT EXISTS eper_application_data_idempotency (
   PRIMARY KEY (tenant_id, application_id, idempotency_key)
 );
 ALTER TABLE eper_application_data_idempotency ENABLE ROW LEVEL SECURITY;
+ALTER TABLE eper_application_data_idempotency FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS eper_application_data_idempotency_tenant_policy ON eper_application_data_idempotency;
 CREATE POLICY eper_application_data_idempotency_tenant_policy ON eper_application_data_idempotency
   USING (tenant_id = current_setting('eper.tenant_id', true)
