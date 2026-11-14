@@ -31,12 +31,13 @@ function canonical(value) {
 const digest = createHash("sha256").update(canonical(definition)).digest("hex");
 const now = "2026-10-31T12:05:00.000Z";
 
-function fixture({ tenantStatus = "active", actorStatus = "active", roleAllowed = true, outstandingIntent = false, outstandingIntentStatus = "pending" } = {}) {
+function fixture({ tenantStatus = "active", actorStatus = "active", roleAllowed = true, outstandingIntent = false, outstandingIntentStatus = "pending", instanceStatus = "running" } = {}) {
   const calls = [];
   const row = {
     tenant_id: context.tenantId, application_id: context.applicationId,
     instance_id: "11111111-1111-4111-8111-111111111111", workflow_id: definition.id,
-    definition_version: 1, definition_digest: digest, status: "running",
+    definition_version: 1, definition_digest: digest, status: instanceStatus,
+    pending_activity_execution_id: instanceStatus === "waiting_for_data" ? "33333333-3333-4333-8333-333333333333" : null,
     current_activity_id: "submit-expense", business_reference: "EXP-1001", data: {},
     version: 1, created_by: context.actorId, created_at: now, updated_at: now, completed_at: null,
   };
@@ -169,3 +170,22 @@ for (const status of ["pending", "processing", "succeeded", "failed", "dead_lett
     assert.equal(calls.some(call => call.sql.includes("UPDATE eper_workflow_instances")), false);
   });
 }
+
+
+test("workflow transition reports a distinct conflict when instance is already waiting for application data", async () => {
+  const { calls, pool } = fixture({ instanceStatus: "waiting_for_data" });
+  await assert.rejects(
+    new PostgresWorkflowExecutionService(pool).transition({
+      ...context,
+      instanceId: "11111111-1111-4111-8111-111111111111",
+      expectedVersion: 1,
+      idempotencyKey: "transition-waiting-0001",
+      action: "submit",
+      payload: {},
+    }),
+    /WORKFLOW_EXECUTION_APPLICATION_DATA_PENDING/,
+  );
+  assert.ok(calls.some(call => call.sql === "ROLLBACK"));
+  assert.equal(calls.some(call => call.sql.includes("FROM eper_workflow_application_data_intents")), false);
+  assert.equal(calls.some(call => call.sql.includes("UPDATE eper_workflow_instances")), false);
+});
