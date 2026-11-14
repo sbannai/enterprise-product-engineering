@@ -288,7 +288,7 @@ export class ApplicationDataIntentReconciler {
       completion.release();
     }
   }
-}
+
   private async releaseFailedClaim(intent: ReconciliationRow, error: unknown): Promise<void> {
     const client = await this.pool.connect();
     try {
@@ -318,4 +318,4 @@ export class ApplicationDataIntentReconciler {
       client.release();
     }
   }
-
+}
