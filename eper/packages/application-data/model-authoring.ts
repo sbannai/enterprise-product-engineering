@@ -69,7 +69,7 @@ function validateModelShape(entityType: string, fields: ApplicationDataField[], 
  * one PostgreSQL transaction.
  */
 export class PostgresApplicationDataModelAuthoringService {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pick<Pool, "connect">) {}
 
   private validateContext(context: ApplicationDataModelAuthoringContext): void {
     for (const [key, value] of Object.entries({
