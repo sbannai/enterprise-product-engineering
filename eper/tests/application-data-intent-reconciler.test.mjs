@@ -43,3 +43,9 @@ test("reconciliation failures release the fenced lease with backoff and dead-let
   assert.match(source, /reconciliation_available_at = CASE WHEN reconciliation_attempts >= \$6[\s\S]*power\(2, LEAST\(reconciliation_attempts, 10\)\)/);
   assert.match(source, /reconciliation_claim_generation = \$5/);
 });
+
+test("reconciliation propagates the default result key into workflow context", async () => {
+  const source = await readFile(new URL("../packages/workflows/application-data-intent-reconciler.ts", import.meta.url), "utf8");
+  assert.match(source, /applicationDataBinding\.resultKey \?\? "result"/);
+  assert.match(source, /const nextData = \{ \.\.\.data, \[resultKey\]: result\[resultKey\] \?\? result \}/);
+});
