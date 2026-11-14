@@ -98,7 +98,7 @@ test("MongoDB workflow grant resolver scopes active grants and binds lookup to t
  assert.equal(lookup.options.session, session);
  assert.deepEqual(lookup.update, { $inc: { authorizationFence: 1 } });
  await ensureMongoWorkflowAuthorizationIndexes(database);
- assert.equal(lookup.index.options.name, "eper_workflow_authorization_grant_scope");
+ assert.equal(lookup.index.options.name, "eper_workflow_authorization_active_grant_scope");
  const indexedCollections = [];
  const factoryDatabase = { collection(name) {
   indexedCollections.push(name);
