@@ -35,10 +35,11 @@ function fixture({ tenantStatus = "active", actorStatus = "active", roleAllowed 
   const calls = [];
   const configuredDefinition = structuredClone(definition);
   if (applicationDataBinding) configuredDefinition.activities[0].applicationDataBinding = applicationDataBinding;
+  const configuredDigest = createHash("sha256").update(canonical(configuredDefinition)).digest("hex");
   const row = {
     tenant_id: context.tenantId, application_id: context.applicationId,
     instance_id: "11111111-1111-4111-8111-111111111111", workflow_id: definition.id,
-    definition_version: 1, definition_digest: digest, status: instanceStatus,
+    definition_version: 1, definition_digest: configuredDigest, status: instanceStatus,
     pending_activity_execution_id: instanceStatus === "waiting_for_data" ? "33333333-3333-4333-8333-333333333333" : null,
     current_activity_id: "submit-expense", business_reference: "EXP-1001", data: {},
     version: 1, created_by: context.actorId, created_at: now, updated_at: now, completed_at: null,
