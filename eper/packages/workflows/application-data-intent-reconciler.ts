@@ -38,6 +38,7 @@ interface InstanceRow {
 export interface ApplicationDataIntentReconcilerOptions {
   workerId?: string;
   leaseMilliseconds?: number;
+  maxAttempts?: number;
   environment: AuditEnvironment;
   serviceVersion?: string;
 }
