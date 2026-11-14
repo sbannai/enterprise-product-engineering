@@ -185,7 +185,11 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
     return prior.response as ApplicationDataRecord;
   }
   async update(c: ApplicationDataContext, e: string, id: string, expected: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }, relationships?: ApplicationDataRelationship[]): Promise<ApplicationDataRecord> {
-    return this.transaction(async session => {
+    const key=c.idempotencyKey;
+    const requestHash=key ? applicationDataUpdateHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected,patch}) : undefined;
+    const idempotencyId=key ? this.key([c.tenantId,c.applicationId,key]) : undefined;
+    try {
+      return await this.transaction(async session => {
       const key=c.idempotencyKey;
       const requestHash=key ? applicationDataUpdateHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected,patch}) : undefined;
       const idempotencyId=key ? this.key([c.tenantId,c.applicationId,key]) : undefined;
@@ -211,7 +215,14 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
       if (key && requestHash && idempotencyId) await this.idempotency().insertOne({_id:idempotencyId,tenantId:c.tenantId,applicationId:c.applicationId,
         idempotencyKey:key,requestHash,response:saved,createdAt:new Date().toISOString()},{session});
       return saved;
-    });
+      });
+    } catch (error) {
+      if ((error as {code?:number})?.code !== 11000 || !key || !requestHash || !idempotencyId) throw error;
+      const prior=await this.idempotency().findOne({_id:idempotencyId});
+      if (!prior) throw error;
+      if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+      return prior.response as ApplicationDataRecord;
+    }
   }
   async getIdempotentDelete(c: ApplicationDataContext, e: string, id: string, expected: number): Promise<boolean> {
     if (!c.idempotencyKey) return false;
