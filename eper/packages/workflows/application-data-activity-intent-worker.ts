@@ -136,7 +136,8 @@ export class ApplicationDataActivityIntentWorker {
       const fingerprint = applicationDataIntentFingerprint({
         tenantId: intent.tenant_id, applicationId: intent.application_id,
         instanceId: intent.instance_id, activityExecutionId: intent.activity_execution_id,
-        actorId: intent.actor_id, actorRoleId: intent.actor_role_id ?? "",\n        requiredPermission: intent.required_permission ?? "workflow:act", correlationId: intent.correlation_id,
+        actorId: intent.actor_id, actorRoleId: intent.actor_role_id ?? "",
+        requiredPermission: intent.required_permission ?? "workflow:act", correlationId: intent.correlation_id,
         requirementId: intent.requirement_id, idempotencyKey: intent.idempotency_key,
         entityType: intent.entity_type, operation: intent.operation, binding, input,
       });
@@ -146,7 +147,9 @@ export class ApplicationDataActivityIntentWorker {
       const context: ApplicationDataContext = {
         tenantId: intent.tenant_id,
         applicationId: intent.application_id,
-        actorId: intent.actor_id,\n        workflowRoleId: intent.actor_role_id ?? undefined,\n        workflowPermission: intent.required_permission ?? undefined,\n        correlationId: intent.correlation_id,
+        actorId: intent.actor_id,
+        workflowRoleId: intent.actor_role_id ?? undefined,
+        workflowPermission: intent.required_permission ?? undefined,\n        correlationId: intent.correlation_id,
         requirementId: intent.requirement_id,
         idempotencyKey: intent.idempotency_key,
       };
