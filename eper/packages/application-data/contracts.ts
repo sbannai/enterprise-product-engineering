@@ -26,8 +26,7 @@ export interface ApplicationDataContext {
   applicationId: string;
   actorId: string;
   correlationId: string;
-  requirementId: string;
-  /** Stable client/workflow key used to make create retries return the original result. */
+  requirementId: string;\n  /** Authorization captured at workflow transition and revalidated by the executor. */\n  workflowRoleId?: string;\n  workflowPermission?: "workflow:act" | "workflow:approve";\n  /** Stable client/workflow key used to make create retries return the original result. */
   idempotencyKey?: string;
 }
 export interface ApplicationDataRecord {
