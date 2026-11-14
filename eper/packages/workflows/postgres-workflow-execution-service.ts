@@ -629,17 +629,53 @@ export class PostgresWorkflowExecutionService {
       }
 
       const nextVersion = input.expectedVersion + 1;
-      const terminal = nextStatus !== "running";
+      const dataBinding = current.applicationDataBinding;
+      const waitingForData = Boolean(dataBinding && input.action !== "cancel" && input.action !== "reject");
+      const activityExecutionId = waitingForData ? randomUUID() : null;
+      const activityIdempotencyKey = waitingForData ? randomUUID() : null;
+      if (waitingForData && dataBinding && activityExecutionId && activityIdempotencyKey) {
+        const binding = {
+          entityType: dataBinding.entityType,
+          operation: dataBinding.operation,
+          ...(dataBinding.recordIdField ? { recordIdField: dataBinding.recordIdField } : {}),
+          ...(dataBinding.expectedVersionField ? { expectedVersionField: dataBinding.expectedVersionField } : {}),
+          ...(dataBinding.dataField ? { dataField: dataBinding.dataField } : {}),
+          ...(dataBinding.resultKey ? { resultKey: dataBinding.resultKey } : {}),
+        };
+        const intentFingerprint = digest({
+          tenantId: input.tenantId, applicationId: input.applicationId,
+          instanceId: input.instanceId, activityExecutionId,
+          actorId: input.actorId, correlationId: input.correlationId,
+          requirementId: dataBinding.requirementId, idempotencyKey: activityIdempotencyKey,
+          entityType: dataBinding.entityType, operation: dataBinding.operation,
+          binding, input: payload,
+        });
+        await client.query(
+          `INSERT INTO eper_workflow_application_data_intents
+            (tenant_id, application_id, intent_id, instance_id, activity_execution_id,
+             activity_id, actor_id, correlation_id, requirement_id, idempotency_key,
+             request_fingerprint, entity_type, operation, binding, input)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb)`,
+          [input.tenantId, input.applicationId, randomUUID(), input.instanceId,
+            activityExecutionId, current.id, input.actorId, input.correlationId,
+            dataBinding.requirementId, activityIdempotencyKey, intentFingerprint,
+            dataBinding.entityType, dataBinding.operation, JSON.stringify(binding), JSON.stringify(payload)],
+        );
+        nextStatus = "waiting_for_data";
+      }
+      const terminal = nextStatus !== "running" && nextStatus !== "waiting_for_data";
       const updated = await client.query<InstanceRow>(
         `UPDATE eper_workflow_instances
             SET status = $4, current_activity_id = $5, data = $6::jsonb,
+                pending_activity_execution_id = $9,
                 version = $7, updated_at = NOW(),
-                completed_at = CASE WHEN $4::varchar = 'running' THEN NULL ELSE NOW() END
+                completed_at = CASE WHEN $4::varchar IN ('running','waiting_for_data') THEN NULL ELSE NOW() END
           WHERE tenant_id = $1 AND application_id = $2 AND instance_id = $3
             AND version = $8
           RETURNING *`,
         [input.tenantId, input.applicationId, input.instanceId, nextStatus,
-          terminal ? null : nextActivityId, JSON.stringify(nextData), nextVersion, input.expectedVersion],
+          terminal ? null : nextActivityId, JSON.stringify(nextData), nextVersion, input.expectedVersion,
+          activityExecutionId],
       );
       const updatedRow = updated.rows[0];
       if (!updatedRow) throw new WorkflowExecutionError("WORKFLOW_EXECUTION_VERSION_CONFLICT", 409);
