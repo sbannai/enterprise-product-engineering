@@ -97,6 +97,14 @@ test("PostgreSQL workflow application-data activity writes once and advances onc
             recordIdField: "orderId", dataField: "orderData",
           },
         }, {
+          id: "read-order", title: "Read persisted order", type: "TASK",
+          roleId, permission: "workflow:act", nextActivityIds: ["confirm-order"],
+          fields: [{ id: "orderId", type: "text", required: true }],
+          applicationDataBinding: {
+            requirementId: "APP_DATA_WORKFLOW_ORDER_GET",
+            entityType, operation: "get", recordIdField: "orderId",
+          },
+        }, {
           id: "confirm-order", title: "Confirm order", type: "TASK",
           roleId, permission: "workflow:act", nextActivityIds: [], fields: [],
         }, {
@@ -105,7 +113,7 @@ test("PostgreSQL workflow application-data activity writes once and advances onc
         }],
         rules: [{
           id: "created-record-version-present", name: "Route after persisted record",
-          priority: 100, targetActivityId: "confirm-order",
+          priority: 100, targetActivityId: "read-order",
           condition: { kind: "condition", field: "result.version", operator: "gte", value: 1 },
         }],
       };
@@ -153,6 +161,22 @@ test("PostgreSQL workflow application-data activity writes once and advances onc
       assert.equal(advanced.instanceId, started.instanceId);
       assert.equal(advanced.resultingVersion, waiting.version + 1);
 
+      const readWaiting = await execution.transition({
+        tenantId, applicationId, actorId, correlationId, environment,
+        instanceId: started.instanceId, expectedVersion: advanced.resultingVersion,
+        idempotencyKey: "read-" + suffix, action: "submit",
+        payload: { orderId: recordId },
+      });
+      assert.equal(readWaiting.status, "waiting_for_data");
+      assert.equal(readWaiting.currentActivityId, "read-order");
+      const readExecuted = await worker.runOnce(tenantId, applicationId);
+      assert.equal(readExecuted.status, "succeeded");
+      assert.equal(readExecuted.result.result.id, recordId);
+      assert.deepEqual(readExecuted.result.result.data, { customerId: "customer-" + suffix, total: 42.5 });
+      const readAdvanced = await reconciler.runOnce(tenantId, applicationId);
+      assert.equal(readAdvanced.status, "advanced");
+      if (readAdvanced.status !== "advanced") throw new Error("APPLICATION_DATA_WORKFLOW_READ_NOT_ADVANCED");
+      assert.equal(readAdvanced.resultingVersion, readWaiting.version + 1);
       const restartedReconciler = new ApplicationDataIntentReconciler(pool, {
         workerId: "data-wf-reconcile-restart-" + suffix, environment, maxAttempts: 3,
       });
@@ -177,19 +201,23 @@ test("PostgreSQL workflow application-data activity writes once and advances onc
         );
         assert.equal(instance.rows.length, 1);
         assert.equal(instance.rows[0].status, "running");
-        assert.equal(Number(instance.rows[0].version), waiting.version + 1);
+        assert.equal(Number(instance.rows[0].version), readWaiting.version + 1);
         assert.equal(instance.rows[0].current_activity_id, "confirm-order");
         assert.equal(instance.rows[0].pending_activity_execution_id, null);
         const workflowData = typeof instance.rows[0].data === "string"
           ? JSON.parse(instance.rows[0].data) : instance.rows[0].data;
         assert.equal(workflowData.result.id, recordId);
+        assert.equal(workflowData.result.data.total, 42.5);
         const intents = await verify.query(
           `SELECT intent_status, reconciliation_status
              FROM eper_workflow_application_data_intents
             WHERE tenant_id=$1 AND application_id=$2 AND instance_id=$3`,
           [tenantId, applicationId, started.instanceId],
         );
-        assert.deepEqual(intents.rows, [{ intent_status: "advanced", reconciliation_status: "completed" }]);
+        assert.deepEqual(intents.rows, [
+          { intent_status: "advanced", reconciliation_status: "completed" },
+          { intent_status: "advanced", reconciliation_status: "completed" },
+        ]);
         const reconciliationTransitions = await verify.query(
           `SELECT count(*)::int AS count FROM eper_workflow_transitions
             WHERE tenant_id=$1 AND application_id=$2 AND instance_id=$3
