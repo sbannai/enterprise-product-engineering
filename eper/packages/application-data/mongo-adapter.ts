@@ -297,9 +297,10 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
   }
   async query(c: ApplicationDataContext, e: string, q: ApplicationDataQuery): Promise<ApplicationDataRecord[]> {
     const read = async (session?: MongoSessionLike) => {
-      const rows=await this.records().find({ ...this.scope(c.tenantId,c.applicationId,e), ...(q.state ? {state:q.state}:{}), ...(q.afterId ? {id:{$gt:q.afterId}} : {}) },
-        ...(session ? {session} : {}) })
-        .sort({id:1}).limit(q.limit ?? 50).toArray();
+      const rows=await this.records().find(
+        { ...this.scope(c.tenantId,c.applicationId,e), ...(q.state ? {state:q.state}:{}), ...(q.afterId ? {id:{$gt:q.afterId}} : {}) },
+        session ? {session} : {},
+      ).sort({id:1}).limit(q.limit ?? 50).toArray();
       return rows.map(row=>this.clean(row) as unknown as ApplicationDataRecord);
     };
     if (!c.workflowRoleId && !c.workflowPermission) return read();
