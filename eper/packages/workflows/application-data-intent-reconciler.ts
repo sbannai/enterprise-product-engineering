@@ -177,9 +177,15 @@ export class ApplicationDataIntentReconciler {
       const activity = definition.activities.find(item => item.id === currentIntent.activity_id);
       if (!activity?.applicationDataBinding) throw new Error("WORKFLOW_APPLICATION_DATA_RECONCILIATION_BINDING_MISSING");
       const binding = asObject(currentIntent.binding);
-      if (binding.entityType !== activity.applicationDataBinding.entityType ||
-          binding.operation !== activity.applicationDataBinding.operation ||
-          binding.entityType === undefined) {
+      const expectedBinding = {
+        entityType: activity.applicationDataBinding.entityType,
+        operation: activity.applicationDataBinding.operation,
+        ...(activity.applicationDataBinding.recordIdField ? { recordIdField: activity.applicationDataBinding.recordIdField } : {}),
+        ...(activity.applicationDataBinding.expectedVersionField ? { expectedVersionField: activity.applicationDataBinding.expectedVersionField } : {}),
+        ...(activity.applicationDataBinding.dataField ? { dataField: activity.applicationDataBinding.dataField } : {}),
+        ...(activity.applicationDataBinding.resultKey ? { resultKey: activity.applicationDataBinding.resultKey } : {}),
+      };
+      if (digest(binding) !== digest(expectedBinding)) {
         throw new Error("WORKFLOW_APPLICATION_DATA_RECONCILIATION_BINDING_MISMATCH");
       }
       const data = asObject(instance.data);
