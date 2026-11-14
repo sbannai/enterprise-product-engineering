@@ -81,11 +81,11 @@ async function main(): Promise<void> {
     await assertReconciliationSchemaReady(pool);
 
     const contexts = new PostgresWorkflowOutboxContextSource(auditPool, config.maxContexts);
-    const reconciler = new ApplicationDataIntentReconciler(auditPool, {
+    const reconciler: ApplicationDataIntentReconciler = new ApplicationDataIntentReconciler(auditPool, {
       workerId: config.workerId, leaseMilliseconds: config.leaseMilliseconds,
       environment: config.environment, serviceVersion: process.env.EPER_SERVICE_VERSION,
     });
-    const process = new ApplicationDataReconciliationProcess(reconciler, contexts, {
+    const reconciliationProcess = new ApplicationDataReconciliationProcess(reconciler, contexts, {
       idlePollMs: config.idlePollMs, maxContextsPerPass: config.maxContexts,
       onPass(result) {
         console.log(JSON.stringify({ event: "application_data_reconciliation_pass", workerId: config.workerId, ...result }));
@@ -102,7 +102,7 @@ async function main(): Promise<void> {
       workerId: config.workerId, databaseRole: config.expectedDatabaseRole,
       maxContexts: config.maxContexts, idlePollMs: config.idlePollMs,
     }));
-    await process.run(controller.signal);
+    await reconciliationProcess.run(controller.signal);
   } finally {
     for (const [signal, handler] of handlers) process.removeListener(signal, handler);
     await pool.end();
