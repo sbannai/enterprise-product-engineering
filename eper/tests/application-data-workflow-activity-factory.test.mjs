@@ -71,3 +71,46 @@ test("MongoDB workflow data access fails closed and revalidates grants in the sa
  assert.match(source, /return this\.authorizedRead\(c/);
  assert.match(source, /this\.transaction\(async session => \{ await this\.authorizeWorkflow\(session,c\); return read\(session\); \}\)/);
 });
+
+test("MongoDB workflow grant resolver scopes active grants and binds lookup to the data transaction", async () => {
+ const { createMongoWorkflowAuthorizer, ensureMongoWorkflowAuthorizationIndexes } =
+  await import("../dist/packages/application-data/mongo-workflow-authorization.js");
+ let lookup;
+ const session = { async withTransaction(work) { return work(); }, async endSession() {} };
+ const database = { collection(name) {
+  assert.equal(name, "eper_workflow_authorization_grants");
+  return {
+   async findOne(filter, options) { lookup = { filter, options }; return { roleId: "operator" }; },
+   async createIndex(keys, options) { lookup.index = { keys, options }; return "grant-scope"; },
+  };
+ }};
+ const authorize = createMongoWorkflowAuthorizer(database);
+ await authorize(session, {
+  tenantId: "tenant-a", applicationId: "app-a", actorId: "actor-a",
+  correlationId: "corr-a", requirementId: "REQ-001", workflowRoleId: "operator",
+  workflowPermission: "workflow:act",
+ });
+ assert.deepEqual(lookup.filter, {
+  tenantId: "tenant-a", applicationId: "app-a", actorId: "actor-a",
+  roleId: "operator", status: "active",
+  permissions: { $in: ["workflow:act", "workflow:admin"] },
+ });
+ assert.equal(lookup.options.session, session);
+ await ensureMongoWorkflowAuthorizationIndexes(database);
+ assert.equal(lookup.index.options.name, "eper_workflow_authorization_grant_scope");
+});
+
+test("MongoDB workflow grant resolver rejects missing and revoked grants", async () => {
+ const { createMongoWorkflowAuthorizer } = await import("../dist/packages/application-data/mongo-workflow-authorization.js");
+ const session = { async withTransaction(work) { return work(); }, async endSession() {} };
+ const authorize = createMongoWorkflowAuthorizer({ collection() { return { async findOne() { return null; } }; } });
+ await assert.rejects(() => authorize(session, {
+  tenantId: "tenant-a", applicationId: "app-a", actorId: "actor-a",
+  correlationId: "corr-a", requirementId: "REQ-001",
+ }), /APPLICATION_DATA_WORKFLOW_AUTHORIZATION_CONTEXT_MISSING/);
+ await assert.rejects(() => authorize(session, {
+  tenantId: "tenant-a", applicationId: "app-a", actorId: "actor-a",
+  correlationId: "corr-a", requirementId: "REQ-001", workflowRoleId: "operator",
+  workflowPermission: "workflow:approve",
+ }), /APPLICATION_DATA_WORKFLOW_PERMISSION_REVOKED/);
+});
