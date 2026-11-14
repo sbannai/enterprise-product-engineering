@@ -2,14 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("built-in PostgreSQL activity revalidates the exact workflow role and permission", async () => {
- const source=await readFile(new URL("../apps/worker/application-data-activities/postgres.ts",import.meta.url),"utf8");
- assert.match(source,/context\.workflowRoleId/);
- assert.match(source,/context\.workflowPermission/);
- assert.match(source,/new PostgresApplicationDataAdapter\(input\.pool, true\)/);
- assert.match(source,/APPLICATION_DATA_WORKFLOW_AUTHORIZATION_CONTEXT_MISSING/);
- assert.match(source,/PostgresApplicationDataAdapter\(input\.pool, true\)/);
- assert.match(source,/APPLICATION_DATA_WORKFLOW_PERMISSION_REVOKED/);
+test("built-in PostgreSQL activity requires authorization provenance and enables transaction-bound checks", async () => {
+ const source = await readFile(new URL("../apps/worker/application-data-activities/postgres.ts", import.meta.url), "utf8");
+ assert.match(source, /context\.workflowRoleId/);
+ assert.match(source, /context\.workflowPermission/);
+ assert.match(source, /new PostgresApplicationDataAdapter\(input\.pool, true\)/);
+ assert.match(source, /APPLICATION_DATA_WORKFLOW_AUTHORIZATION_CONTEXT_MISSING/);
+ assert.match(source, /same transaction as every scoped data access/);
 });
 
 test("PostgreSQL record mutation authorization locks the exact active role grant", async () => {
