@@ -159,3 +159,22 @@ test("workflow data update requires an explicit patch payload", async t => {
     entityType:"Order",operation:"update",recordIdField:"recordId",expectedVersionField:"version"
   },{recordId:"order-01",version:1}),/WORKFLOW_INPUT_INVALID/);
 });
+
+test("workflow read bindings retrieve a record and bounded query results without mutation idempotency keys", async t => {
+  const service=await fixture(t);
+  const activity=new ApplicationDataWorkflowActivity(service,async()=>{});
+  await service.create(context,"Order","order-read-01",{customerId:"c1",total:12,status:"NEW"});
+  const found=await activity.execute(context,{
+    entityType:"Order",operation:"get",recordIdField:"orderId",resultKey:"order"
+  },{orderId:"order-read-01"});
+  assert.equal(found.order.id,"order-read-01");
+  assert.equal(found.order.data.total,12);
+  const listed=await activity.execute(context,{
+    entityType:"Order",operation:"query",resultKey:"orders"
+  },{limit:10});
+  assert.equal(listed.orders.length,1);
+  assert.equal(listed.orders[0].id,"order-read-01");
+  await assert.rejects(()=>activity.execute(context,{
+    entityType:"Order",operation:"get",recordIdField:"orderId"
+  },{}),/WORKFLOW_INPUT_INVALID/);
+});
