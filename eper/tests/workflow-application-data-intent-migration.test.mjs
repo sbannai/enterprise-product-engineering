@@ -33,3 +33,10 @@ test("workflow instance wait state is pinned to one activity execution intent", 
   assert.match(sql, /DEFERRABLE INITIALLY DEFERRED/);
   assert.match(sql, /DROP CONSTRAINT IF EXISTS eper_workflow_instances_check/);
 });
+
+test("workflow instance can have only one unadvanced application-data intent", async () => {
+  const sql = await readFile(new URL("../packages/workflows/migrations/020_application_data_single_pending_intent.sql", import.meta.url), "utf8");
+  assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS eper_workflow_application_data_one_unadvanced_intent_idx/);
+  assert.match(sql, /ON eper_workflow_application_data_intents \(tenant_id, application_id, instance_id\)/);
+  assert.match(sql, /WHERE intent_status <> 'advanced'/);
+});
