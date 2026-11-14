@@ -254,9 +254,10 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
     }
   }
   async getIdempotentDelete(c: ApplicationDataContext, e: string, id: string, expected: number): Promise<boolean> {
-    if (!c.idempotencyKey) return false;
+    const idempotencyKey = c.idempotencyKey;
+    if (!idempotencyKey) return false;
     return this.authorizedRead(c, async session => {
-      const prior=await this.idempotency().findOne({_id:this.key([c.tenantId,c.applicationId,c.idempotencyKey])},session ? {session} : {});
+      const prior=await this.idempotency().findOne({_id:this.key([c.tenantId,c.applicationId,idempotencyKey])},session ? {session} : {});
       if (!prior) return false;
       const requestHash=applicationDataDeleteHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected});
       if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
