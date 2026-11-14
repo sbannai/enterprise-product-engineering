@@ -1,7 +1,7 @@
--- Durable intent ledger for the planned workflow-to-application-data hand-off.
--- Current state: the worker can claim and execute ledger rows, but the workflow
--- transition path does not yet enqueue intents or hold/advance instances. Do not
--- treat this migration alone as end-to-end workflow integration.
+-- Durable intent ledger for the workflow-to-application-data hand-off.
+-- Transition-time enqueue and the waiting state are implemented by the workflow
+-- execution service. A separate completion/reconciliation transaction is still
+-- required before a succeeded intent can safely advance its workflow instance.
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS eper_workflow_application_data_intents (
