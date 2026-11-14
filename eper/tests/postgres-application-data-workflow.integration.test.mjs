@@ -272,6 +272,7 @@ test("PostgreSQL model authoring enforces versioning and atomically audits schem
   const actorId = "model-author-actor-" + suffix;
   const roleId = "model-author-role-" + suffix;
   const correlationId = "model-author-corr-" + suffix;
+  const authorizationCorrelationId = correlationId + "-authz";
   const environment = "sandbox";
   const roleStore = new PostgresWorkflowRoleDefinitionStore(pool);
   const assignmentStore = new PostgresWorkflowActorRoleAssignmentStore(pool);
@@ -301,11 +302,11 @@ test("PostgreSQL model authoring enforces versioning and atomically audits schem
     await roleStore.replace({
       tenantId, applicationId, roleId, name: "Application model administrator",
       permissions: ["workflow:admin"], delegable: false, status: "active",
-      expectedVersion: 0, changedBy: actorId, environment, correlationId,
+      expectedVersion: 0, changedBy: actorId, environment, correlationId: authorizationCorrelationId,
     });
     await assignmentStore.assign({
       tenantId, applicationId, actorId, roleId, changedBy: actorId,
-      expectedVersion: 0, environment, correlationId,
+      expectedVersion: 0, environment, correlationId: authorizationCorrelationId,
     });
 
     const first = await service.createDraft(context, {
