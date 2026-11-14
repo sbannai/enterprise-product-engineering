@@ -184,14 +184,14 @@ export class ApplicationDataActivityIntentWorker {
       await scope(client, intent.tenant_id, intent.application_id);
       const updated = await client.query(
         `UPDATE eper_workflow_application_data_intents
-            SET intent_status = $5,
-                result = CASE WHEN $5 = 'succeeded' THEN $6::jsonb ELSE NULL END,
+            SET intent_status = $5::text,
+                result = CASE WHEN $5::text = 'succeeded' THEN $6::jsonb ELSE NULL END,
                 last_error = $7,
                 available_at = CASE WHEN $5 = 'pending'
                   THEN NOW() + LEAST(300, power(2, LEAST(attempts, 8))) * INTERVAL '1 second'
                   ELSE available_at END,
                 locked_at = NULL, locked_by = NULL,
-                completed_at = CASE WHEN $5 IN ('succeeded','dead_letter') THEN NOW() ELSE NULL END,
+                completed_at = CASE WHEN $5::text IN ('succeeded','dead_letter') THEN NOW() ELSE NULL END,
                 updated_at = NOW()
           WHERE tenant_id = $1 AND application_id = $2 AND intent_id = $3
             AND intent_status = 'processing' AND locked_by = $4 AND claim_generation = $8`,
