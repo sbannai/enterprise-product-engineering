@@ -1,6 +1,7 @@
--- Durable hand-off between workflow transitions and application-data mutations.
--- The workflow transaction records an intent; a separately leased worker executes it
--- idempotently. A workflow must not advance until the intent result is committed.
+-- Durable intent ledger for the planned workflow-to-application-data hand-off.
+-- Current state: the worker can claim and execute ledger rows, but the workflow
+-- transition path does not yet enqueue intents or hold/advance instances. Do not
+-- treat this migration alone as end-to-end workflow integration.
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS eper_workflow_application_data_intents (
