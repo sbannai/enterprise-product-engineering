@@ -28,6 +28,7 @@ test("workflow migrations preserve the ordered worker-access, claim-generation, 
   const applicationDataWaitState = names.indexOf("019_workflow_application_data_wait_state.sql");
   const singlePendingIntent = names.indexOf("020_application_data_single_pending_intent.sql");
   const reconciliationLease = names.indexOf("021_application_data_reconciliation_lease.sql");
+  const reconciliationWorkerAccess = names.indexOf("022_application_data_reconciliation_worker_access.sql");
   assert.notEqual(workerAccess, -1, "worker-access migration must exist");
   assert.notEqual(claimGeneration, -1, "claim-generation migration must exist");
   assert.notEqual(permissionCatalogue, -1, "permission-catalogue migration must exist");
@@ -35,6 +36,7 @@ test("workflow migrations preserve the ordered worker-access, claim-generation, 
   assert.notEqual(applicationDataWaitState, -1, "application-data workflow wait-state migration must exist");
   assert.notEqual(singlePendingIntent, -1, "single pending application-data intent migration must exist");
   assert.notEqual(reconciliationLease, -1, "application-data reconciliation lease migration must exist");
+  assert.notEqual(reconciliationWorkerAccess, -1, "reconciliation worker access migration must exist");
   assert.equal(names[workerAccess - 1], "014_workflow_definition_drafts.sql");
   assert.equal(names[workerAccess + 1], "016_workflow_outbox_claim_generation.sql");
   assert.equal(names[claimGeneration + 1], "017_workflow_role_permission_catalogue.sql");
@@ -42,5 +44,6 @@ test("workflow migrations preserve the ordered worker-access, claim-generation, 
   assert.equal(names[applicationDataIntents + 1], "019_workflow_application_data_wait_state.sql");
   assert.equal(names[applicationDataWaitState + 1], "020_application_data_single_pending_intent.sql");
   assert.equal(names[singlePendingIntent + 1], "021_application_data_reconciliation_lease.sql");
-  assert.equal(names.at(-1), "021_application_data_reconciliation_lease.sql");
+  assert.equal(names[reconciliationLease + 1], "022_application_data_reconciliation_worker_access.sql");
+  assert.equal(names.at(-1), "022_application_data_reconciliation_worker_access.sql");
 });
