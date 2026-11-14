@@ -23,6 +23,7 @@ interface IntentRow {
   binding: ApplicationDataWorkflowBinding | string;
   input: Record<string, unknown> | string;
   claim_generation: number | string;
+  attempts: number | string;
 }
 export type ApplicationDataIntentWorkerResult =
   | { status: "idle" }
@@ -103,6 +104,7 @@ export class ApplicationDataActivityIntentWorker {
     }
     if (!intent) return { status: "idle" };
 
+    let result: Record<string, unknown>;
     try {
       const binding = (typeof intent.binding === "string" ? JSON.parse(intent.binding) : intent.binding) as ApplicationDataWorkflowBinding;
       if (!binding || binding.entityType !== intent.entity_type || binding.operation !== intent.operation) {
@@ -116,16 +118,18 @@ export class ApplicationDataActivityIntentWorker {
         requirementId: intent.requirement_id,
         idempotencyKey: intent.idempotency_key,
       };
-      const result = await this.activity.execute(context, binding, object(intent.input));
-      const completed = await this.finish(intent, "succeeded", result);
-      if (!completed) throw new Error("WORKFLOW_APPLICATION_DATA_INTENT_LEASE_LOST");
-      return { status: "succeeded", intentId: intent.intent_id, result };
+      result = await this.activity.execute(context, binding, object(intent.input));
     } catch (error) {
       const errorCode = (error instanceof Error ? error.message : "WORKFLOW_APPLICATION_DATA_INTENT_FAILED").slice(0, 2000);
       const deadLetter = Number(intent.attempts ?? 1) >= this.maxAttempts;
       await this.finish(intent, deadLetter ? "dead_letter" : "pending", undefined, errorCode);
       return { status: deadLetter ? "dead_letter" : "retrying", intentId: intent.intent_id, errorCode };
     }
+    const completed = await this.finish(intent, "succeeded", result);
+    if (!completed) {
+      return { status: "retrying", intentId: intent.intent_id, errorCode: "WORKFLOW_APPLICATION_DATA_INTENT_LEASE_LOST" };
+    }
+    return { status: "succeeded", intentId: intent.intent_id, result };
   }
 
   private async finish(
