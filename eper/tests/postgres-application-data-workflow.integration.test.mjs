@@ -85,7 +85,8 @@ test("PostgreSQL workflow application-data activity writes once and advances onc
         id: workflowId, name: "Create customer order", status: "ACTIVE",
         activities: [{
           id: "create-order", title: "Create order", type: "TASK",
-          roleId, permission: "workflow:act", nextActivityIds: ["confirm-order"],
+          roleId, permission: "workflow:act", nextActivityIds: ["confirm-order", "manual-review"],
+          routingRuleIds: ["created-record-version-present"],
           fields: [
             { id: "orderId", type: "text", required: true },
             { id: "orderData", type: "json", required: true },
@@ -98,6 +99,14 @@ test("PostgreSQL workflow application-data activity writes once and advances onc
         }, {
           id: "confirm-order", title: "Confirm order", type: "TASK",
           roleId, permission: "workflow:act", nextActivityIds: [], fields: [],
+        }, {
+          id: "manual-review", title: "Manual review", type: "TASK",
+          roleId, permission: "workflow:act", nextActivityIds: [], fields: [],
+        }],
+        rules: [{
+          id: "created-record-version-present", name: "Route after persisted record",
+          priority: 100, targetActivityId: "confirm-order",
+          condition: { kind: "condition", field: "result.version", operator: "gte", value: 1 },
         }],
       };
       await publisher.publish({ tenantId, applicationId, principalId: actorId, correlationId, environment }, definition);
