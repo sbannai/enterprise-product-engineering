@@ -52,3 +52,12 @@ test("successful application-data writes have a separately fenced reconciliation
   assert.match(sql, /intent_status = 'advanced'[\s\S]*reconciliation_status = 'completed'/);
   assert.match(sql, /WHERE intent_status = 'succeeded'[\s\S]*reconciliation_status IN \('pending','processing'\)/);
 });
+
+test("application-data intent authorization metadata is mandatory as a complete pair", async () => {
+  const sql = await readFile(new URL("../packages/workflows/migrations/024_application_data_intent_authorization.sql", import.meta.url), "utf8");
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS actor_role_id varchar\(128\)/);
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS required_permission varchar\(32\)/);
+  assert.match(sql, /actor_role_id IS NULL AND required_permission IS NULL/);
+  assert.match(sql, /actor_role_id IS NOT NULL[\s\S]*required_permission IS NOT NULL/);
+  assert.match(sql, /'workflow:act','workflow:approve'/);
+});
