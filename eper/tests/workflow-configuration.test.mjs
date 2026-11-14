@@ -78,9 +78,17 @@ test("workflow configuration accepts only explicit governed application-data mut
     id: "order-flow", name: "Order flow", status: "DRAFT", activities: [activity],
   }]);
   assert.equal(saved.activities[0].applicationDataBinding.operation, "create");
+  for (const operation of ["get", "query"]) {
+    const [readWorkflow] = service.replaceWorkflows([{
+      id: "order-flow", name: "Order flow", status: "DRAFT",
+      activities: [{ ...activity, applicationDataBinding: { ...activity.applicationDataBinding,
+        operation, ...(operation === "query" ? { recordIdField: undefined } : {}) } }],
+    }]);
+    assert.equal(readWorkflow.activities[0].applicationDataBinding.operation, operation);
+  }
   assert.throws(() => service.replaceWorkflows([{
     id: "order-flow", name: "Order flow", status: "DRAFT",
-    activities: [{ ...activity, applicationDataBinding: { ...activity.applicationDataBinding, operation: "query" } }],
+    activities: [{ ...activity, applicationDataBinding: { ...activity.applicationDataBinding, operation: "upsert" } }],
   }]), /invalid_or_duplicate_workflow_activity/);
   assert.throws(() => service.replaceWorkflows([{
     id: "order-flow", name: "Order flow", status: "DRAFT",
