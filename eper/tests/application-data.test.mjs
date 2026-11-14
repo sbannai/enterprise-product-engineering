@@ -32,9 +32,9 @@ test("application data enforces optimistic concurrency and schema validation on 
 });
 test("workflow binding invokes registered operations without exposing a storage collection", async t => {
   const service=await fixture(t); const activity=new ApplicationDataWorkflowActivity(service, async () => {});
-  const result=await activity.execute(context,{entityType:"Order",operation:"create",recordIdField:"orderId",dataField:"payload"},{orderId:"order-01",payload:{customerId:"c1",total:12,status:"NEW"}});
+  const result=await activity.execute({...context,idempotencyKey:"workflow-create-0001"},{entityType:"Order",operation:"create",recordIdField:"orderId",dataField:"payload"},{orderId:"order-01",payload:{customerId:"c1",total:12,status:"NEW"}});
   assert.equal(result.result.id,"order-01");
-  await assert.rejects(()=>activity.execute(context,{entityType:"Order",operation:"create",recordIdField:"id",dataField:"payload"},{id:"order-02",payload:{bad:true}}),/UNKNOWN_FIELD/);
+  await assert.rejects(()=>activity.execute({...context,idempotencyKey:"workflow-create-0002"},{entityType:"Order",operation:"create",recordIdField:"id",dataField:"payload"},{id:"order-02",payload:{bad:true}}),/UNKNOWN_FIELD/);
 });
 test("model versions cannot be overwritten in place", async t => {
   const service=await fixture(t);
