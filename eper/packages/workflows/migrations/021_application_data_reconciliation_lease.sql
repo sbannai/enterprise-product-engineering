@@ -14,6 +14,11 @@ ALTER TABLE eper_workflow_application_data_intents
   ADD COLUMN IF NOT EXISTS reconciliation_claim_generation bigint NOT NULL DEFAULT 0
     CHECK (reconciliation_claim_generation >= 0);
 
+-- Preserve already reconciled rows when upgrading an existing installation.
+UPDATE eper_workflow_application_data_intents
+   SET reconciliation_status = 'completed'
+ WHERE intent_status = 'advanced';
+
 ALTER TABLE eper_workflow_application_data_intents
   DROP CONSTRAINT IF EXISTS eper_workflow_app_data_reconciliation_lease_check;
 
