@@ -104,7 +104,11 @@ test("PostgreSQL workflow application-data activity writes once and advances onc
       const started = await execution.start({
         tenantId, applicationId, actorId, correlationId, environment,
         workflowId, idempotencyKey: "start-" + suffix,
-        businessReference: "ORDER-" + suffix, data: {},
+        businessReference: "ORDER-" + suffix,
+        data: {
+          orderId: recordId,
+          orderData: { customerId: "customer-" + suffix, total: 42.5 },
+        },
       });
       assert.equal(started.currentActivityId, "create-order");
 
