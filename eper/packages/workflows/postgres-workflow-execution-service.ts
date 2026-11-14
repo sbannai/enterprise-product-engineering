@@ -649,8 +649,8 @@ export class PostgresWorkflowExecutionService {
         const intentFingerprint = digest({
           tenantId: input.tenantId, applicationId: input.applicationId,
           instanceId: input.instanceId, activityExecutionId,
-          actorId: input.actorId, correlationId: input.correlationId,
-          requirementId: dataBinding.requirementId, idempotencyKey: activityIdempotencyKey,
+          actorId: input.actorId, actorRoleId: actorRole, requiredPermission: activityPermission ?? "workflow:act",
+          correlationId: input.correlationId, requirementId: dataBinding.requirementId, idempotencyKey: activityIdempotencyKey,
           entityType: dataBinding.entityType, operation: dataBinding.operation,
           binding, input: payload,
         });
