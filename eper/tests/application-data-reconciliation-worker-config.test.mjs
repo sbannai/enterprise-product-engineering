@@ -42,14 +42,17 @@ test("application data reconciliation worker applies bounded defaults and overri
   assert.equal(config.idlePollMs, 1000);
   assert.equal(config.maxContexts, 1000);
   assert.equal(config.leaseMilliseconds, 60000);
+  assert.equal(config.maxAttempts, 8);
   const custom = validEnv();
   custom.EPER_APPLICATION_DATA_RECONCILIATION_IDLE_POLL_MS = "250";
   custom.EPER_APPLICATION_DATA_RECONCILIATION_MAX_CONTEXTS = "25";
   custom.EPER_APPLICATION_DATA_RECONCILIATION_LEASE_MS = "120000";
+  custom.EPER_APPLICATION_DATA_RECONCILIATION_MAX_ATTEMPTS = "12";
   const changed = readApplicationDataReconciliationWorkerConfig(custom);
   assert.equal(changed.idlePollMs, 250);
   assert.equal(changed.maxContexts, 25);
   assert.equal(changed.leaseMilliseconds, 120000);
+  assert.equal(changed.maxAttempts, 12);
 });
 
 test("application data reconciliation worker rejects unsafe polling bounds", () => {
