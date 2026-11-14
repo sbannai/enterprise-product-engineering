@@ -230,7 +230,7 @@ test("publisher rejects draft content that differs from the locked revision", as
 });
 
 test("publisher accepts JSON workflow fields used by governed application-data activities", async () => {
-  const { calls, pool } = fixture();
+  const { calls, pool } = fixture({ rolePermissions: ["workflow:act"] });
   const jsonFieldDefinition = {
     ...definition,
     id: "order-workflow",
