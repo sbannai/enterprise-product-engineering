@@ -46,13 +46,13 @@ function fixture({ tenantStatus = "active", actorStatus = "active", roleAllowed 
       if (sql.includes("FROM eper_workflow_application_data_intents")) {
         return { rows: outstandingIntent ? [{ intent_id: "22222222-2222-4222-8222-222222222222", intent_status: outstandingIntentStatus }] : [], rowCount: outstandingIntent ? 1 : 0 };
       }
+      if (sql.includes("FROM eper_workflow_instances") && sql.includes("start_idempotency_key")) {
+        return { rows: [], rowCount: 0 };
+      }
       if (sql.includes("SELECT * FROM eper_workflow_instances")) return { rows: [row], rowCount: 1 };
       if (sql.includes("FROM eper_workflow_definition_versions")) return { rows: [{ definition }], rowCount: 1 };
       if (sql.includes("FROM eper_workflow_actor_role_assignment r")) {
         return { rows: roleAllowed ? [{ role_id: "employee" }] : [], rowCount: roleAllowed ? 1 : 0 };
-      }
-      if (sql.includes("FROM eper_workflow_instances") && sql.includes("start_idempotency_key")) {
-        return { rows: [], rowCount: 0 };
       }
       if (sql.includes("FROM eper_tenant_application_assignment")) {
         return { rows: [{ assignment_status: tenantStatus }], rowCount: 1 };
