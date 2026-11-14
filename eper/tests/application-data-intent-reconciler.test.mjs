@@ -34,3 +34,12 @@ test("workflow advancement, outbox, audit and intent advancement share one recon
   assert.match(source, /reconciliation_locked_by = \$4 AND reconciliation_claim_generation = \$5/);
   assert.match(source, /reconciliation_status = 'completed'/);
 });
+
+test("reconciliation failures release the fenced lease with backoff and dead-letter after the configured limit", async () => {
+  const source = await readFile(new URL("../packages/workflows/application-data-intent-reconciler.ts", import.meta.url), "utf8");
+  assert.match(source, /maxAttempts = options\.maxAttempts \?\? 8/);
+  assert.match(source, /releaseFailedClaim\(currentIntentForRelease, error\)/);
+  assert.match(source, /reconciliation_status = CASE WHEN reconciliation_attempts >= \$6[\s\S]*THEN 'dead_letter' ELSE 'pending'/);
+  assert.match(source, /reconciliation_available_at = CASE WHEN reconciliation_attempts >= \$6[\s\S]*power\(2, LEAST\(reconciliation_attempts, 10\)\)/);
+  assert.match(source, /reconciliation_claim_generation = \$5/);
+});
