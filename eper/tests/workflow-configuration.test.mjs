@@ -65,7 +65,10 @@ test("workflow configuration accepts only explicit governed application-data mut
   service.replaceRoles([{ id: "operator", name: "Operator", members: ["operator-1"], permissions: ["workflow:act"] }]);
   const activity = {
     id: "save-order", title: "Save order", type: "TASK", roleId: "operator",
-    permission: "workflow:act", nextActivityIds: [], fields: [],
+    permission: "workflow:act", nextActivityIds: [], fields: [
+      { id: "orderId", type: "text", required: true },
+      { id: "order", type: "json", required: true },
+    ],
     applicationDataBinding: {
       requirementId: "REQ-001", entityType: "Order", operation: "create",
       recordIdField: "orderId", dataField: "order",
