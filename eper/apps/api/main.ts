@@ -93,13 +93,13 @@ if (providerStorageRuntimeConfiguration.enabled) {
 if (customerIdentityPersistenceMode !== "disabled" && customerIdentityPersistenceMode !== "postgres") {
   throw new Error("EPER_CUSTOMER_IDENTITY_PERSISTENCE_UNSUPPORTED");
 }
+const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || applicationDataModelAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled || providerCatalogueAdminEnabled || providerConnectionsEnabled || customerIdentityPersistenceMode === "postgres" || customerAssetPersistenceApiEnabled || peripheralApiEnabled || remoteDesktopApiEnabled;
+const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
 if (applicationDataModelAdminEnabled && (!paymentPool || process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
     process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" || process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres" ||
     customerIdentityPersistenceMode !== "postgres" || process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres")) {
   throw new Error("APPLICATION_DATA_MODEL_ADMIN_API_REQUIRES_POSTGRES_IDENTITY_ASSIGNMENTS_ADMIN_CONFIG_AND_DURABLE_AUDIT");
 }
-const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled || providerCatalogueAdminEnabled || providerConnectionsEnabled || customerIdentityPersistenceMode === "postgres" || customerAssetPersistenceApiEnabled || peripheralApiEnabled || remoteDesktopApiEnabled;
-const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
 
 // Privileged control-plane stores use independent PostgreSQL credentials and pools.
 // Configure these URLs with separate least-privilege roles and explicit table grants;
