@@ -81,7 +81,19 @@ function validateDefinition(value: WorkflowDefinition): void {
         !Array.isArray(activity.nextActivityIds) || activity.nextActivityIds.length > 200 ||
         new Set(activity.nextActivityIds).size !== activity.nextActivityIds.length ||
         activity.nextActivityIds.some(id => typeof id !== "string" || !/^[a-zA-Z0-9._-]{1,128}$/.test(id)) ||
-        !Array.isArray(activity.fields) || activity.fields.length > 100) {
+        !Array.isArray(activity.fields) || activity.fields.length > 100 ||
+        (activity.applicationDataBinding !== undefined && (
+          !activity.applicationDataBinding ||
+          typeof activity.applicationDataBinding.requirementId !== "string" ||
+          !/^[a-zA-Z0-9._-]{1,128}$/.test(activity.applicationDataBinding.requirementId) ||
+          typeof activity.applicationDataBinding.entityType !== "string" ||
+          !/^[a-zA-Z][a-zA-Z0-9._-]{1,128}$/.test(activity.applicationDataBinding.entityType) ||
+          !["create", "get", "update", "delete", "query"].includes(activity.applicationDataBinding.operation) ||
+          (activity.applicationDataBinding.recordIdField !== undefined && !/^[a-zA-Z0-9._-]{1,128}$/.test(activity.applicationDataBinding.recordIdField)) ||
+          (activity.applicationDataBinding.expectedVersionField !== undefined && !/^[a-zA-Z0-9._-]{1,128}$/.test(activity.applicationDataBinding.expectedVersionField)) ||
+          (activity.applicationDataBinding.dataField !== undefined && !/^[a-zA-Z0-9._-]{1,128}$/.test(activity.applicationDataBinding.dataField)) ||
+          (activity.applicationDataBinding.resultKey !== undefined && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(activity.applicationDataBinding.resultKey))
+        ))) {
       throw new WorkflowDefinitionPublishError("WORKFLOW_PUBLISH_INVALID_ACTIVITY", 400);
     }
     const fieldIds = new Set<string>();
