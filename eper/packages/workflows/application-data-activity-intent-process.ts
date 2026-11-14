@@ -27,17 +27,20 @@ function waitForNextPass(signal: AbortSignal, milliseconds: number): Promise<voi
 /** Long-running host loop for durable application-data activity intents. */
 export class ApplicationDataActivityIntentProcess {
   private readonly idlePollMs: number;
-  private readonly maxContextsPerPass: number;\n  private readonly maxExecutionsPerContext: number;
+  private readonly maxContextsPerPass: number;
+  private readonly maxExecutionsPerContext: number;
   constructor(
     private readonly worker: ApplicationDataActivityIntentWorker,
     private readonly contexts: WorkflowOutboxContextSource,
     private readonly options: ApplicationDataActivityIntentProcessOptions = {},
   ) {
     this.idlePollMs = options.idlePollMs ?? 1_000;
-    this.maxContextsPerPass = options.maxContextsPerPass ?? 1_000;\n    this.maxExecutionsPerContext = options.maxExecutionsPerContext ?? 25;
+    this.maxContextsPerPass = options.maxContextsPerPass ?? 1_000;
+    this.maxExecutionsPerContext = options.maxExecutionsPerContext ?? 25;
     if (!Number.isSafeInteger(this.idlePollMs) || this.idlePollMs < 50 || this.idlePollMs > 60_000 ||
         !Number.isSafeInteger(this.maxContextsPerPass) || this.maxContextsPerPass < 1 ||
-        this.maxContextsPerPass > 10_000 || !Number.isSafeInteger(this.maxExecutionsPerContext) ||\n        this.maxExecutionsPerContext < 1 || this.maxExecutionsPerContext > 250) {
+        this.maxContextsPerPass > 10_000 || !Number.isSafeInteger(this.maxExecutionsPerContext) ||
+        this.maxExecutionsPerContext < 1 || this.maxExecutionsPerContext > 250) {
       throw new Error("WORKFLOW_APPLICATION_DATA_INTENT_PROCESS_OPTIONS_INVALID");
     }
   }
