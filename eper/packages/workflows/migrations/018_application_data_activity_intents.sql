@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS eper_workflow_application_data_intents (
   binding jsonb NOT NULL CHECK (jsonb_typeof(binding) = 'object'),
   input jsonb NOT NULL CHECK (jsonb_typeof(input) = 'object'),
   intent_status varchar(16) NOT NULL DEFAULT 'pending'
-    CHECK (intent_status IN ('pending','processing','succeeded','failed','dead_letter')),
+    CHECK (intent_status IN ('pending','processing','succeeded','failed','dead_letter','advanced')),
   attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
   available_at timestamptz NOT NULL DEFAULT now(),
   locked_at timestamptz,
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS eper_workflow_application_data_intents (
     OR (intent_status <> 'processing' AND locked_at IS NULL AND locked_by IS NULL)
   ),
   CHECK (
-    (intent_status IN ('succeeded','failed','dead_letter') AND completed_at IS NOT NULL)
+    (intent_status IN ('succeeded','failed','dead_letter','advanced') AND completed_at IS NOT NULL)
     OR (intent_status IN ('pending','processing') AND completed_at IS NULL)
   ),
   CHECK ((intent_status = 'succeeded' AND result IS NOT NULL) OR intent_status <> 'succeeded')
