@@ -6,7 +6,7 @@ import type { ApplicationDataContext } from "../../../packages/application-data/
 
 /** Built-in PostgreSQL activity factory. It revalidates the exact role grant before each mutation. */
 export function createApplicationDataWorkflowActivity(input:{pool:Pool;env:NodeJS.ProcessEnv}):ApplicationDataWorkflowActivity {
- const service=new ApplicationDataService(new PostgresApplicationDataAdapter(input.pool));
+ const service=new ApplicationDataService(new PostgresApplicationDataAdapter(input.pool, true));
  return new ApplicationDataWorkflowActivity(service,async(context:ApplicationDataContext,_entityType, _operation)=>{
   if(!context.workflowRoleId||!context.workflowPermission) throw new Error("APPLICATION_DATA_WORKFLOW_AUTHORIZATION_CONTEXT_MISSING");
   const client=await input.pool.connect();
