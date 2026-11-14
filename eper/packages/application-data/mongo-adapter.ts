@@ -14,7 +14,7 @@ interface MongoCollectionLike<T extends Record<string, unknown>> {
   deleteOne(filter: Record<string, unknown>, options?: Record<string, unknown>): Promise<MongoResult>;
   createIndex?(keys: Record<string, 1 | -1>, options?: Record<string, unknown>): Promise<string>;
 }
-interface MongoSessionLike { withTransaction<T>(work: () => Promise<T>): Promise<T>; endSession(): Promise<void>; }
+export interface MongoSessionLike { withTransaction<T>(work: () => Promise<T>): Promise<T>; endSession(): Promise<void>; }
 interface MongoDatabaseLike {
   collection<T extends Record<string, unknown>>(name: string): MongoCollectionLike<T>;
   client?: { startSession(): MongoSessionLike };
