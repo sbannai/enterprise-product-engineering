@@ -46,7 +46,8 @@ function canonical(value: unknown): string {
 /** Shared fingerprint contract for workflow intent creation and execution. */
 export function applicationDataIntentFingerprint(intent: {
   tenantId: string; applicationId: string; instanceId: string; activityExecutionId: string;
-  actorId: string; actorRoleId: string; requiredPermission: "workflow:act" | "workflow:approve";\n  correlationId: string; requirementId: string; idempotencyKey: string;
+  actorId: string; actorRoleId: string; requiredPermission: "workflow:act" | "workflow:approve";
+  correlationId: string; requirementId: string; idempotencyKey: string;
   entityType: string; operation: "create" | "update" | "delete";
   binding: ApplicationDataWorkflowBinding; input: Record<string, unknown>;
 }): string {
@@ -149,7 +150,8 @@ export class ApplicationDataActivityIntentWorker {
         applicationId: intent.application_id,
         actorId: intent.actor_id,
         workflowRoleId: intent.actor_role_id ?? undefined,
-        workflowPermission: intent.required_permission ?? undefined,\n        correlationId: intent.correlation_id,
+        workflowPermission: intent.required_permission ?? undefined,
+        correlationId: intent.correlation_id,
         requirementId: intent.requirement_id,
         idempotencyKey: intent.idempotency_key,
       };
