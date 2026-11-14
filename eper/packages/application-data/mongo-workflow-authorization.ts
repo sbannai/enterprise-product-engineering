@@ -1,5 +1,5 @@
 import type { ApplicationDataContext } from "./contracts.js";
-import type { MongoSessionLike, MongoWorkflowAuthorizer } from "./mongo-adapter.js";
+import { MongoApplicationDataAdapter, type MongoSessionLike, type MongoWorkflowAuthorizer } from "./mongo-adapter.js";
 
 interface MongoGrantCollection {
   findOne(filter: Record<string, unknown>, options?: Record<string, unknown>): Promise<Record<string, unknown> | null>;
@@ -53,4 +53,12 @@ export async function ensureMongoWorkflowAuthorizationIndexes(database: unknown)
     { tenantId: 1, applicationId: 1, actorId: 1, roleId: 1, status: 1 },
     { name: "eper_workflow_authorization_grant_scope" },
   );
+}
+
+/** Build the MongoDB provider with grant authorization and required indexes configured before use. */
+export async function createMongoApplicationDataAdapter(database: unknown): Promise<MongoApplicationDataAdapter> {
+  const adapter = new MongoApplicationDataAdapter(database, createMongoWorkflowAuthorizer(database));
+  await adapter.ensureIndexes();
+  await ensureMongoWorkflowAuthorizationIndexes(database);
+  return adapter;
 }
