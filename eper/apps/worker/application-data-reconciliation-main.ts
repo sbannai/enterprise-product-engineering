@@ -66,12 +66,14 @@ async function main(): Promise<void> {
     process.once(signal, handler);
   }
   try {
-    const identity = await pool.query<{ role_name: string; is_superuser: boolean; bypasses_rls: boolean }>(`
-      SELECT current_user::text AS role_name, r.rolsuper AS is_superuser, r.rolbypassrls AS bypasses_rls
+    const identity = await pool.query<{ role_name: string; is_superuser: boolean; bypasses_rls: boolean; has_reconcile_access: boolean }>(`
+      SELECT current_user::text AS role_name, r.rolsuper AS is_superuser, r.rolbypassrls AS bypasses_rls,
+             pg_has_role(current_user, 'eper_application_data_reconcile_access', 'USAGE') AS has_reconcile_access
         FROM pg_roles r WHERE r.rolname = current_user
     `);
     const role = identity.rows[0];
-    if (!role || role.role_name !== config.expectedDatabaseRole || role.is_superuser || role.bypasses_rls) {
+    if (!role || role.role_name !== config.expectedDatabaseRole || role.is_superuser || role.bypasses_rls ||
+        !role.has_reconcile_access) {
       throw new Error("WORKFLOW_APPLICATION_DATA_RECONCILIATION_DATABASE_ROLE_INVALID");
     }
     const auditPool = createAuditSqlPoolAdapter(pool);
