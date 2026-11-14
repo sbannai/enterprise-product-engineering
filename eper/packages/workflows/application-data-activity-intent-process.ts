@@ -5,7 +5,8 @@ import type { WorkflowOutboxContextSource } from "./workflow-outbox-process.js";
 export interface ApplicationDataActivityIntentProcessOptions {
   idlePollMs?: number;
   maxContextsPerPass?: number;
-  onPass?: (result: { contextsVisited: number; succeeded: number; idle: number; retrying: number; deadLettered: number; errors: number }) => void;
+  maxExecutionsPerContext?: number;
+  onPass?: (result: { contextsVisited: number; executions: number; succeeded: number; idle: number; retrying: number; deadLettered: number; errors: number }) => void;
   onError?: (error: unknown, context?: WorkflowOutboxContext) => void;
 }
 function waitForNextPass(signal: AbortSignal, milliseconds: number): Promise<void> {
@@ -26,17 +27,17 @@ function waitForNextPass(signal: AbortSignal, milliseconds: number): Promise<voi
 /** Long-running host loop for durable application-data activity intents. */
 export class ApplicationDataActivityIntentProcess {
   private readonly idlePollMs: number;
-  private readonly maxContextsPerPass: number;
+  private readonly maxContextsPerPass: number;\n  private readonly maxExecutionsPerContext: number;
   constructor(
     private readonly worker: ApplicationDataActivityIntentWorker,
     private readonly contexts: WorkflowOutboxContextSource,
     private readonly options: ApplicationDataActivityIntentProcessOptions = {},
   ) {
     this.idlePollMs = options.idlePollMs ?? 1_000;
-    this.maxContextsPerPass = options.maxContextsPerPass ?? 1_000;
+    this.maxContextsPerPass = options.maxContextsPerPass ?? 1_000;\n    this.maxExecutionsPerContext = options.maxExecutionsPerContext ?? 25;
     if (!Number.isSafeInteger(this.idlePollMs) || this.idlePollMs < 50 || this.idlePollMs > 60_000 ||
         !Number.isSafeInteger(this.maxContextsPerPass) || this.maxContextsPerPass < 1 ||
-        this.maxContextsPerPass > 10_000) {
+        this.maxContextsPerPass > 10_000 || !Number.isSafeInteger(this.maxExecutionsPerContext) ||\n        this.maxExecutionsPerContext < 1 || this.maxExecutionsPerContext > 250) {
       throw new Error("WORKFLOW_APPLICATION_DATA_INTENT_PROCESS_OPTIONS_INVALID");
     }
   }
@@ -46,7 +47,7 @@ export class ApplicationDataActivityIntentProcess {
       throw new Error("WORKFLOW_APPLICATION_DATA_INTENT_ABORT_SIGNAL_REQUIRED");
     }
     while (!signal.aborted) {
-      const total = { contextsVisited: 0, succeeded: 0, idle: 0, retrying: 0, deadLettered: 0, errors: 0 };
+      const total = { contextsVisited: 0, executions: 0, succeeded: 0, idle: 0, retrying: 0, deadLettered: 0, errors: 0 };
       try {
         const listed = await this.contexts.listActiveContexts(signal);
         if (!Array.isArray(listed) || listed.length > this.maxContextsPerPass) {
@@ -63,15 +64,24 @@ export class ApplicationDataActivityIntentProcess {
         for (const context of unique.values()) {
           if (signal.aborted) break;
           total.contextsVisited += 1;
-          try {
-            const result = await this.worker.runOnce(context.tenantId, context.applicationId);
-            if (result.status === "succeeded") total.succeeded += 1;
-            else if (result.status === "retrying") total.retrying += 1;
-            else if (result.status === "dead_letter") total.deadLettered += 1;
-            else total.idle += 1;
-          } catch (error) {
-            total.errors += 1;
-            try { this.options.onError?.(error, context); } catch { /* telemetry must not stop execution */ }
+          let foundWork = false;
+          for (let attempt = 0; attempt < this.maxExecutionsPerContext && !signal.aborted; attempt += 1) {
+            try {
+              const result = await this.worker.runOnce(context.tenantId, context.applicationId);
+              if (result.status === "idle") {
+                if (!foundWork) total.idle += 1;
+                break;
+              }
+              foundWork = true;
+              total.executions += 1;
+              if (result.status === "succeeded") total.succeeded += 1;
+              else if (result.status === "retrying") total.retrying += 1;
+              else if (result.status === "dead_letter") total.deadLettered += 1;
+            } catch (error) {
+              total.errors += 1;
+              try { this.options.onError?.(error, context); } catch { /* telemetry must not stop execution */ }
+              break;
+            }
           }
         }
       } catch (error) {
