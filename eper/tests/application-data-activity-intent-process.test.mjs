@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";\nimport { ApplicationDataActivityIntentProcess } from "../dist/packages/workflows/application-data-activity-intent-process.js";
 
 const source = await readFile(new URL("../packages/workflows/application-data-activity-intent-process.ts", import.meta.url), "utf8");
 
@@ -65,4 +65,36 @@ test("activity intent process drains bounded batches instead of executing only o
   assert.match(source, /attempt < this\.maxExecutionsPerContext/);
   assert.match(source, /total\.executions \+= 1/);
   assert.match(source, /if \(result\.status === "idle"\)/);
+});
+
+test("activity intent process deduplicates scopes and drains each scope until idle", async () => {
+  const controller = new AbortController();
+  const calls = [];
+  const passes = [];
+  const worker = { async runOnce(tenantId, applicationId) {
+    calls.push(tenantId + "/" + applicationId);
+    if (tenantId === "tenant-a" && calls.filter(value => value === "tenant-a/app-a").length === 1) {
+      return { status: "succeeded", intentId: "intent-1", result: {} };
+    }
+    return { status: "idle" };
+  }};
+  const contexts = { async listActiveContexts() {
+    return [
+      { tenantId: "tenant-a", applicationId: "app-a" },
+      { tenantId: "tenant-a", applicationId: "app-a" },
+      { tenantId: "tenant-b", applicationId: "app-b" },
+    ];
+  }};
+  const process = new ApplicationDataActivityIntentProcess(worker, contexts, {
+    idlePollMs: 50,
+    maxExecutionsPerContext: 3,
+    onPass(result) { passes.push(result); controller.abort(); },
+  });
+  await process.run(controller.signal);
+  assert.deepEqual(calls, ["tenant-a/app-a", "tenant-a/app-a", "tenant-b/app-b"]);
+  assert.equal(passes.length, 1);
+  assert.equal(passes[0].contextsVisited, 2);
+  assert.equal(passes[0].executions, 1);
+  assert.equal(passes[0].succeeded, 1);
+  assert.equal(passes[0].idle, 1);
 });
