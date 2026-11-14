@@ -52,7 +52,8 @@ function validateModelShape(entityType: string, fields: ApplicationDataField[], 
   const relationFields = new Set<string>();
   for (const relation of relationships) {
     const field = fields.find(item => item.id === relation.field);
-    if (!field || typeof relation.field !== "string" || typeof relation.targetEntity !== "string" ||\n        relationFields.has(relation.field) || !ID.test(relation.targetEntity) ||
+    if (!field || typeof relation.field !== "string" || typeof relation.targetEntity !== "string" ||
+        relationFields.has(relation.field) || !ID.test(relation.targetEntity) ||
         !["one", "many"].includes(relation.cardinality) ||
         (relation.cardinality === "one" && field.type !== "string") ||
         (relation.cardinality === "many" && field.type !== "array")) {
