@@ -43,7 +43,9 @@ test("intent worker executes its injected activity with trusted context and reco
   const result = await worker.runOnce("tenant-a", "app-a");
   assert.equal(result.status, "succeeded");
   assert.equal(execution.context.idempotencyKey, row.idempotency_key);
-  assert.equal(execution.context.actorId, "actor-a");\n  assert.equal(execution.context.workflowRoleId, "operator");\n  assert.equal(execution.context.workflowPermission, "workflow:act");
+  assert.equal(execution.context.actorId, "actor-a");
+  assert.equal(execution.context.workflowRoleId, "operator");
+  assert.equal(execution.context.workflowPermission, "workflow:act");
   assert.equal(execution.binding.entityType, "Order");
   assert.equal(execution.input.id, "order-1");
   assert.ok(statements.some(item => item.sql.includes("FOR UPDATE SKIP LOCKED")));
