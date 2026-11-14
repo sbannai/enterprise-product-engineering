@@ -34,7 +34,13 @@ const now = "2026-10-31T12:05:00.000Z";
 function fixture({ tenantStatus = "active", actorStatus = "active", roleAllowed = true, outstandingIntent = false, outstandingIntentStatus = "pending", instanceStatus = "running", applicationDataBinding = null } = {}) {
   const calls = [];
   const configuredDefinition = structuredClone(definition);
-  if (applicationDataBinding) configuredDefinition.activities[0].applicationDataBinding = applicationDataBinding;
+  if (applicationDataBinding) {
+    configuredDefinition.activities[0].applicationDataBinding = applicationDataBinding;
+    configuredDefinition.activities[0].fields = [
+      { id: "orderId", type: "text", required: true },
+      { id: "order", type: "json", required: true },
+    ];
+  }
   const configuredDigest = createHash("sha256").update(canonical(configuredDefinition)).digest("hex");
   const row = {
     tenant_id: context.tenantId, application_id: context.applicationId,
