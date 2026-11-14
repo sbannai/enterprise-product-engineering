@@ -55,6 +55,8 @@ test("model draft creation requires an active application-scoped workflow admin 
  assert.ok(insert > auth);
  assert.ok(audit > insert);
  assert.ok(outbox > audit);
+ const auditInsert = statements.find(item => item.sql.startsWith("INSERT INTO eper_audit_events"));
+ assert.equal(JSON.parse(auditInsert.values[25]).requirementId, "REQ-46301");
  assert.equal(statements.at(-2).sql, "COMMIT");
 });
 
