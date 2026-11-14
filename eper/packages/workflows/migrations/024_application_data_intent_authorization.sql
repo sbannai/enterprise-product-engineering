@@ -9,6 +9,6 @@ ALTER TABLE eper_workflow_application_data_intents
   CHECK (
     (actor_role_id IS NULL AND required_permission IS NULL)
     OR (actor_role_id IS NOT NULL AND length(btrim(actor_role_id)) BETWEEN 1 AND 128
-        AND required_permission IN ('workflow:act','workflow:approve'))
+        AND required_permission IS NOT NULL\n        AND required_permission IN ('workflow:act','workflow:approve'))
   );
 COMMIT;
