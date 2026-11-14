@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { AuditSqlClient, AuditSqlPool } from "../audit/audit-event-store.js";
 import type { ApplicationDataContext } from "../application-data/contracts.js";
 import type { ApplicationDataWorkflowActivity, ApplicationDataWorkflowBinding } from "../application-data/workflow-binding.js";
@@ -24,12 +24,32 @@ interface IntentRow {
   input: Record<string, unknown> | string;
   claim_generation: number | string;
   attempts: number | string;
+  request_fingerprint: string;
 }
 export type ApplicationDataIntentWorkerResult =
   | { status: "idle" }
   | { status: "succeeded"; intentId: string; result: Record<string, unknown> }
   | { status: "retrying"; intentId: string; errorCode: string }
   | { status: "dead_letter"; intentId: string; errorCode: string };
+
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
+  if (value && typeof value === "object") return "{" + Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, item]) => JSON.stringify(key) + ":" + canonical(item)).join(",") + "}";
+  return JSON.stringify(value) ?? "null";
+}
+
+/** Shared fingerprint contract for workflow intent creation and execution. */
+export function applicationDataIntentFingerprint(intent: {
+  tenantId: string; applicationId: string; instanceId: string; activityExecutionId: string;
+  actorId: string; correlationId: string; requirementId: string; idempotencyKey: string;
+  entityType: string; operation: "create" | "update" | "delete";
+  binding: ApplicationDataWorkflowBinding; input: Record<string, unknown>;
+}): string {
+  return createHash("sha256").update(canonical(intent)).digest("hex");
+}
 
 function object(value: Record<string, unknown> | string): Record<string, unknown> {
   const parsed = typeof value === "string" ? JSON.parse(value) : value;
@@ -110,6 +130,17 @@ export class ApplicationDataActivityIntentWorker {
       if (!binding || binding.entityType !== intent.entity_type || binding.operation !== intent.operation) {
         throw new Error("WORKFLOW_APPLICATION_DATA_INTENT_BINDING_MISMATCH");
       }
+      const input = object(intent.input);
+      const fingerprint = applicationDataIntentFingerprint({
+        tenantId: intent.tenant_id, applicationId: intent.application_id,
+        instanceId: intent.instance_id, activityExecutionId: intent.activity_execution_id,
+        actorId: intent.actor_id, correlationId: intent.correlation_id,
+        requirementId: intent.requirement_id, idempotencyKey: intent.idempotency_key,
+        entityType: intent.entity_type, operation: intent.operation, binding, input,
+      });
+      if (fingerprint !== intent.request_fingerprint.trim()) {
+        throw new Error("WORKFLOW_APPLICATION_DATA_INTENT_FINGERPRINT_MISMATCH");
+      }
       const context: ApplicationDataContext = {
         tenantId: intent.tenant_id,
         applicationId: intent.application_id,
@@ -118,7 +149,7 @@ export class ApplicationDataActivityIntentWorker {
         requirementId: intent.requirement_id,
         idempotencyKey: intent.idempotency_key,
       };
-      result = await this.activity.execute(context, binding, object(intent.input));
+      result = await this.activity.execute(context, binding, input);
     } catch (error) {
       const errorCode = (error instanceof Error ? error.message : "WORKFLOW_APPLICATION_DATA_INTENT_FAILED").slice(0, 2000);
       const deadLetter = Number(intent.attempts ?? 1) >= this.maxAttempts;
