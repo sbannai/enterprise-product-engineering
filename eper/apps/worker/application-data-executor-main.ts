@@ -79,13 +79,13 @@ async function main():Promise<void>{
   const worker=new ApplicationDataActivityIntentWorker(auditPool,activity,{
    workerId:config.workerId,leaseMilliseconds:config.leaseMilliseconds,maxAttempts:config.maxAttempts,
   });
-  const process=new ApplicationDataActivityIntentProcess(worker,contexts,{
+  const executorProcess=new ApplicationDataActivityIntentProcess(worker,contexts,{
    idlePollMs:config.idlePollMs,maxContextsPerPass:config.maxContexts,
    onPass(result){console.log(JSON.stringify({event:"application_data_executor_pass",workerId:config.workerId,...result}));},
    onError(error,context){console.error(JSON.stringify({event:"application_data_executor_error",workerId:config.workerId,code:safeErrorCode(error),tenantId:context?.tenantId,applicationId:context?.applicationId}));},
   });
   console.log(JSON.stringify({event:"application_data_executor_worker_started",workerId:config.workerId,databaseRole:config.expectedDatabaseRole,maxContexts:config.maxContexts,idlePollMs:config.idlePollMs}));
-  await process.run(controller.signal);
+  await executorProcess.run(controller.signal);
  }finally{
   for(const [signal,handler] of handlers)process.removeListener(signal,handler);
   await pool.end();
