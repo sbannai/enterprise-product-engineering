@@ -14,9 +14,9 @@ test("dev:verify applies and repeats all seven PostgreSQL migration groups", () 
   assert.deepEqual(configured, [
     "migrate:payments",
     "migrate:audit",
+    "migrate:capabilities",
     "migrate:workflows",
     "migrate:campaign-scheduler",
-    "migrate:capabilities",
     "migrate:ticketing",
     "migrate:identity",
   ]);

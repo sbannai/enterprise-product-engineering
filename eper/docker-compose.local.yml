@@ -17,5 +17,40 @@ services:
       timeout: 5s
       retries: 20
 
+  application-data-executor:
+    profiles: ["application-data"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "dist/apps/worker/application-data-executor-main.js"]
+    restart: unless-stopped
+    environment:
+      EPER_APPLICATION_DATA_EXECUTOR_WORKER_ENABLED: "true"
+      EPER_APPLICATION_DATA_EXECUTOR_DATABASE_URL: ${EPER_APPLICATION_DATA_EXECUTOR_DATABASE_URL:-}
+      EPER_APPLICATION_DATA_EXECUTOR_EXPECTED_DATABASE_ROLE: ${EPER_APPLICATION_DATA_EXECUTOR_EXPECTED_DATABASE_ROLE:-}
+      EPER_APPLICATION_DATA_EXECUTOR_WORKER_ID: ${EPER_APPLICATION_DATA_EXECUTOR_WORKER_ID:-eper-local-executor-01}
+      EPER_APPLICATION_DATA_ACTIVITY_MODULE: "./dist/apps/worker/application-data-activities/postgres.js"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  application-data-reconciliation:
+    profiles: ["application-data"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "dist/apps/worker/application-data-reconciliation-main.js"]
+    restart: unless-stopped
+    environment:
+      EPER_APPLICATION_DATA_RECONCILIATION_WORKER_ENABLED: "true"
+      EPER_AUDIT_PERSISTENCE: "postgres"
+      EPER_APPLICATION_DATA_RECONCILIATION_DATABASE_URL: ${EPER_APPLICATION_DATA_RECONCILIATION_DATABASE_URL:-}
+      EPER_APPLICATION_DATA_RECONCILIATION_EXPECTED_DATABASE_ROLE: ${EPER_APPLICATION_DATA_RECONCILIATION_EXPECTED_DATABASE_ROLE:-}
+      EPER_APPLICATION_DATA_RECONCILIATION_WORKER_ID: ${EPER_APPLICATION_DATA_RECONCILIATION_WORKER_ID:-eper-local-reconcile-01}
+      EPER_ENVIRONMENT: "sandbox"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   eper-postgres-data:

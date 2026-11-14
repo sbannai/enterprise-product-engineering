@@ -13,6 +13,23 @@ if (!connectionString.trim()) {
   console.error("EPER_WORKFLOW_DATABASE_URL_REQUIRED");
   process.exitCode = 1;
 } else {
+  // Application-data record mutations append to audit_evidence and transactional_outbox.
+  // Install their capability-owned schema before worker privilege grants reference it.
+  await runMigrations(connectionString, {
+    directory: join(here, "..", "packages", "capabilities", "migrations"),
+    lockName: "eper:capability-schema-migrations",
+    ledgerTable: "eper_capability_schema_migrations",
+    applicationName: "eper-capability-migrations",
+  });
+  // Workflow migration 023 grants the intent executor access to application-data
+  // tables. Apply that schema first so a fresh database never reaches the grants
+  // migration with missing relations.
+  await runMigrations(connectionString, {
+    directory: join(here, "..", "packages", "application-data", "migrations"),
+    lockName: "eper:application-data-schema-migrations",
+    ledgerTable: "eper_application_data_schema_migrations",
+    applicationName: "eper-application-data-migrations",
+  });
   await runMigrations(connectionString, {
     directory: join(here, "..", "packages", "workflows", "migrations"),
     lockName: "eper:workflow-schema-migrations",

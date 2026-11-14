@@ -8,7 +8,7 @@ import {
 import { evaluateWorkflowRoutingRules, type WorkflowActivity, type WorkflowDefinition, type WorkflowField } from "./workflow-configuration.js";
 
 export type WorkflowTransitionAction = "submit" | "approve" | "reject" | "cancel";
-export type WorkflowInstanceStatus = "running" | "completed" | "rejected" | "cancelled" | "failed";
+export type WorkflowInstanceStatus = "running" | "waiting_for_data" | "completed" | "rejected" | "cancelled" | "failed";
 
 export interface WorkflowExecutionContext {
   tenantId: string;
@@ -51,6 +51,7 @@ export interface WorkflowInstanceRecord {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  pendingActivityExecutionId: string | null;
 }
 
 export class WorkflowExecutionError extends Error {
@@ -66,6 +67,7 @@ type InstanceRow = {
   current_activity_id: string | null; business_reference: string | null; data: Record<string, unknown> | string;
   version: number | string; created_by: string; created_at: string | Date;
   updated_at: string | Date; completed_at: string | Date | null;
+  pending_activity_execution_id?: string | null;
   start_request_fingerprint?: string | null;
 };
 type DefinitionVersionRow = {
@@ -108,6 +110,7 @@ function mapInstance(row: InstanceRow): WorkflowInstanceRecord {
     data: parseObject(row.data), version: Number(row.version), createdBy: row.created_by,
     createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString(),
     completedAt: row.completed_at ? new Date(row.completed_at).toISOString() : null,
+    pendingActivityExecutionId: row.pending_activity_execution_id ?? null,
   };
 }
 function validateId(value: string, name: string): void {
@@ -157,7 +160,9 @@ function validateActivityPayload(fields: WorkflowField[], payload: Record<string
       field.type === "number" && (typeof value !== "number" || !Number.isFinite(value)) ||
       field.type === "date" && (typeof value !== "string" || !Number.isFinite(Date.parse(value))) ||
       field.type === "checkbox" && typeof value !== "boolean" ||
-      field.type === "select" && (typeof value !== "string" || !field.options?.includes(value));
+      field.type === "select" && (typeof value !== "string" || !field.options?.includes(value)) ||
+      field.type === "json" && (!value || typeof value !== "object" || Array.isArray(value) ||
+        Buffer.byteLength(JSON.stringify(value)) > 65536);
     if (invalid) throw new WorkflowExecutionError("WORKFLOW_EXECUTION_FIELD_TYPE_INVALID:" + field.id, 422);
   }
 }
@@ -344,7 +349,8 @@ export class PostgresWorkflowExecutionService {
                 'eper_workflow_actor_role_assignment',
                 'eper_workflow_role_definition',
                 'eper_workflow_outbox_events',
-                'eper_workflow_outbox_delivery'
+                'eper_workflow_outbox_delivery',
+                'eper_workflow_application_data_intents'
               ]) AS required(table_name)
               JOIN pg_class c ON c.oid = to_regclass('public.' || required.table_name)
              WHERE c.relrowsecurity AND c.relforcerowsecurity
@@ -363,7 +369,7 @@ export class PostgresWorkflowExecutionService {
            ) AS start_key_present`,
       );
       const row = result.rows[0];
-      if (Number(row?.ready_tables) !== 9 || row?.start_key_present !== true) {
+      if (Number(row?.ready_tables) !== 10 || row?.start_key_present !== true) {
         throw new Error("EPER_WORKFLOW_EXECUTION_SCHEMA_NOT_READY");
       }
     } catch (error) {
@@ -552,9 +558,29 @@ export class PostgresWorkflowExecutionService {
       );
       const instance = selected.rows[0];
       if (!instance) throw new WorkflowExecutionError("WORKFLOW_EXECUTION_INSTANCE_NOT_FOUND", 404);
+      if (instance.status === "waiting_for_data") {
+        throw new WorkflowExecutionError("WORKFLOW_EXECUTION_APPLICATION_DATA_PENDING", 409);
+      }
       if (instance.status !== "running") throw new WorkflowExecutionError("WORKFLOW_EXECUTION_INSTANCE_TERMINAL", 409);
       if (Number(instance.version) !== input.expectedVersion) {
         throw new WorkflowExecutionError("WORKFLOW_EXECUTION_VERSION_CONFLICT", 409);
+      }
+
+      // Fail closed while an application-data intent has not been reconciled with
+      // the workflow state machine. A successful data mutation is not itself a
+      // workflow transition; the future completion handshake must mark it advanced.
+      const outstandingIntent = await client.query<{ intent_id: string; intent_status: string }>(
+        `SELECT intent_id, intent_status
+           FROM eper_workflow_application_data_intents
+          WHERE tenant_id = $1 AND application_id = $2 AND instance_id = $3
+            AND intent_status <> 'advanced'
+          ORDER BY created_at
+          LIMIT 1
+          FOR SHARE`,
+        [input.tenantId, input.applicationId, input.instanceId],
+      );
+      if (outstandingIntent.rows[0]) {
+        throw new WorkflowExecutionError("WORKFLOW_EXECUTION_APPLICATION_DATA_PENDING", 409);
       }
 
       const definitionResult = await client.query<{ definition: WorkflowDefinition | string }>(
@@ -574,6 +600,7 @@ export class PostgresWorkflowExecutionService {
       if (!current) throw new WorkflowExecutionError("WORKFLOW_EXECUTION_CURRENT_ACTIVITY_NOT_FOUND", 500);
 
       let actorRole: string;
+      let activityPermission: "workflow:act" | "workflow:approve" | null = null;
       let nextActivityId: string | null = null;
       let nextStatus: WorkflowInstanceStatus = "running";
       let nextData = parseObject(instance.data);
@@ -588,6 +615,7 @@ export class PostgresWorkflowExecutionService {
         nextStatus = "rejected";
       } else {
         const requiredPermission = input.action === "approve" ? "workflow:approve" : "workflow:act";
+        activityPermission = requiredPermission;
         if (input.action === "approve" && current.type !== "APPROVAL") {
           throw new WorkflowExecutionError("WORKFLOW_EXECUTION_APPROVE_REQUIRES_APPROVAL", 422);
         }
@@ -605,17 +633,53 @@ export class PostgresWorkflowExecutionService {
       }
 
       const nextVersion = input.expectedVersion + 1;
-      const terminal = nextStatus !== "running";
+      const dataBinding = current.applicationDataBinding;
+      const waitingForData = Boolean(dataBinding && input.action !== "cancel" && input.action !== "reject");
+      const activityExecutionId = waitingForData ? randomUUID() : null;
+      const activityIdempotencyKey = waitingForData ? randomUUID() : null;
+      if (waitingForData && dataBinding && activityExecutionId && activityIdempotencyKey) {
+        const binding = {
+          entityType: dataBinding.entityType,
+          operation: dataBinding.operation,
+          ...(dataBinding.recordIdField ? { recordIdField: dataBinding.recordIdField } : {}),
+          ...(dataBinding.expectedVersionField ? { expectedVersionField: dataBinding.expectedVersionField } : {}),
+          ...(dataBinding.dataField ? { dataField: dataBinding.dataField } : {}),
+          ...(dataBinding.resultKey ? { resultKey: dataBinding.resultKey } : {}),
+        };
+        const intentFingerprint = digest({
+          tenantId: input.tenantId, applicationId: input.applicationId,
+          instanceId: input.instanceId, activityExecutionId,
+          actorId: input.actorId, actorRoleId: actorRole, requiredPermission: activityPermission ?? "workflow:act",
+          correlationId: input.correlationId, requirementId: dataBinding.requirementId, idempotencyKey: activityIdempotencyKey,
+          entityType: dataBinding.entityType, operation: dataBinding.operation,
+          binding, input: payload,
+        });
+        await client.query(
+          `INSERT INTO eper_workflow_application_data_intents
+            (tenant_id, application_id, intent_id, instance_id, activity_execution_id,
+             activity_id, actor_id, actor_role_id, required_permission, correlation_id, requirement_id, idempotency_key,
+             request_fingerprint, entity_type, operation, binding, input)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17::jsonb)`,
+          [input.tenantId, input.applicationId, randomUUID(), input.instanceId,
+            activityExecutionId, current.id, input.actorId, actorRole, activityPermission,
+            input.correlationId, dataBinding.requirementId, activityIdempotencyKey, intentFingerprint,
+            dataBinding.entityType, dataBinding.operation, JSON.stringify(binding), JSON.stringify(payload)],
+        );
+        nextStatus = "waiting_for_data";
+      }
+      const terminal = nextStatus !== "running" && nextStatus !== "waiting_for_data";
       const updated = await client.query<InstanceRow>(
         `UPDATE eper_workflow_instances
             SET status = $4, current_activity_id = $5, data = $6::jsonb,
+                pending_activity_execution_id = $9,
                 version = $7, updated_at = NOW(),
-                completed_at = CASE WHEN $4::varchar = 'running' THEN NULL ELSE NOW() END
+                completed_at = CASE WHEN $4::varchar IN ('running','waiting_for_data') THEN NULL ELSE NOW() END
           WHERE tenant_id = $1 AND application_id = $2 AND instance_id = $3
             AND version = $8
           RETURNING *`,
         [input.tenantId, input.applicationId, input.instanceId, nextStatus,
-          terminal ? null : nextActivityId, JSON.stringify(nextData), nextVersion, input.expectedVersion],
+          terminal ? null : waitingForData ? current.id : nextActivityId, JSON.stringify(nextData), nextVersion, input.expectedVersion,
+          activityExecutionId],
       );
       const updatedRow = updated.rows[0];
       if (!updatedRow) throw new WorkflowExecutionError("WORKFLOW_EXECUTION_VERSION_CONFLICT", 409);
@@ -628,7 +692,7 @@ export class PostgresWorkflowExecutionService {
            request_fingerprint, correlation_id, payload_digest)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
         [input.tenantId, input.applicationId, transitionId, input.instanceId,
-          instance.current_activity_id, terminal ? null : nextActivityId, input.action,
+          instance.current_activity_id, terminal ? null : waitingForData ? current.id : nextActivityId, input.action,
           input.actorId, actorRole, input.expectedVersion, nextVersion, input.idempotencyKey,
           requestFingerprint, input.correlationId, digest(payload)],
       );
@@ -649,7 +713,7 @@ export class PostgresWorkflowExecutionService {
         eventType, nextVersion, {
           workflowId: instance.workflow_id, instanceId: input.instanceId,
           action: input.action, resultingStatus: nextStatus, resultingVersion: nextVersion,
-          fromActivityId: instance.current_activity_id, toActivityId: nextActivityId,
+          fromActivityId: instance.current_activity_id, toActivityId: waitingForData ? current.id : nextActivityId,
           payloadDigest: digest(payload), correlationId: input.correlationId,
           ...(routingDecision ? { routingDecision } : {}),
         });

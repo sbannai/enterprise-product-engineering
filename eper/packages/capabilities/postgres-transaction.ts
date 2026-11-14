@@ -24,7 +24,7 @@ export interface OutboxEvent<T extends Record<string, unknown> = Record<string, 
  * No external side effects should happen inside work; enqueue an outbox event instead.
  */
 export async function withTenantTransaction<T>(
-  pool: Pool,
+  pool: Pick<Pool, "connect">,
   tenantId: string,
   work: (transaction: TenantTransaction) => Promise<T>,
 ): Promise<T> {

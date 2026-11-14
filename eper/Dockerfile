@@ -23,6 +23,10 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/packages/payments/migrations ./packages/payments/migrations
+# Worker startup and fresh-runtime migrations need the capability-owned schemas.
+COPY --from=build /app/packages/capabilities/migrations ./packages/capabilities/migrations
+COPY --from=build /app/packages/application-data/migrations ./packages/application-data/migrations
+COPY --from=build /app/packages/workflows/migrations ./packages/workflows/migrations
 COPY scripts ./scripts
 USER node
 EXPOSE 8080

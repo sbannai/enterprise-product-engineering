@@ -47,6 +47,7 @@ import type { PostgresPaymentStore } from "../../packages/payments/postgres-paym
 import type { TrustedReceiptNumberSource } from "./payments.js";
 import type { TrustedTransactionSnapshotSource } from "../../packages/payments/transaction-receipt-contract.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
+import type { PostgresApplicationDataModelAuthoringService } from "../../packages/application-data/model-authoring.js";
 import { handleAgentRoute, type AgentAuditWriter, type AgentDraftStore } from "../../packages/agents/agent-workflows.js";
 import { PostgresAgentStore, type AgentSqlPool } from "../../packages/agents/postgres-agent-store.js";
 import { handleAgentJobRoute } from "./agent-job-routes.js";
@@ -538,7 +539,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; customerAssetRepository?: PostgresCustomerAssetRepository; assetUploadPort?: IntegrationPort<StorageUploadRequest, StorageUploadGrant>; assetUploadProviderCapabilities?: StorageUploadProviderCapabilities; assetUploadLookup?: (uploadSessionId: string, requestId: string, scope: { tenantId: string; applicationId: string }) => Promise<StorageUploadLookupOutcome>; assetUploadLookupPort?: IntegrationPort<StorageUploadLookupRequest, StorageUploadLookupResponse>; assetUploadVerification?: (request: StorageUploadVerificationRequest, requestId: string) => Promise<VerifiedStorageObject | null>; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowDefinitionDraftStore?: PostgresWorkflowDefinitionDraftStore; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer; peripheralService?: ApplicationPeripheralService; remoteDesktopService?: ApplicationRemoteDesktopService } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; customerAssetRepository?: PostgresCustomerAssetRepository; assetUploadPort?: IntegrationPort<StorageUploadRequest, StorageUploadGrant>; assetUploadProviderCapabilities?: StorageUploadProviderCapabilities; assetUploadLookup?: (uploadSessionId: string, requestId: string, scope: { tenantId: string; applicationId: string }) => Promise<StorageUploadLookupOutcome>; assetUploadLookupPort?: IntegrationPort<StorageUploadLookupRequest, StorageUploadLookupResponse>; assetUploadVerification?: (request: StorageUploadVerificationRequest, requestId: string) => Promise<VerifiedStorageObject | null>; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowDefinitionDraftStore?: PostgresWorkflowDefinitionDraftStore; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; applicationDataModelAuthoringService?: PostgresApplicationDataModelAuthoringService; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer; peripheralService?: ApplicationPeripheralService; remoteDesktopService?: ApplicationRemoteDesktopService } = {}): Server {
   // Durable mode must never fall back to credential-embedded applicationIds.
   // main.ts wires and readiness-checks this store; keep the API factory fail-closed
   // as well for tests, alternate entry points, and future embedding scenarios.
@@ -987,6 +988,77 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         const code = message.toUpperCase().replace(/[^A-Z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64) || "ACTION_APPROVAL_OPERATION_FAILED";
         sendApiError(request, response, status, code, "The action approval operation could not be completed."); return;
       }
+    }
+
+    const applicationDataModelCollection = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/application-data-models$/.exec(requestUrl.pathname);
+    const applicationDataModelTransition = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/application-data-models\/([A-Za-z][A-Za-z0-9._-]{0,127})\/([1-9][0-9]*)\/(activate|retire)$/.exec(requestUrl.pathname);
+    if (applicationDataModelCollection || applicationDataModelTransition) {
+      if (process.env.EPER_APPLICATION_DATA_MODEL_ADMIN_API_ENABLED !== "true" ||
+          process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
+          process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      const identity = resolveAdminConfigIdentity(request);
+      if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
+      if (identity.roleKey !== "customer_admin") {
+        sendApiError(request, response, 403, "CUSTOMER_ADMIN_ROLE_REQUIRED", "Application data model authoring is reserved for Customer Admins."); return;
+      }
+      if (!options.applicationDataModelAuthoringService || !options.tenantApplicationAssignmentStore ||
+          !options.actorApplicationAssignmentStore || !options.workflowActorRoleAssignmentStore) {
+        sendApiError(request, response, 503, "APPLICATION_DATA_MODEL_ADMIN_UNAVAILABLE", "Application data model administration is not configured."); return;
+      }
+      const applicationId = (applicationDataModelCollection ?? applicationDataModelTransition)![1];
+      try {
+        const tenantApplications = await options.tenantApplicationAssignmentStore.listActive(identity.tenantId);
+        if (!tenantApplications.includes(applicationId)) {
+          sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+        }
+        if (!(await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId))) {
+          sendApiError(request, response, 403, "ADMIN_NOT_ASSIGNED_TO_APPLICATION", "The administrator is not assigned to this application."); return;
+        }
+        const roleIds = await options.workflowActorRoleAssignmentStore.listActiveRoleIds(identity.tenantId, applicationId, identity.actorId);
+        let authoringRoleId: string | undefined;
+        for (const roleId of roleIds) {
+          if (await options.workflowActorRoleAssignmentStore.hasPermission(identity.tenantId, applicationId, identity.actorId, roleId, "workflow:admin")) {
+            authoringRoleId = roleId; break;
+          }
+        }
+        if (!authoringRoleId) {
+          sendApiError(request, response, 403, "APPLICATION_DATA_MODEL_MANAGE_FORBIDDEN", "The workflow administrator permission is required."); return;
+        }
+        const context = {
+          tenantId: identity.tenantId, applicationId, actorId: identity.actorId, roleId: authoringRoleId,
+          correlationId: resolveApiRequestId(request), requirementId: "REQ-46301",
+          environment: options.adminConfigEnvironment ?? "sandbox", serviceVersion: options.serviceVersion,
+        };
+        if (applicationDataModelCollection) {
+          if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
+          const body = await readJson(request);
+          if (!allowedBodyKeys(body, ["entityType", "fields", "relationships", "expectedVersion"]) ||
+              typeof body.entityType !== "string" || !Array.isArray(body.fields) ||
+              (body.relationships !== undefined && !Array.isArray(body.relationships)) ||
+              !Number.isSafeInteger(body.expectedVersion)) {
+            sendApiError(request, response, 400, "INVALID_APPLICATION_DATA_MODEL_BODY", "entityType, fields and expectedVersion are required."); return;
+          }
+          const model = await options.applicationDataModelAuthoringService.createDraft(context, {
+            entityType: body.entityType,
+            fields: body.fields as import("../../packages/application-data/contracts.js").ApplicationDataField[],
+            relationships: body.relationships as import("../../packages/application-data/contracts.js").ApplicationDataRelationship[] | undefined,
+            expectedVersion: body.expectedVersion as number,
+          });
+          sendApiSuccess(request, response, 201, { model }); return;
+        }
+        const [, , entityType, versionText, transition] = applicationDataModelTransition!;
+        if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
+        const body = await readJson(request);
+        if (!allowedBodyKeys(body, [])) {
+          sendApiError(request, response, 400, "INVALID_APPLICATION_DATA_MODEL_TRANSITION_BODY", "The transition request must have an empty JSON object."); return;
+        }
+        const version = Number(versionText);
+        if (transition === "activate") await options.applicationDataModelAuthoringService.activate(context, entityType, version);
+        else await options.applicationDataModelAuthoringService.retire(context, entityType, version);
+        sendApiSuccess(request, response, 200, { entityType, version, status: transition === "activate" ? "ACTIVE" : "RETIRED" }); return;
+      } catch (error) { workflowError(error); return; }
     }
 
     if (workflowRoleCollection || workflowRoleDetail || workflowRoleAssignments || workflowPublishRoute || workflowDraftCollection || workflowDraftDetail || workflowDraftPublish) {

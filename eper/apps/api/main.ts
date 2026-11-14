@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { createAppServer } from "./server.js";
+import { PostgresApplicationDataModelAuthoringService } from "../../packages/application-data/model-authoring.js";
 import { createPostgresPaymentPool } from "../../packages/payments/postgres-payment-runtime.js";
 import { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
 import { PostgresCommercialTariffAdminStore } from "../../packages/pricing/postgres-commercial-tariff-admin-store.js";
@@ -64,6 +65,7 @@ const platformApplicationRemediationEnabled = process.env.EPER_PLATFORM_APPLICAT
 const platformAdminCredentialsEnabled = process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED === "true";
 const providerCatalogueAdminEnabled = process.env.EPER_PROVIDER_CATALOGUE_ADMIN_API_ENABLED === "true";
 const workflowOutboxAdminEnabled = process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED === "true";
+const applicationDataModelAdminEnabled = process.env.EPER_APPLICATION_DATA_MODEL_ADMIN_API_ENABLED === "true";
 const commercialTariffAdminEnabled = process.env.EPER_COMMERCIAL_TARIFF_API_ENABLED === "true";
 const customerLifecycleApiEnabled = process.env.EPER_CUSTOMER_LIFECYCLE_API_ENABLED === "true";
 const customerIdentityPersistenceMode = process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE ?? "disabled";
@@ -91,8 +93,13 @@ if (providerStorageRuntimeConfiguration.enabled) {
 if (customerIdentityPersistenceMode !== "disabled" && customerIdentityPersistenceMode !== "postgres") {
   throw new Error("EPER_CUSTOMER_IDENTITY_PERSISTENCE_UNSUPPORTED");
 }
-const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled || providerCatalogueAdminEnabled || providerConnectionsEnabled || customerIdentityPersistenceMode === "postgres" || customerAssetPersistenceApiEnabled || peripheralApiEnabled || remoteDesktopApiEnabled;
+const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || applicationDataModelAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled || providerCatalogueAdminEnabled || providerConnectionsEnabled || customerIdentityPersistenceMode === "postgres" || customerAssetPersistenceApiEnabled || peripheralApiEnabled || remoteDesktopApiEnabled;
 const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
+if (applicationDataModelAdminEnabled && (!paymentPool || process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
+    process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" || process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres" ||
+    customerIdentityPersistenceMode !== "postgres" || process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres")) {
+  throw new Error("APPLICATION_DATA_MODEL_ADMIN_API_REQUIRES_POSTGRES_IDENTITY_ASSIGNMENTS_ADMIN_CONFIG_AND_DURABLE_AUDIT");
+}
 
 // Privileged control-plane stores use independent PostgreSQL credentials and pools.
 // Configure these URLs with separate least-privilege roles and explicit table grants;
@@ -416,12 +423,15 @@ const providerValidationService = providerValidationEnabled && paymentPool
     )
   : undefined;
 
-const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled || workflowRoleDelegationEnabled || platformCustomerAdminEnabled || providerConnectionsEnabled || providerValidationEnabled || customerAssetPersistenceApiEnabled || peripheralApiEnabled || remoteDesktopApiEnabled;
+const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled || applicationDataModelAdminEnabled || workflowRoleDelegationEnabled || platformCustomerAdminEnabled || providerConnectionsEnabled || providerValidationEnabled || customerAssetPersistenceApiEnabled || peripheralApiEnabled || remoteDesktopApiEnabled;
 const workflowRoleDefinitionStore = workflowAuthorizationStoresEnabled && paymentPool
   ? new PostgresWorkflowRoleDefinitionStore(paymentPool)
   : undefined;
 const workflowActorRoleAssignmentStore = workflowAuthorizationStoresEnabled && paymentPool
   ? new PostgresWorkflowActorRoleAssignmentStore(paymentPool)
+  : undefined;
+const applicationDataModelAuthoringService = applicationDataModelAdminEnabled && paymentPool
+  ? new PostgresApplicationDataModelAuthoringService(paymentPool)
   : undefined;
 const workflowDefinitionPublisher = workflowExecutionEnabled && paymentPool
   ? new WorkflowDefinitionPublisher(paymentPool)
@@ -604,7 +614,7 @@ const server = createAppServer({
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
   workflowRoleDefinitionStore, workflowActorRoleAssignmentStore, workflowRoleDelegationStore, customerAssetRepository, platformCustomerAdminProvisioningStore, platformApplicationRemediationStore, platformAdminCredentialStore,
   providerConnectionRepository, providerValidationService, providerCatalogueRepository,
-  workflowDefinitionPublisher, workflowDefinitionDraftStore, workflowExecutionService, peripheralService, remoteDesktopService,
+  workflowDefinitionPublisher, workflowDefinitionDraftStore, workflowExecutionService, applicationDataModelAuthoringService, peripheralService, remoteDesktopService,
 });
 
 server.listen(port, host, () => {
