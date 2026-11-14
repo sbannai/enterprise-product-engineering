@@ -674,7 +674,7 @@ export class PostgresWorkflowExecutionService {
             AND version = $8
           RETURNING *`,
         [input.tenantId, input.applicationId, input.instanceId, nextStatus,
-          terminal ? null : nextActivityId, JSON.stringify(nextData), nextVersion, input.expectedVersion,
+          terminal ? null : waitingForData ? current.id : nextActivityId, JSON.stringify(nextData), nextVersion, input.expectedVersion,
           activityExecutionId],
       );
       const updatedRow = updated.rows[0];
@@ -688,7 +688,7 @@ export class PostgresWorkflowExecutionService {
            request_fingerprint, correlation_id, payload_digest)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
         [input.tenantId, input.applicationId, transitionId, input.instanceId,
-          instance.current_activity_id, terminal ? null : nextActivityId, input.action,
+          instance.current_activity_id, terminal ? null : waitingForData ? current.id : nextActivityId, input.action,
           input.actorId, actorRole, input.expectedVersion, nextVersion, input.idempotencyKey,
           requestFingerprint, input.correlationId, digest(payload)],
       );
@@ -709,7 +709,7 @@ export class PostgresWorkflowExecutionService {
         eventType, nextVersion, {
           workflowId: instance.workflow_id, instanceId: input.instanceId,
           action: input.action, resultingStatus: nextStatus, resultingVersion: nextVersion,
-          fromActivityId: instance.current_activity_id, toActivityId: nextActivityId,
+          fromActivityId: instance.current_activity_id, toActivityId: waitingForData ? current.id : nextActivityId,
           payloadDigest: digest(payload), correlationId: input.correlationId,
           ...(routingDecision ? { routingDecision } : {}),
         });
