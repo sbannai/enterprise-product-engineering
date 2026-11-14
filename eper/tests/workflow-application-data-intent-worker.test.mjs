@@ -119,3 +119,26 @@ test("intent worker does not report dead-letter when its failure lease has been 
     errorCode: "WORKFLOW_APPLICATION_DATA_INTENT_LEASE_LOST",
   });
 });
+
+test("intent fingerprint is stable across JSON key ordering but binds tenant and activity scope", () => {
+  const base = {
+    tenantId: "tenant-a", applicationId: "app-a", instanceId: "instance-a",
+    activityExecutionId: "execution-a", actorId: "actor-a", correlationId: "corr-a",
+    requirementId: "req-a", idempotencyKey: "workflow-intent-key-0004",
+    entityType: "Order", operation: "create",
+    binding: { entityType: "Order", operation: "create", recordIdField: "id", dataField: "data" },
+    input: { id: "order-1", data: { total: 125, currency: "INR" } },
+  };
+  const reordered = {
+    ...base,
+    input: { data: { currency: "INR", total: 125 }, id: "order-1" },
+    binding: { dataField: "data", recordIdField: "id", operation: "create", entityType: "Order" },
+  };
+  assert.equal(applicationDataIntentFingerprint(base), applicationDataIntentFingerprint(reordered));
+  assert.notEqual(applicationDataIntentFingerprint(base), applicationDataIntentFingerprint({
+    ...base, tenantId: "tenant-b",
+  }));
+  assert.notEqual(applicationDataIntentFingerprint(base), applicationDataIntentFingerprint({
+    ...base, activityExecutionId: "execution-b",
+  }));
+});
