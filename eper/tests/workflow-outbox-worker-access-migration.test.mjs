@@ -31,6 +31,7 @@ test("workflow migrations preserve the ordered worker-access, claim-generation, 
   const reconciliationWorkerAccess = names.indexOf("022_application_data_reconciliation_worker_access.sql");
   const applicationDataExecutorAccess = names.indexOf("023_application_data_executor_worker_access.sql");
   const applicationDataIntentAuthorization = names.indexOf("024_application_data_intent_authorization.sql");
+  const applicationDataExecutorRowLocks = names.indexOf("025_application_data_executor_authorization_row_locks.sql");
   assert.notEqual(workerAccess, -1, "worker-access migration must exist");
   assert.notEqual(claimGeneration, -1, "claim-generation migration must exist");
   assert.notEqual(permissionCatalogue, -1, "permission-catalogue migration must exist");
@@ -41,6 +42,7 @@ test("workflow migrations preserve the ordered worker-access, claim-generation, 
   assert.notEqual(reconciliationWorkerAccess, -1, "reconciliation worker access migration must exist");
   assert.notEqual(applicationDataExecutorAccess, -1, "application-data executor worker access migration must exist");
   assert.notEqual(applicationDataIntentAuthorization, -1, "application-data intent authorization migration must exist");
+  assert.notEqual(applicationDataExecutorRowLocks, -1, "application-data executor row-lock privilege migration must exist");
   assert.equal(names[workerAccess - 1], "014_workflow_definition_drafts.sql");
   assert.equal(names[workerAccess + 1], "016_workflow_outbox_claim_generation.sql");
   assert.equal(names[claimGeneration + 1], "017_workflow_role_permission_catalogue.sql");
@@ -51,5 +53,6 @@ test("workflow migrations preserve the ordered worker-access, claim-generation, 
   assert.equal(names[reconciliationLease + 1], "022_application_data_reconciliation_worker_access.sql");
   assert.equal(names[reconciliationWorkerAccess + 1], "023_application_data_executor_worker_access.sql");
   assert.equal(names[applicationDataExecutorAccess + 1], "024_application_data_intent_authorization.sql");
-  assert.equal(names.at(-1), "024_application_data_intent_authorization.sql");
+  assert.equal(names[applicationDataIntentAuthorization + 1], "025_application_data_executor_authorization_row_locks.sql");
+  assert.equal(names.at(-1), "025_application_data_executor_authorization_row_locks.sql");
 });
