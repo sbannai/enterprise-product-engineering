@@ -558,6 +558,23 @@ export class PostgresWorkflowExecutionService {
         throw new WorkflowExecutionError("WORKFLOW_EXECUTION_VERSION_CONFLICT", 409);
       }
 
+      // Fail closed while an application-data intent has not been reconciled with
+      // the workflow state machine. A successful data mutation is not itself a
+      // workflow transition; the future completion handshake must mark it advanced.
+      const outstandingIntent = await client.query<{ intent_id: string; intent_status: string }>(
+        `SELECT intent_id, intent_status
+           FROM eper_workflow_application_data_intents
+          WHERE tenant_id = $1 AND application_id = $2 AND instance_id = $3
+            AND intent_status <> 'advanced'
+          ORDER BY created_at
+          LIMIT 1
+          FOR SHARE`,
+        [input.tenantId, input.applicationId, input.instanceId],
+      );
+      if (outstandingIntent.rows[0]) {
+        throw new WorkflowExecutionError("WORKFLOW_EXECUTION_APPLICATION_DATA_PENDING", 409);
+      }
+
       const definitionResult = await client.query<{ definition: WorkflowDefinition | string }>(
         `SELECT definition FROM eper_workflow_definition_versions
           WHERE tenant_id = $1 AND application_id = $2 AND workflow_id = $3
