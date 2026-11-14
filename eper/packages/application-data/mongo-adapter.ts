@@ -40,6 +40,13 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
     }
     await this.authorizeWorkflowGrant(session, context);
   }
+  private async authorizedRead<T>(context: ApplicationDataContext, read: (session?: MongoSessionLike) => Promise<T>): Promise<T> {
+    if (!context.workflowRoleId && !context.workflowPermission) return read();
+    return this.transaction(async session => {
+      await this.authorizeWorkflow(session, context);
+      return read(session);
+    });
+  }
   private records() { return this.db.collection<StoredRecord>("eper_application_data_records"); }
   private models() { return this.db.collection<StoredModel>("eper_application_data_models"); }
   /** Run during deployment/bootstrap; the partial unique index is the cross-process guard for active schemas. */
@@ -138,11 +145,13 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
   async getIdempotentCreate(context: ApplicationDataContext, entityType: string, id: string, data: Record<string, unknown>): Promise<ApplicationDataRecord | undefined> {
     const key=context.idempotencyKey;
     if (!key) return undefined;
-    const prior=await this.idempotency().findOne({_id:this.key([context.tenantId,context.applicationId,key])});
-    if (!prior) return undefined;
-    const requestHash=applicationDataCreateHash({tenantId:context.tenantId,applicationId:context.applicationId,entityType,id,data});
-    if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
-    return prior.response as ApplicationDataRecord;
+    return this.authorizedRead(context, async session => {
+      const prior=await this.idempotency().findOne({_id:this.key([context.tenantId,context.applicationId,key])},session ? {session} : {});
+      if (!prior) return undefined;
+      const requestHash=applicationDataCreateHash({tenantId:context.tenantId,applicationId:context.applicationId,entityType,id,data});
+      if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+      return prior.response as ApplicationDataRecord;
+    });
   }
   async create(record: ApplicationDataRecord, context: ApplicationDataContext, relationships?: ApplicationDataRelationship[]): Promise<ApplicationDataRecord> {
     const key = context.idempotencyKey;
@@ -196,11 +205,13 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
   async getIdempotentUpdate(c: ApplicationDataContext, e: string, id: string, expected: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }): Promise<ApplicationDataRecord | undefined> {
     const key=c.idempotencyKey;
     if (!key) return undefined;
-    const prior=await this.idempotency().findOne({_id:this.key([c.tenantId,c.applicationId,key])});
-    if (!prior) return undefined;
-    const requestHash=applicationDataUpdateHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected,patch});
-    if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
-    return prior.response as ApplicationDataRecord;
+    return this.authorizedRead(c, async session => {
+      const prior=await this.idempotency().findOne({_id:this.key([c.tenantId,c.applicationId,key])},session ? {session} : {});
+      if (!prior) return undefined;
+      const requestHash=applicationDataUpdateHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected,patch});
+      if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+      return prior.response as ApplicationDataRecord;
+    });
   }
   async update(c: ApplicationDataContext, e: string, id: string, expected: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }, relationships?: ApplicationDataRelationship[]): Promise<ApplicationDataRecord> {
     const key=c.idempotencyKey;
@@ -244,11 +255,13 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
   }
   async getIdempotentDelete(c: ApplicationDataContext, e: string, id: string, expected: number): Promise<boolean> {
     if (!c.idempotencyKey) return false;
-    const prior=await this.idempotency().findOne({_id:this.key([c.tenantId,c.applicationId,c.idempotencyKey])});
-    if (!prior) return false;
-    const requestHash=applicationDataDeleteHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected});
-    if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
-    return !!prior.response && typeof prior.response==="object" && (prior.response as Record<string,unknown>).deleted===true;
+    return this.authorizedRead(c, async session => {
+      const prior=await this.idempotency().findOne({_id:this.key([c.tenantId,c.applicationId,c.idempotencyKey])},session ? {session} : {});
+      if (!prior) return false;
+      const requestHash=applicationDataDeleteHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected});
+      if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+      return !!prior.response && typeof prior.response==="object" && (prior.response as Record<string,unknown>).deleted===true;
+    });
   }
   async delete(c: ApplicationDataContext, e: string, id: string, expected: number): Promise<void> {
     const key=c.idempotencyKey;
