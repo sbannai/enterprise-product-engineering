@@ -51,9 +51,10 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
   private models() { return this.db.collection<StoredModel>("eper_application_data_models"); }
   /** Run during deployment/bootstrap; the partial unique index is the cross-process guard for active schemas. */
   async ensureIndexes(): Promise<void> {
-    const createIndex = this.models().createIndex;
+    const models = this.models();
+    const createIndex = models.createIndex;
     if (!createIndex) throw new Error("MONGODB_INDEX_MANAGEMENT_REQUIRED");
-    await createIndex.call(this.models(), { tenantId:1, applicationId:1, entityType:1 }, {
+    await createIndex.call(models, { tenantId:1, applicationId:1, entityType:1 }, {
       name:"eper_application_data_one_active_model",
       unique:true,
       partialFilterExpression:{ status:"ACTIVE" }
