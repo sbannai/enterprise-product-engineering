@@ -213,9 +213,9 @@ export class ApplicationDataIntentReconciler {
       const action = activity.type === "APPROVAL" ? "approve" : "submit";
       const updated = await completion.query(
         `UPDATE eper_workflow_instances
-            SET status = $4, current_activity_id = $5, data = $6::jsonb,
+            SET status = $4::text, current_activity_id = $5, data = $6::jsonb,
                 pending_activity_execution_id = NULL, version = $7,
-                updated_at = NOW(), completed_at = CASE WHEN $4 = 'completed' THEN NOW() ELSE NULL END
+                updated_at = NOW(), completed_at = CASE WHEN $4::text = 'completed' THEN NOW() ELSE NULL END
           WHERE tenant_id = $1 AND application_id = $2 AND instance_id = $3
             AND status = 'waiting_for_data' AND version = $8
             AND pending_activity_execution_id = $9
