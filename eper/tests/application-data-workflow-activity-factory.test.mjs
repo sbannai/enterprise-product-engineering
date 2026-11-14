@@ -73,7 +73,7 @@ test("MongoDB workflow data access fails closed and revalidates grants in the sa
 });
 
 test("MongoDB workflow grant resolver scopes active grants and binds lookup to the data transaction", async () => {
- const { createMongoWorkflowAuthorizer, ensureMongoWorkflowAuthorizationIndexes } =
+ const { createMongoWorkflowAuthorizer, ensureMongoWorkflowAuthorizationIndexes, createMongoApplicationDataAdapter } =
   await import("../dist/packages/application-data/mongo-workflow-authorization.js");
  let lookup;
  const session = { async withTransaction(work) { return work(); }, async endSession() {} };
@@ -98,6 +98,14 @@ test("MongoDB workflow grant resolver scopes active grants and binds lookup to t
  assert.equal(lookup.options.session, session);
  await ensureMongoWorkflowAuthorizationIndexes(database);
  assert.equal(lookup.index.options.name, "eper_workflow_authorization_grant_scope");
+ const indexedCollections = [];
+ const factoryDatabase = { collection(name) {
+  indexedCollections.push(name);
+  return { async createIndex() { return name + "-index"; }, async findOne() { return null; } };
+ }};
+ const adapter = await createMongoApplicationDataAdapter(factoryDatabase);
+ assert.ok(adapter);
+ assert.deepEqual(indexedCollections, ["eper_application_data_models", "eper_workflow_authorization_grants"]);
 });
 
 test("MongoDB workflow grant resolver rejects missing and revoked grants", async () => {
