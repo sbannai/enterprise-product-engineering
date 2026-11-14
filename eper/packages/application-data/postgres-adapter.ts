@@ -3,6 +3,7 @@ import type { Pool } from "pg";
 import { withTenantTransaction, enqueueOutboxEvent } from "../capabilities/postgres-transaction.js";
 import type { ApplicationDataAdapter, ApplicationDataContext, ApplicationDataModel, ApplicationDataQuery, ApplicationDataRecord } from "./contracts.js";
 import { applicationDataCreateHash, applicationDataUpdateHash, applicationDataDeleteHash } from "./idempotency.js";
+import { assertApplicationDataWorkflowAuthorization } from "./postgres-workflow-authorization.js";
 
 type Row = Record<string, unknown>;
 function json<T>(value: unknown): T { return (typeof value === "string" ? JSON.parse(value) : value) as T; }
@@ -20,10 +21,11 @@ function canonical(value: unknown): string {
   return "{" + Object.keys(o).sort().map(k => JSON.stringify(k) + ":" + canonical(o[k])).join(",") + "}";
 }
 export class PostgresApplicationDataAdapter implements ApplicationDataAdapter {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool, private readonly requireWorkflowAuthorization = false) {}
   private async scope<T>(context: ApplicationDataContext, work: (client: import("pg").PoolClient) => Promise<T>): Promise<T> {
     return withTenantTransaction(this.pool, context.tenantId, async ({ client }) => {
       await client.query("SELECT set_config('eper.application_id', $1, true)", [context.applicationId]);
+      if (this.requireWorkflowAuthorization) await assertApplicationDataWorkflowAuthorization(client, context);
       return work(client);
     });
   }
