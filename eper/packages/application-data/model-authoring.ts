@@ -196,10 +196,25 @@ export class PostgresApplicationDataModelAuthoringService {
       const row = selected.rows[0];
       if (!row || row.status !== from) throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_CONFLICT");
       if (to === "ACTIVE") {
+        const activeModels = await client.query<{ tenant_id: string; application_id: string; entity_type: string;
+          version: number; status: ApplicationDataModel["status"]; fields: ApplicationDataField[];
+          relationships: ApplicationDataRelationship[] }>(`
+          SELECT tenant_id,application_id,entity_type,version,status,fields,relationships
+            FROM eper_application_data_models
+           WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND status='ACTIVE'
+           FOR UPDATE
+        `, [context.tenantId, context.applicationId, entityType]);
         await client.query(`
           UPDATE eper_application_data_models SET status='RETIRED',updated_at=now()
            WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND status='ACTIVE'
         `, [context.tenantId, context.applicationId, entityType]);
+        for (const active of activeModels.rows) {
+          await this.audit(client, context, "APPLICATION_DATA_MODEL_RETIRED", {
+            tenantId: active.tenant_id, applicationId: active.application_id, entityType: active.entity_type,
+            version: Number(active.version), status: "RETIRED", fields: active.fields,
+            relationships: active.relationships ?? [],
+          });
+        }
       }
       const changed = await client.query(`
         UPDATE eper_application_data_models SET status=$5,updated_at=now()
