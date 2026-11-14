@@ -18,5 +18,5 @@ test("workflow application-data intent migration provides durable idempotent wor
   assert.match(sql, /current_setting\('eper\.application_id', true\)/);
   assert.match(sql, /FOREIGN KEY \(tenant_id, application_id, instance_id\)/);
   assert.match(sql, /intent_status = 'processing' AND locked_at IS NOT NULL AND locked_by IS NOT NULL/);
-  assert.match(sql, /intent_status = 'succeeded' AND result IS NOT NULL/);
+  assert.match(sql, /intent_status IN \\('succeeded','advanced'\\) AND result IS NOT NULL/);
 });
