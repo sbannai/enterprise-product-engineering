@@ -21,7 +21,8 @@ interface ReconciliationRow {
   idempotency_key: string;
   binding: Record<string, unknown> | string;
   result: Record<string, unknown> | string;
-  reconciliation_claim_generation: number | string;\n  reconciliation_attempts: number | string;
+  reconciliation_claim_generation: number | string;
+  reconciliation_attempts: number | string;
 }
 interface InstanceRow {
   instance_id: string;
@@ -74,16 +75,19 @@ async function setScope(client: AuditSqlClient, tenantId: string, applicationId:
  */
 export class ApplicationDataIntentReconciler {
   private readonly workerId: string;
-  private readonly leaseMilliseconds: number;\n  private readonly maxAttempts: number;
+  private readonly leaseMilliseconds: number;
+  private readonly maxAttempts: number;
 
   constructor(
     private readonly pool: AuditSqlPool,
     private readonly options: ApplicationDataIntentReconcilerOptions,
   ) {
     this.workerId = options.workerId ?? randomUUID();
-    this.leaseMilliseconds = options.leaseMilliseconds ?? 60_000;\n    this.maxAttempts = options.maxAttempts ?? 8;
+    this.leaseMilliseconds = options.leaseMilliseconds ?? 60_000;
+    this.maxAttempts = options.maxAttempts ?? 8;
     if (!/^[a-zA-Z0-9._:-]{8,128}$/.test(this.workerId) ||
-        !Number.isSafeInteger(this.leaseMilliseconds) || this.leaseMilliseconds < 1000 ||\n        !Number.isSafeInteger(this.maxAttempts) || this.maxAttempts < 1 || this.maxAttempts > 100 ||
+        !Number.isSafeInteger(this.leaseMilliseconds) || this.leaseMilliseconds < 1000 ||
+        !Number.isSafeInteger(this.maxAttempts) || this.maxAttempts < 1 || this.maxAttempts > 100 ||
         !["production", "uat", "sandbox"].includes(options.environment)) {
       throw new Error("WORKFLOW_APPLICATION_DATA_RECONCILER_CONFIGURATION_INVALID");
     }
@@ -132,7 +136,8 @@ export class ApplicationDataIntentReconciler {
     }
     if (!intent) return { status: "idle" };
 
-    const currentIntentForRelease = intent;\n    const completion = await this.pool.connect();
+    const currentIntentForRelease = intent;
+    const completion = await this.pool.connect();
     try {
       await completion.query("BEGIN");
       await setScope(completion, tenantId, applicationId);
