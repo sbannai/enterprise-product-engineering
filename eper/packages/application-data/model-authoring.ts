@@ -110,8 +110,9 @@ export class PostgresApplicationDataModelAuthoringService {
     model: ApplicationDataModel,
   ): Promise<void> {
     const resourceId = model.entityType + ":" + model.version;
-    const payload = { entityType: model.entityType, version: model.version, status: model.status,
-      fieldCount: model.fields.length, relationshipCount: model.relationships?.length ?? 0 };
+    const payload = { requirementId: context.requirementId, entityType: model.entityType,
+      version: model.version, status: model.status, fieldCount: model.fields.length,
+      relationshipCount: model.relationships?.length ?? 0 };
     const audit = await appendAuditEventInTransaction(client as unknown as AuditSqlClient, {
       tenantId: context.tenantId, applicationId: context.applicationId, environment: context.environment,
       actorType: "human", actorId: context.actorId, effectiveRoles: [context.roleId],
