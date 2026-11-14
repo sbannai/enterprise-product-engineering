@@ -15,6 +15,7 @@ export interface CustomerAssetScanChildSupervisorOptions {
   timeoutMs: number;
   maxOutputBytes?: number;
   environment?: Record<string, string>;
+  signal?: AbortSignal;
 }
 
 export type CustomerAssetScanChildOutcome =
@@ -46,7 +47,10 @@ export async function runCustomerAssetScanChild(
   }
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(options.environment ?? {})) {
-    if (!/^[A-Z][A-Z0-9_]{0,127}$/.test(key) || /(?:DATABASE|DB_URL|PASSWORD|PRIVATE_KEY|SECRET)/.test(key) || typeof value !== "string" || value.length > 4096) {
+    if (!/^[A-Z][A-Z0-9_]{0,127}$/.test(key) ||
+        /(?:^|_)(?:DATABASE_URL|DB_URL|PASSWORD|PRIVATE_KEY|SECRET)(?:_|$)/.test(key) ||
+        /^(?:NODE_OPTIONS|NODE_PATH|NODE_EXTRA_CA_CERTS|OPENSSL_CONF|OPENSSL_MODULES|SSLKEYLOGFILE|LD_PRELOAD|LD_LIBRARY_PATH|DYLD_INSERT_LIBRARIES|DYLD_LIBRARY_PATH)$/.test(key) ||
+        key.startsWith("DYLD_") || typeof value !== "string" || value.length > 4096) {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_ENVIRONMENT_INVALID");
     }
     env[key] = value;
@@ -56,8 +60,10 @@ export async function runCustomerAssetScanChild(
     env,
     stdio: ["pipe", "pipe", "ignore"],
     windowsHide: true,
+    // Dedicated POSIX process group lets cancellation terminate descendants.
+    detached: process.platform !== "win32",
   });
-  return supervise(child, options.start, options.timeoutMs, maxOutputBytes);
+  return supervise(child, options.start, options.timeoutMs, maxOutputBytes, options.signal);
 }
 
 function supervise(
@@ -65,6 +71,7 @@ function supervise(
   start: CustomerAssetScanChildStart,
   timeoutMs: number,
   maxOutputBytes: number,
+  signal?: AbortSignal,
 ): Promise<CustomerAssetScanChildOutcome> {
   return new Promise((resolve, reject) => {
     let output = "";
@@ -72,30 +79,61 @@ function supervise(
     let settled = false;
     let timedOut = false;
     let overflowed = false;
+    let spawnError = false;
+    let aborted = signal?.aborted ?? false;
     const finish = (error?: Error, value?: CustomerAssetScanChildOutcome) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener("abort", abortChild);
       if (error) reject(error);
       else resolve(value!);
     };
+    const terminateChild = () => {
+      if (process.platform !== "win32" && child.pid !== undefined) {
+        try { process.kill(-child.pid, "SIGKILL"); return; } catch { /* fall back */ }
+      }
+      child.kill("SIGKILL");
+    };
+    const abortChild = () => {
+      aborted = true;
+      terminateChild();
+    };
+    if (aborted) terminateChild();
+    else signal?.addEventListener("abort", abortChild, { once: true });
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGKILL");
+      terminateChild();
     }, timeoutMs);
 
-    child.once("error", () => finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_SPAWN_FAILED")));
+    // Do not settle on the error event: Node emits "close" after "error",
+    // and the supervisor must not release the job for retry before process exit.
+    child.once("error", () => {
+      spawnError = true;
+      terminateChild();
+    });
+    // A child may exit before consuming its one-shot request. Handle EPIPE and
+    // stdout stream errors explicitly; let the process close event settle the
+    // attempt so a started child is never mistaken for an exited child.
+    child.stdin?.on("error", () => {
+      terminateChild();
+    });
+    child.stdout?.on("error", () => {
+      terminateChild();
+    });
     child.stdout?.on("data", (chunk: Buffer | string) => {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       outputBytes += buffer.length;
       if (outputBytes > maxOutputBytes) {
         overflowed = true;
-        child.kill("SIGKILL");
+        terminateChild();
         return;
       }
       output += buffer.toString("utf8");
     });
     child.once("close", (code, signal) => {
+      if (spawnError) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_SPAWN_FAILED"));
+      if (aborted) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_ABORTED"));
       if (timedOut) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_TIMEOUT"));
       if (overflowed) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_OUTPUT_LIMIT"));
       if (code !== 0 || signal !== null) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_EXITED"));

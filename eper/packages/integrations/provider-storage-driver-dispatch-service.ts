@@ -1,11 +1,13 @@
 import type {
   ProviderMalwareScanOutcome,
   ProviderMalwareScanRequest,
+  ProviderInternalObjectReadRequest,
   ProviderObjectVerificationOutcome,
   ProviderObjectVerificationRequest,
   ProviderStorageDriver,
 } from "./provider-storage-driver-contract.js";
 import { assertProviderStorageDriver } from "./provider-storage-driver-contract.js";
+import { verifiedProviderInternalObjectChunks } from "./provider-internal-object-read.js";
 import type { ProviderRuntimeCredentialResolutionService } from "./provider-runtime-credential-resolution-service.js";
 import { assertDependencyRuntimeCompatible, type DependencyInventoryReader } from "../dependencies/runtime-gate.js";
 import type { StorageDownloadRequest, StorageDownloadResult } from "../assets/storage-download-adapter.js";
@@ -18,14 +20,16 @@ export type ProviderStorageOperation =
   | { kind: "renew_upload"; request: StorageUploadRequest & { providerUploadReference: string } }
   | { kind: "verify_object"; request: ProviderObjectVerificationRequest }
   | { kind: "create_download"; request: StorageDownloadRequest }
-  | { kind: "scan_object"; request: ProviderMalwareScanRequest };
+  | { kind: "scan_object"; request: ProviderMalwareScanRequest }
+  | { kind: "read_object_internal"; request: ProviderInternalObjectReadRequest };
 
 export type ProviderStorageOperationResult =
   | StorageUploadProviderOutcome
   | StorageUploadLookupOutcome
   | ProviderObjectVerificationOutcome
   | StorageDownloadResult | null
-  | ProviderMalwareScanOutcome;
+  | ProviderMalwareScanOutcome
+  | AsyncIterable<Uint8Array>;
 
 const CAPABILITY_BY_OPERATION: Record<ProviderStorageOperation["kind"], string> = {
   create_upload: "storage.upload.grant",
@@ -34,6 +38,7 @@ const CAPABILITY_BY_OPERATION: Record<ProviderStorageOperation["kind"], string> 
   verify_object: "storage.object.verify",
   create_download: "storage.download.grant",
   scan_object: "storage.object.scan",
+  read_object_internal: "storage.object.read.internal",
 };
 
 function validText(value: unknown, max = 2048): value is string {
@@ -77,6 +82,12 @@ function validOperationRequest(operation: ProviderStorageOperation): boolean {
     case "scan_object":
       return validText(request.assetId, 128) &&
         validText(request.providerObjectReference, 2048) && validSha256(request.expectedSha256);
+    case "read_object_internal":
+      return validText(request.assetId, 128) &&
+        validText(request.providerObjectReference, 2048) &&
+        Number.isSafeInteger(request.expectedSizeBytes) &&
+        (request.expectedSizeBytes as number) > 0 &&
+        validSha256(request.expectedSha256);
   }
 }
 
@@ -118,6 +129,8 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
     correlationId: string;
     operation: ProviderStorageOperation;
     signal?: AbortSignal;
+    /** Required connection pin for internal scanner reads. */
+    expectedConnectionId?: string;
   }): Promise<ProviderStorageOperationResult> {
     if (!input || !input.operation || typeof input.requestId !== "string" ||
         !input.requestId.trim() || input.requestId.length > 128 ||
@@ -127,7 +140,9 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
     if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
     const capability = CAPABILITY_BY_OPERATION[input.operation.kind];
     if (!capability || !validText(input.tenantId, 128) || !validText(input.applicationId, 128) ||
-        !validOperationRequest(input.operation)) {
+        !validOperationRequest(input.operation) ||
+        (input.operation.kind === "read_object_internal" && !validText(input.expectedConnectionId, 128)) ||
+        (input.expectedConnectionId !== undefined && !validText(input.expectedConnectionId, 128))) {
       throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
     }
 
@@ -135,11 +150,13 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
       tenantId: input.tenantId,
       applicationId: input.applicationId,
       capability,
+      ...(input.expectedConnectionId !== undefined ? { expectedConnectionId: input.expectedConnectionId } : {}),
     });
     if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
     const selection = resolved.runtime.selection;
     if (selection.tenantId !== input.tenantId || selection.applicationId !== input.applicationId ||
-        selection.capabilityKey !== capability || resolved.runtime.capability !== capability) {
+        selection.capabilityKey !== capability || resolved.runtime.capability !== capability ||
+        (input.expectedConnectionId !== undefined && selection.connectionId !== input.expectedConnectionId)) {
       throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH");
     }
 
@@ -212,6 +229,21 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
       case "scan_object":
         if (!driver.capabilities.malwareScan) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING");
         return driver.scanObject(context, input.operation.request, input.requestId, input.signal);
+      case "read_object_internal": {
+        if (!driver.capabilities.internalObjectRead || typeof driver.readObjectInternal !== "function") {
+          throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING");
+        }
+        const stream = await driver.readObjectInternal(context, input.operation.request, input.requestId, input.signal);
+        if (!stream || typeof stream[Symbol.asyncIterator] !== "function") {
+          throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
+        }
+        return verifiedProviderInternalObjectChunks({
+          source: stream,
+          expectedSizeBytes: input.operation.request.expectedSizeBytes,
+          expectedSha256: input.operation.request.expectedSha256,
+          signal: input.signal,
+        });
+      }
     }
   }
 }
