@@ -80,7 +80,7 @@ test("MongoDB workflow grant resolver scopes active grants and binds lookup to t
  const database = { collection(name) {
   assert.equal(name, "eper_workflow_authorization_grants");
   return {
-   async findOne(filter, options) { lookup = { filter, options }; return { roleId: "operator" }; },
+   async updateOne(filter, update, options) { lookup = { filter, update, options }; return { matchedCount: 1 }; },
    async createIndex(keys, options) { lookup.index = { keys, options }; return "grant-scope"; },
   };
  }};
@@ -96,12 +96,13 @@ test("MongoDB workflow grant resolver scopes active grants and binds lookup to t
   permissions: { $in: ["workflow:act", "workflow:admin"] },
  });
  assert.equal(lookup.options.session, session);
+ assert.deepEqual(lookup.update, { $inc: { authorizationFence: 1 } });
  await ensureMongoWorkflowAuthorizationIndexes(database);
  assert.equal(lookup.index.options.name, "eper_workflow_authorization_grant_scope");
  const indexedCollections = [];
  const factoryDatabase = { collection(name) {
   indexedCollections.push(name);
-  return { async createIndex() { return name + "-index"; }, async findOne() { return null; } };
+  return { async createIndex() { return name + "-index"; }, async updateOne() { return { matchedCount: 0 }; } };
  }};
  const adapter = await createMongoApplicationDataAdapter(factoryDatabase);
  assert.ok(adapter);
@@ -111,7 +112,7 @@ test("MongoDB workflow grant resolver scopes active grants and binds lookup to t
 test("MongoDB workflow grant resolver rejects missing and revoked grants", async () => {
  const { createMongoWorkflowAuthorizer } = await import("../dist/packages/application-data/mongo-workflow-authorization.js");
  const session = { async withTransaction(work) { return work(); }, async endSession() {} };
- const authorize = createMongoWorkflowAuthorizer({ collection() { return { async findOne() { return null; } }; } });
+ const authorize = createMongoWorkflowAuthorizer({ collection() { return { async updateOne() { return { matchedCount: 0 }; } }; } });
  await assert.rejects(() => authorize(session, {
   tenantId: "tenant-a", applicationId: "app-a", actorId: "actor-a",
   correlationId: "corr-a", requirementId: "REQ-001",
