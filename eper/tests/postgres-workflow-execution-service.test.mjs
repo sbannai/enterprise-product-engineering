@@ -142,7 +142,10 @@ test("workflow transition fails closed while an application-data intent is unrec
     }),
     /WORKFLOW_EXECUTION_APPLICATION_DATA_PENDING/,
   );
-  assert.ok(calls.some(call => call.sql.includes("FROM eper_workflow_application_data_intents")));
+  const instanceLockIndex = calls.findIndex(call => call.sql.includes("FROM eper_workflow_instances") && call.sql.includes("FOR UPDATE"));
+  const intentLockIndex = calls.findIndex(call => call.sql.includes("FROM eper_workflow_application_data_intents") && call.sql.includes("FOR SHARE"));
+  assert.ok(instanceLockIndex >= 0, "workflow instance must be locked before checking intents");
+  assert.ok(intentLockIndex > instanceLockIndex, "intent status must be checked under the instance lock");
   assert.ok(calls.some(call => call.sql === "ROLLBACK"));
   assert.equal(calls.some(call => call.sql.includes("UPDATE eper_workflow_instances")), false);
 });
