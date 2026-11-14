@@ -990,8 +990,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
     }
 
-    const applicationDataModelCollection = /^\\/admin\\/applications\\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\\/application-data-models$/.exec(requestUrl.pathname);
-    const applicationDataModelTransition = /^\\/admin\\/applications\\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\\/application-data-models\\/([A-Za-z][A-Za-z0-9._-]{0,127})\\/([1-9][0-9]*)\\/(activate|retire)$/.exec(requestUrl.pathname);
+    const applicationDataModelCollection = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/application-data-models$/.exec(requestUrl.pathname);
+    const applicationDataModelTransition = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/application-data-models\/([A-Za-z][A-Za-z0-9._-]{0,127})\/([1-9][0-9]*)\/(activate|retire)$/.exec(requestUrl.pathname);
     if (applicationDataModelCollection || applicationDataModelTransition) {
       if (process.env.EPER_APPLICATION_DATA_MODEL_ADMIN_API_ENABLED !== "true" ||
           process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
