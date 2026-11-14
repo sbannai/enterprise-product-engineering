@@ -74,7 +74,7 @@ test("Customer Admin creates a model draft using server-derived scope and actor 
     assert.equal(calls.length, 1);
     assert.deepEqual(calls[0].context, {
       tenantId: "tenant-a", applicationId: "app-a", actorId: "admin-a", roleId: "role-a",
-      correlationId: calls[0].context.correlationId, requirementId: "application-data-model-authoring",
+      correlationId: calls[0].context.correlationId, requirementId: "REQ-46301",
       environment: "sandbox", serviceVersion: undefined,
     });
     assert.equal(calls[0].input.entityType, "Order");
