@@ -115,6 +115,15 @@ test("publisher rejects draft definitions and malformed activity graphs before d
     }),
     error => error.code === "WORKFLOW_PUBLISH_UNKNOWN_NEXT_ACTIVITY",
   );
+  await assert.rejects(
+    new WorkflowDefinitionPublisher(pool).publish(context, {
+      ...definition,
+      activities: [{ ...definition.activities[0], applicationDataBinding: {
+        requirementId: "REQ-001", entityType: "Order", operation: "upsert",
+      } }],
+    }),
+    error => error.code === "WORKFLOW_PUBLISH_INVALID_ACTIVITY",
+  );
   assert.equal(calls.length, 0);
 });
 
