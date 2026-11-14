@@ -11,6 +11,7 @@ import { PostgresApplicationDataAdapter } from "../dist/packages/application-dat
 import { ApplicationDataWorkflowActivity } from "../dist/packages/application-data/workflow-binding.js";
 import { ApplicationDataActivityIntentWorker } from "../dist/packages/workflows/application-data-activity-intent-worker.js";
 import { ApplicationDataIntentReconciler } from "../dist/packages/workflows/application-data-intent-reconciler.js";
+import { PostgresApplicationDataModelAuthoringService } from "../dist/packages/application-data/model-authoring.js";
 
 const databaseConfigured = Boolean(process.env.EPER_PAYMENT_DATABASE_URL || process.env.DATABASE_URL);
 
@@ -261,3 +262,105 @@ test("PostgreSQL workflow application-data activity writes once and advances onc
       await pool.end();
     }
   });
+
+
+test("PostgreSQL model authoring enforces versioning and atomically audits schema activation and retirement", { skip: !databaseConfigured }, async () => {
+  const pool = createPostgresPaymentPool();
+  const suffix = randomUUID().replace(/-/g, "");
+  const tenantId = "model-author-tenant-" + suffix;
+  const applicationId = "model-author-app-" + suffix;
+  const actorId = "model-author-actor-" + suffix;
+  const roleId = "model-author-role-" + suffix;
+  const correlationId = "model-author-corr-" + suffix;
+  const environment = "sandbox";
+  const roleStore = new PostgresWorkflowRoleDefinitionStore(pool);
+  const assignmentStore = new PostgresWorkflowActorRoleAssignmentStore(pool);
+  const service = new PostgresApplicationDataModelAuthoringService(pool);
+  const context = {
+    tenantId, applicationId, actorId, roleId, correlationId,
+    requirementId: "REQ-46301", environment,
+  };
+  try {
+    await roleStore.assertReady();
+    await assignmentStore.assertReady();
+    const setup = await pool.connect();
+    try {
+      await setup.query(
+        `INSERT INTO eper_tenant_application_assignment
+          (tenant_id, application_id, assignment_status, assigned_by, updated_by)
+         VALUES ($1,$2,'active',$3,$3)`,
+        [tenantId, applicationId, actorId],
+      );
+      await setup.query(
+        `INSERT INTO eper_actor_application_assignment
+          (tenant_id, actor_id, application_id, assignment_status, assigned_by, updated_by)
+         VALUES ($1,$2,$3,'active',$2,$2)`,
+        [tenantId, actorId, applicationId],
+      );
+    } finally { setup.release(); }
+    await roleStore.replace({
+      tenantId, applicationId, roleId, name: "Application model administrator",
+      permissions: ["workflow:admin"], delegable: false, status: "active",
+      expectedVersion: 0, changedBy: actorId, environment, correlationId,
+    });
+    await assignmentStore.assign({
+      tenantId, applicationId, actorId, roleId, changedBy: actorId,
+      expectedVersion: 0, environment, correlationId,
+    });
+
+    const first = await service.createDraft(context, {
+      entityType: "Order", expectedVersion: 0,
+      fields: [{ id: "total", type: "number", required: true }],
+    });
+    assert.equal(first.version, 1);
+    await service.activate(context, "Order", 1);
+    const second = await service.createDraft(context, {
+      entityType: "Order", expectedVersion: 1,
+      fields: [
+        { id: "total", type: "number", required: true },
+        { id: "fulfillmentMode", type: "string" },
+      ],
+    });
+    assert.equal(second.version, 2);
+    await assert.rejects(
+      () => service.createDraft(context, {
+        entityType: "Order", expectedVersion: 1,
+        fields: [{ id: "total", type: "number" }],
+      }),
+      /APPLICATION_DATA_SCHEMA_VERSION_CONFLICT/,
+    );
+    await service.activate(context, "Order", 2);
+    await service.retire(context, "Order", 2);
+
+    const models = await pool.query(
+      `SELECT version, status FROM eper_application_data_models
+        WHERE tenant_id=$1 AND application_id=$2 AND entity_type='Order'
+        ORDER BY version`,
+      [tenantId, applicationId],
+    );
+    assert.deepEqual(models.rows.map(row => [row.version, row.status]), [
+      [1, "RETIRED"], [2, "RETIRED"],
+    ]);
+    const audit = await pool.query(
+      `SELECT action FROM eper_audit_events
+        WHERE tenant_id=$1 AND application_id=$2 AND correlation_id=$3
+        ORDER BY occurred_at, event_id`,
+      [tenantId, applicationId, correlationId],
+    );
+    assert.deepEqual(audit.rows.map(row => row.action).sort(), [
+      "APPLICATION_DATA_MODEL_ACTIVATED",
+      "APPLICATION_DATA_MODEL_DRAFT_CREATED",
+      "APPLICATION_DATA_MODEL_DRAFT_CREATED",
+      "APPLICATION_DATA_MODEL_RETIRED",
+      "APPLICATION_DATA_MODEL_RETIRED",
+    ].sort());
+    const outbox = await pool.query(
+      `SELECT event_type FROM transactional_outbox
+        WHERE tenant_id=$1 AND correlation_id=$2`,
+      [tenantId, correlationId],
+    );
+    assert.equal(outbox.rows.length, 5);
+  } finally {
+    await pool.end();
+  }
+});
