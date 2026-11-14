@@ -189,39 +189,36 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
     const requestHash=key ? applicationDataUpdateHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected,patch}) : undefined;
     const idempotencyId=key ? this.key([c.tenantId,c.applicationId,key]) : undefined;
     try {
-      return await this.transaction(async session => {
-      const key=c.idempotencyKey;
-      const requestHash=key ? applicationDataUpdateHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected,patch}) : undefined;
-      const idempotencyId=key ? this.key([c.tenantId,c.applicationId,key]) : undefined;
-      if (key && requestHash && idempotencyId) {
+        return await this.transaction(async session => {
+        if (key && requestHash && idempotencyId) {
         const prior=await this.idempotency().findOne({_id:idempotencyId},{session});
         if (prior) {
           if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
           return prior.response as ApplicationDataRecord;
         }
-      }
-      if (patch.data) await this.lockRelationshipTargets(session,c,relationships,patch.data);
-      const _id=this.key([c.tenantId,c.applicationId,e,id]);
-      const current=await this.records().findOne({ _id, version:expected },{session});
-      if (!current) {
+        }
+        if (patch.data) await this.lockRelationshipTargets(session,c,relationships,patch.data);
+        const _id=this.key([c.tenantId,c.applicationId,e,id]);
+        const current=await this.records().findOne({ _id, version:expected },{session});
+        if (!current) {
         const exists=await this.records().findOne({ _id },{session});
         throw new Error(exists ? "APPLICATION_DATA_VERSION_CONFLICT" : "APPLICATION_DATA_RECORD_NOT_FOUND");
-      }
-      const next={ ...current, ...patch, version:expected+1, updatedAt:new Date().toISOString() };
-      const replaced=await this.records().replaceOne({ _id, version:expected },next,{session});
-      if (!replaced.matchedCount) throw new Error("APPLICATION_DATA_VERSION_CONFLICT");
-      const saved=this.clean(next) as unknown as ApplicationDataRecord;
-      await this.evidence(session,c,"APPLICATION_DATA_UPDATED",saved);
-      if (key && requestHash && idempotencyId) await this.idempotency().insertOne({_id:idempotencyId,tenantId:c.tenantId,applicationId:c.applicationId,
+        }
+        const next={ ...current, ...patch, version:expected+1, updatedAt:new Date().toISOString() };
+        const replaced=await this.records().replaceOne({ _id, version:expected },next,{session});
+        if (!replaced.matchedCount) throw new Error("APPLICATION_DATA_VERSION_CONFLICT");
+        const saved=this.clean(next) as unknown as ApplicationDataRecord;
+        await this.evidence(session,c,"APPLICATION_DATA_UPDATED",saved);
+        if (key && requestHash && idempotencyId) await this.idempotency().insertOne({_id:idempotencyId,tenantId:c.tenantId,applicationId:c.applicationId,
         idempotencyKey:key,requestHash,response:saved,createdAt:new Date().toISOString()},{session});
-      return saved;
+        return saved;
       });
     } catch (error) {
-      if ((error as {code?:number})?.code !== 11000 || !key || !requestHash || !idempotencyId) throw error;
-      const prior=await this.idempotency().findOne({_id:idempotencyId});
-      if (!prior) throw error;
-      if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
-      return prior.response as ApplicationDataRecord;
+        if ((error as {code?:number})?.code !== 11000 || !key || !requestHash || !idempotencyId) throw error;
+        const prior=await this.idempotency().findOne({_id:idempotencyId});
+        if (!prior) throw error;
+        if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+        return prior.response as ApplicationDataRecord;
     }
   }
   async getIdempotentDelete(c: ApplicationDataContext, e: string, id: string, expected: number): Promise<boolean> {
