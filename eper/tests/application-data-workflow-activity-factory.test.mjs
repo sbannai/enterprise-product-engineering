@@ -123,3 +123,38 @@ test("MongoDB workflow grant resolver rejects missing and revoked grants", async
   workflowPermission: "workflow:approve",
  }), /APPLICATION_DATA_WORKFLOW_PERMISSION_REVOKED/);
 });
+
+test("MongoDB adapter revalidates the concrete grant before a scoped record read in one session", async () => {
+ const { MongoApplicationDataAdapter } = await import("../dist/packages/application-data/mongo-adapter.js");
+ const session = { async withTransaction(work) { return work(); }, async endSession() {} };
+ let grantSession, recordSession;
+ const record = {
+  _id: '["tenant-a","app-a","Order","order-1"]',
+  tenantId: "tenant-a", applicationId: "app-a", entityType: "Order", id: "order-1",
+  schemaVersion: 1, version: 1, state: "ACTIVE", data: { total: 9 },
+  createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z",
+ };
+ const database = {
+  client: { startSession() { return session; } },
+  collection(name) {
+   if (name === "eper_workflow_authorization_grants") return {
+    async updateOne(_filter, _update, options) { grantSession = options.session; return { matchedCount: 1 }; },
+   };
+   if (name === "eper_application_data_records") return {
+    async findOne(_filter, options) { recordSession = options.session; return record; },
+   };
+   throw new Error("unexpected collection " + name);
+  },
+ };
+ const adapter = new MongoApplicationDataAdapter(database, async (usedSession) => {
+  grantSession = usedSession;
+ });
+ const found = await adapter.get({
+  tenantId: "tenant-a", applicationId: "app-a", actorId: "actor-a",
+  correlationId: "corr-a", requirementId: "REQ-001", workflowRoleId: "operator",
+  workflowPermission: "workflow:act",
+ }, "Order", "order-1");
+ assert.equal(found.id, "order-1");
+ assert.equal(grantSession, session);
+ assert.equal(recordSession, session);
+});
