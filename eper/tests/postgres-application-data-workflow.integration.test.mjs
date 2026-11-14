@@ -85,7 +85,7 @@ test("PostgreSQL workflow application-data activity writes once and advances onc
         id: workflowId, name: "Create customer order", status: "ACTIVE",
         activities: [{
           id: "create-order", title: "Create order", type: "TASK",
-          roleId, permission: "workflow:act", nextActivityIds: ["confirm-order", "manual-review"],
+          roleId, permission: "workflow:act", nextActivityIds: ["read-order", "manual-review"],
           routingRuleIds: ["created-record-version-present"],
           fields: [
             { id: "orderId", type: "text", required: true },
