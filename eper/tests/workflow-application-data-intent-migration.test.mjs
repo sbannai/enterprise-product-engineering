@@ -10,6 +10,9 @@ test("workflow application-data intent migration provides durable idempotent wor
   assert.match(sql, /request_fingerprint char\(64\)/);
   assert.match(sql, /intent_status IN \('pending','processing','succeeded','failed','dead_letter'\)/);
   assert.match(sql, /claim_generation bigint NOT NULL DEFAULT 0/);
+  assert.match(sql, /actor_id varchar\(128\) NOT NULL/);
+  assert.match(sql, /correlation_id varchar\(128\) NOT NULL/);
+  assert.match(sql, /requirement_id varchar\(128\) NOT NULL/);
   assert.match(sql, /FORCE ROW LEVEL SECURITY/);
   assert.match(sql, /current_setting\('eper\.tenant_id', true\)/);
   assert.match(sql, /current_setting\('eper\.application_id', true\)/);
