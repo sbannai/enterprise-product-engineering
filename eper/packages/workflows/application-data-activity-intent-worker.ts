@@ -153,7 +153,10 @@ export class ApplicationDataActivityIntentWorker {
     } catch (error) {
       const errorCode = (error instanceof Error ? error.message : "WORKFLOW_APPLICATION_DATA_INTENT_FAILED").slice(0, 2000);
       const deadLetter = Number(intent.attempts ?? 1) >= this.maxAttempts;
-      await this.finish(intent, deadLetter ? "dead_letter" : "pending", undefined, errorCode);
+      const recorded = await this.finish(intent, deadLetter ? "dead_letter" : "pending", undefined, errorCode);
+      if (!recorded) {
+        return { status: "retrying", intentId: intent.intent_id, errorCode: "WORKFLOW_APPLICATION_DATA_INTENT_LEASE_LOST" };
+      }
       return { status: deadLetter ? "dead_letter" : "retrying", intentId: intent.intent_id, errorCode };
     }
     const completed = await this.finish(intent, "succeeded", result);
