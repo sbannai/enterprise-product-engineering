@@ -15,6 +15,8 @@ interface IntentRow {
   instance_id: string;
   activity_execution_id: string;
   actor_id: string;
+  actor_role_id: string | null;
+  required_permission: "workflow:act" | "workflow:approve" | null;
   correlation_id: string;
   requirement_id: string;
   idempotency_key: string;
@@ -44,7 +46,7 @@ function canonical(value: unknown): string {
 /** Shared fingerprint contract for workflow intent creation and execution. */
 export function applicationDataIntentFingerprint(intent: {
   tenantId: string; applicationId: string; instanceId: string; activityExecutionId: string;
-  actorId: string; correlationId: string; requirementId: string; idempotencyKey: string;
+  actorId: string; actorRoleId: string; requiredPermission: "workflow:act" | "workflow:approve";\n  correlationId: string; requirementId: string; idempotencyKey: string;
   entityType: string; operation: "create" | "update" | "delete";
   binding: ApplicationDataWorkflowBinding; input: Record<string, unknown>;
 }): string {
@@ -134,7 +136,7 @@ export class ApplicationDataActivityIntentWorker {
       const fingerprint = applicationDataIntentFingerprint({
         tenantId: intent.tenant_id, applicationId: intent.application_id,
         instanceId: intent.instance_id, activityExecutionId: intent.activity_execution_id,
-        actorId: intent.actor_id, correlationId: intent.correlation_id,
+        actorId: intent.actor_id, actorRoleId: intent.actor_role_id ?? "",\n        requiredPermission: intent.required_permission ?? "workflow:act", correlationId: intent.correlation_id,
         requirementId: intent.requirement_id, idempotencyKey: intent.idempotency_key,
         entityType: intent.entity_type, operation: intent.operation, binding, input,
       });
@@ -144,8 +146,7 @@ export class ApplicationDataActivityIntentWorker {
       const context: ApplicationDataContext = {
         tenantId: intent.tenant_id,
         applicationId: intent.application_id,
-        actorId: intent.actor_id,
-        correlationId: intent.correlation_id,
+        actorId: intent.actor_id,\n        workflowRoleId: intent.actor_role_id ?? undefined,\n        workflowPermission: intent.required_permission ?? undefined,\n        correlationId: intent.correlation_id,
         requirementId: intent.requirement_id,
         idempotencyKey: intent.idempotency_key,
       };
