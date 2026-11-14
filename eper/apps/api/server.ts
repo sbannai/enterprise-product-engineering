@@ -1028,7 +1028,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         }
         const context = {
           tenantId: identity.tenantId, applicationId, actorId: identity.actorId, roleId: authoringRoleId,
-          correlationId: resolveApiRequestId(request), requirementId: "application-data-model-authoring",
+          correlationId: resolveApiRequestId(request), requirementId: "REQ-46301",
           environment: options.adminConfigEnvironment ?? "sandbox", serviceVersion: options.serviceVersion,
         };
         if (applicationDataModelCollection) {
