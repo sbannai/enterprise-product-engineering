@@ -40,3 +40,15 @@ test("workflow instance can have only one unadvanced application-data intent", a
   assert.match(sql, /ON eper_workflow_application_data_intents \(tenant_id, application_id, instance_id\)/);
   assert.match(sql, /WHERE intent_status <> 'advanced'/);
 });
+
+
+test("successful application-data writes have a separately fenced reconciliation lease", async () => {
+  const sql = await readFile(new URL("../packages/workflows/migrations/021_application_data_reconciliation_lease.sql", import.meta.url), "utf8");
+  assert.match(sql, /reconciliation_status IN \('pending','processing','completed'\)/);
+  assert.match(sql, /reconciliation_claim_generation bigint NOT NULL DEFAULT 0/);
+  assert.match(sql, /reconciliation_locked_at IS NOT NULL/);
+  assert.match(sql, /reconciliation_locked_by IS NOT NULL/);
+  assert.match(sql, /intent_status = 'succeeded'[\s\S]*reconciliation_status IN \('pending','processing'\)/);
+  assert.match(sql, /intent_status = 'advanced'[\s\S]*reconciliation_status = 'completed'/);
+  assert.match(sql, /WHERE intent_status = 'succeeded'[\s\S]*reconciliation_status IN \('pending','processing'\)/);
+});
