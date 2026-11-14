@@ -53,7 +53,7 @@ export function readApplicationDataExecutorWorkerConfig(
  if(!/^[a-zA-Z0-9._:-]{8,128}$/.test(workerId)) throw new Error("APPLICATION_DATA_EXECUTOR_WORKER_ID_INVALID");
  return {
   databaseUrl,expectedDatabaseRole,workerId,
-  activityModulePath:resolveApplicationDataActivityModulePath(required(env,"EPER_APPLICATION_DATA_ACTIVITY_MODULE"),cwd),
+  activityModulePath:resolveApplicationDataActivityModulePath(env.EPER_APPLICATION_DATA_ACTIVITY_MODULE?.trim() || "./dist/apps/worker/application-data-activities/postgres.js",cwd),
   idlePollMs:bounded(env,"EPER_APPLICATION_DATA_EXECUTOR_IDLE_POLL_MS",1000,50,60000),
   maxContexts:bounded(env,"EPER_APPLICATION_DATA_EXECUTOR_MAX_CONTEXTS",1000,1,10000),
   leaseMilliseconds:bounded(env,"EPER_APPLICATION_DATA_EXECUTOR_LEASE_MS",60000,1000,3600000),
