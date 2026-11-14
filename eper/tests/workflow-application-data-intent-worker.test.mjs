@@ -9,7 +9,7 @@ test("intent worker executes its injected activity with trusted context and reco
     tenant_id: "tenant-a", application_id: "app-a",
     instance_id: "4c0a4c31-5b83-4eab-9f11-0e4a3e8e0b1a",
     activity_execution_id: "b93c16cc-1a8e-4b75-8a5a-2b6d3f5e7c11",
-    actor_id: "actor-a", correlation_id: "corr-a", requirement_id: "req-a",
+    actor_id: "actor-a", actor_role_id: "operator", required_permission: "workflow:act", correlation_id: "corr-a", requirement_id: "req-a",
     idempotency_key: "workflow-intent-key-0001",
     entity_type: "Order", operation: "create",
     binding: { entityType: "Order", operation: "create", recordIdField: "id", dataField: "data" },
@@ -19,6 +19,7 @@ test("intent worker executes its injected activity with trusted context and reco
   row.request_fingerprint = applicationDataIntentFingerprint({
     tenantId: row.tenant_id, applicationId: row.application_id, instanceId: row.instance_id,
     activityExecutionId: row.activity_execution_id, actorId: row.actor_id,
+    actorRoleId: row.actor_role_id, requiredPermission: row.required_permission,
     correlationId: row.correlation_id, requirementId: row.requirement_id,
     idempotencyKey: row.idempotency_key, entityType: row.entity_type,
     operation: row.operation, binding: row.binding, input: row.input,
@@ -42,7 +43,7 @@ test("intent worker executes its injected activity with trusted context and reco
   const result = await worker.runOnce("tenant-a", "app-a");
   assert.equal(result.status, "succeeded");
   assert.equal(execution.context.idempotencyKey, row.idempotency_key);
-  assert.equal(execution.context.actorId, "actor-a");
+  assert.equal(execution.context.actorId, "actor-a");\n  assert.equal(execution.context.workflowRoleId, "operator");\n  assert.equal(execution.context.workflowPermission, "workflow:act");
   assert.equal(execution.binding.entityType, "Order");
   assert.equal(execution.input.id, "order-1");
   assert.ok(statements.some(item => item.sql.includes("FOR UPDATE SKIP LOCKED")));
@@ -69,7 +70,7 @@ test("intent worker rejects tampered persisted input before invoking application
     tenant_id: "tenant-a", application_id: "app-a",
     instance_id: "4c0a4c31-5b83-4eab-9f11-0e4a3e8e0b1a",
     activity_execution_id: "b93c16cc-1a8e-4b75-8a5a-2b6d3f5e7c12",
-    actor_id: "actor-a", correlation_id: "corr-a", requirement_id: "req-a",
+    actor_id: "actor-a", actor_role_id: "operator", required_permission: "workflow:act", correlation_id: "corr-a", requirement_id: "req-a",
     idempotency_key: "workflow-intent-key-0002", entity_type: "Order", operation: "create",
     binding: { entityType: "Order", operation: "create", recordIdField: "id", dataField: "data" },
     input: { id: "order-tampered", data: { total: 125 } },
@@ -98,7 +99,7 @@ test("intent worker does not report dead-letter when its failure lease has been 
     tenant_id: "tenant-a", application_id: "app-a",
     instance_id: "4c0a4c31-5b83-4eab-9f11-0e4a3e8e0b1a",
     activity_execution_id: "b93c16cc-1a8e-4b75-8a5a-2b6d3f5e7c13",
-    actor_id: "actor-a", correlation_id: "corr-a", requirement_id: "req-a",
+    actor_id: "actor-a", actor_role_id: "operator", required_permission: "workflow:act", correlation_id: "corr-a", requirement_id: "req-a",
     idempotency_key: "workflow-intent-key-0003", entity_type: "Order", operation: "create",
     binding: { entityType: "Order", operation: "create", recordIdField: "id", dataField: "data" },
     input: { id: "order-tampered", data: { total: 125 } },
@@ -124,7 +125,7 @@ test("intent worker does not report dead-letter when its failure lease has been 
 test("intent fingerprint is stable across JSON key ordering but binds tenant and activity scope", () => {
   const base = {
     tenantId: "tenant-a", applicationId: "app-a", instanceId: "instance-a",
-    activityExecutionId: "execution-a", actorId: "actor-a", correlationId: "corr-a",
+    activityExecutionId: "execution-a", actorId: "actor-a", actorRoleId: "operator", requiredPermission: "workflow:act", correlationId: "corr-a",
     requirementId: "req-a", idempotencyKey: "workflow-intent-key-0004",
     entityType: "Order", operation: "create",
     binding: { entityType: "Order", operation: "create", recordIdField: "id", dataField: "data" },
@@ -151,7 +152,7 @@ test("intent worker rejects a binding whose entity or operation differs from the
     tenant_id: "tenant-a", application_id: "app-a",
     instance_id: "4c0a4c31-5b83-4eab-9f11-0e4a3e8e0b1a",
     activity_execution_id: "b93c16cc-1a8e-4b75-8a5a-2b6d3f5e7c14",
-    actor_id: "actor-a", correlation_id: "corr-a", requirement_id: "req-a",
+    actor_id: "actor-a", actor_role_id: "operator", required_permission: "workflow:act", correlation_id: "corr-a", requirement_id: "req-a",
     idempotency_key: "workflow-intent-key-0005",
     entity_type: "Order", operation: "create",
     binding: { entityType: "Customer", operation: "create", recordIdField: "id", dataField: "data" },
