@@ -65,9 +65,9 @@ run("Build", ["run", "build"]);
 const migrations = [
   "migrate:payments",
   "migrate:audit",
+  "migrate:capabilities",
   "migrate:workflows",
   "migrate:campaign-scheduler",
-  "migrate:capabilities",
   "migrate:ticketing",
   "migrate:identity",
 ];
