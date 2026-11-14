@@ -82,7 +82,7 @@ async function main(): Promise<void> {
 
     const contexts = new PostgresWorkflowOutboxContextSource(auditPool, config.maxContexts);
     const reconciler: ApplicationDataIntentReconciler = new ApplicationDataIntentReconciler(auditPool, {
-      workerId: config.workerId, leaseMilliseconds: config.leaseMilliseconds,
+      workerId: config.workerId, leaseMilliseconds: config.leaseMilliseconds, maxAttempts: config.maxAttempts,
       environment: config.environment, serviceVersion: process.env.EPER_SERVICE_VERSION,
     });
     const reconciliationProcess = new ApplicationDataReconciliationProcess(reconciler, contexts, {
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({
       event: "application_data_reconciliation_worker_started",
       workerId: config.workerId, databaseRole: config.expectedDatabaseRole,
-      maxContexts: config.maxContexts, idlePollMs: config.idlePollMs,
+      maxContexts: config.maxContexts, idlePollMs: config.idlePollMs, maxAttempts: config.maxAttempts,
     }));
     await reconciliationProcess.run(controller.signal);
   } finally {
