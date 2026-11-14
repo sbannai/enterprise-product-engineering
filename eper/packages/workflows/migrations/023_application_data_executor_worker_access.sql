@@ -25,12 +25,6 @@ GRANT SELECT ON eper_actor_application_assignment,
   eper_workflow_actor_role_assignment, eper_workflow_role_definition
   TO eper_application_data_executor_access;
 
--- PostgreSQL row-locking SELECTs require UPDATE privilege on at least one column.
--- Grant only the non-authoritative version counters so the executor can take
--- FOR SHARE locks without being able to change membership or permission fields.
-GRANT UPDATE (version) ON eper_actor_application_assignment,
-  eper_tenant_application_assignment, eper_workflow_actor_role_assignment,
-  eper_workflow_role_definition TO eper_application_data_executor_access;
 GRANT UPDATE (intent_status, attempts, available_at, locked_at, locked_by,
               claim_generation, result, last_error, completed_at, updated_at)
   ON eper_workflow_application_data_intents TO eper_application_data_executor_access;
