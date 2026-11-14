@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { PostgresApplicationDataModelAuthoringService } from "../dist/packages/application-data/model-authoring.js";
 
 const context = {
@@ -104,4 +105,13 @@ test("activating a draft retires and audits the prior active schema in the same 
  assert.equal(outbox.length, 2);
  assert.ok(activate > retire);
  assert.equal(statements.at(-2).sql, "COMMIT");
+});
+
+
+test("application data schema, records and idempotency tables force tenant and application row isolation", async () => {
+ const migration = await readFile(new URL("../packages/application-data/migrations/001_application_data.sql", import.meta.url), "utf8");
+ for (const table of ["eper_application_data_models", "eper_application_data_records", "eper_application_data_idempotency"]) {
+  assert.match(migration, new RegExp("ALTER TABLE " + table + " FORCE ROW LEVEL SECURITY"));
+  assert.match(migration, new RegExp("CREATE POLICY " + table + "_tenant_policy"));
+ }
 });
