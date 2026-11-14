@@ -3,6 +3,7 @@ import { MongoApplicationDataAdapter, type MongoSessionLike, type MongoWorkflowA
 
 interface MongoGrantCollection {
   findOne(filter: Record<string, unknown>, options?: Record<string, unknown>): Promise<Record<string, unknown> | null>;
+  updateOne(filter: Record<string, unknown>, update: Record<string, unknown>, options?: Record<string, unknown>): Promise<{ matchedCount?: number }>;
 }
 interface MongoAuthorizationDatabase {
   collection<T extends Record<string, unknown>>(name: string): MongoGrantCollection;
@@ -26,15 +27,20 @@ export function createMongoWorkflowAuthorizer(database: unknown): MongoWorkflowA
     const permissions = context.workflowPermission === "workflow:act"
       ? ["workflow:act", "workflow:admin"]
       : [context.workflowPermission];
-    const grant = await db.collection("eper_workflow_authorization_grants").findOne({
+    const scope = {
       tenantId: context.tenantId,
       applicationId: context.applicationId,
       actorId: context.actorId,
       roleId: context.workflowRoleId,
       status: "active",
       permissions: { $in: permissions },
-    }, { session });
-    if (!grant) throw new Error("APPLICATION_DATA_WORKFLOW_PERMISSION_REVOKED");
+    };
+    // A conditional write creates a document-level write conflict with concurrent revocation.
+    // A read-only snapshot lookup would not serialize revocation against this transaction.
+    const locked = await db.collection("eper_workflow_authorization_grants").updateOne(
+      scope, { $inc: { authorizationFence: 1 } }, { session },
+    );
+    if (!locked.matchedCount) throw new Error("APPLICATION_DATA_WORKFLOW_PERMISSION_REVOKED");
   };
 }
 
