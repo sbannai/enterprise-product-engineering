@@ -278,7 +278,7 @@ export class WorkflowConfigurationService {
         if (new Set(fieldIds).size !== fieldIds.length ||
             activity.fields.some((field) => !field || !this.validId(field.id) ||
               (field.label !== undefined && !this.validLabel(field.label, 200)) ||
-              !["text", "textarea", "number", "date", "select", "checkbox"].includes(field.type) ||
+              !["text", "textarea", "number", "date", "select", "checkbox", "json"].includes(field.type) ||
               (field.required !== undefined && typeof field.required !== "boolean") ||
               (field.options !== undefined && (!Array.isArray(field.options) ||
                 field.options.length > WorkflowConfigurationService.MAX_SELECT_OPTIONS ||
