@@ -6,3 +6,4 @@ export * from "./mongo-adapter.js";
 export * from "./workflow-binding.js";
 export * from "./idempotency.js";
 export * from "./mongo-workflow-authorization.js";
+export * from "./model-authoring.js";
