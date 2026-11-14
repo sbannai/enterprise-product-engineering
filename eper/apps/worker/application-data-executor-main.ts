@@ -56,16 +56,16 @@ async function main():Promise<void>{
  };
  for(const signal of ["SIGINT","SIGTERM"] as const){const handler=()=>shutdown(signal);handlers.set(signal,handler);process.once(signal,handler);}
  try{
-  const identity=await pool.query<{role_name:string;can_login:boolean;is_superuser:boolean;can_create_database:boolean;can_create_role:boolean;can_replicate:boolean;bypasses_rls:boolean;has_executor_access:boolean}>(`
+  const identity=await pool.query<{role_name:string;can_login:boolean;is_superuser:boolean;can_create_database:boolean;can_create_role:boolean;can_replicate:boolean;bypasses_rls:boolean;has_executor_access:boolean;inherits_role_privileges:boolean}>(`
    SELECT current_user::text AS role_name,r.rolcanlogin AS can_login,r.rolsuper AS is_superuser,
           r.rolcreatedb AS can_create_database,r.rolcreaterole AS can_create_role,
-          r.rolreplication AS can_replicate,r.rolbypassrls AS bypasses_rls,
+          r.rolreplication AS can_replicate,r.rolbypassrls AS bypasses_rls,r.rolinherit AS inherits_role_privileges,
           pg_has_role(current_user,'eper_application_data_executor_access','USAGE') AS has_executor_access
      FROM pg_roles r WHERE r.rolname=current_user
   `);
   const role=identity.rows[0];
   if(!role||role.role_name!==config.expectedDatabaseRole||!role.can_login||role.is_superuser||
-     role.can_create_database||role.can_create_role||role.can_replicate||role.bypasses_rls||!role.has_executor_access){
+     role.can_create_database||role.can_create_role||role.can_replicate||role.bypasses_rls||!role.has_executor_access||!role.inherits_role_privileges){
    throw new Error("APPLICATION_DATA_EXECUTOR_DATABASE_ROLE_INVALID");
   }
   await assertExecutorSchemaReady(pool);
