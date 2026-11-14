@@ -25,7 +25,8 @@
     "bench:postgres-api": "node scripts/postgres-capacity-api-bench.mjs",
     "observe:postgres-capacity": "node scripts/postgres-capacity-db-observer.mjs",
     "migrate:application-data": "node scripts/migrate-application-data.mjs",
-    "start:application-data-reconciliation-worker": "node dist/apps/worker/application-data-reconciliation-main.js"
+    "start:application-data-reconciliation-worker": "node dist/apps/worker/application-data-reconciliation-main.js",
+    "start:application-data-executor-worker": "node dist/apps/worker/application-data-executor-main.js"
   },
   "devDependencies": {
     "@types/node": "20.14.15",
