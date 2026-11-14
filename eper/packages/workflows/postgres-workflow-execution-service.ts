@@ -160,7 +160,9 @@ function validateActivityPayload(fields: WorkflowField[], payload: Record<string
       field.type === "number" && (typeof value !== "number" || !Number.isFinite(value)) ||
       field.type === "date" && (typeof value !== "string" || !Number.isFinite(Date.parse(value))) ||
       field.type === "checkbox" && typeof value !== "boolean" ||
-      field.type === "select" && (typeof value !== "string" || !field.options?.includes(value));
+      field.type === "select" && (typeof value !== "string" || !field.options?.includes(value)) ||
+      field.type === "json" && (!value || typeof value !== "object" || Array.isArray(value) ||
+        Buffer.byteLength(JSON.stringify(value)) > 65536);
     if (invalid) throw new WorkflowExecutionError("WORKFLOW_EXECUTION_FIELD_TYPE_INVALID:" + field.id, 422);
   }
 }
