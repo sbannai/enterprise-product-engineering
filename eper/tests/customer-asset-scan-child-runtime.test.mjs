@@ -179,3 +179,21 @@ test("child runtime rejects a malformed provider iterator without throwing", asy
   assert.equal(result.type, "failure");
   assert.equal(result.code, "SCANNER_BOOTSTRAP_FAILED");
 });
+
+test("child runtime permits only one consumer for the provider stream", async () => {
+  const source = { async *[Symbol.asyncIterator]() { yield new Uint8Array([1, 2, 3, 4]); } };
+  const { runtime } = makeRuntime({
+    stream: source,
+    scanner: {
+      async scan(value) {
+        const first = value.source[Symbol.asyncIterator]();
+        assert.throws(() => value.source[Symbol.asyncIterator](), /SCANNER_SOURCE_ALREADY_CLAIMED/);
+        for await (const chunk of { [Symbol.asyncIterator]() { return first; } }) void chunk;
+        return { scanStatus: "clean" };
+      },
+    },
+  });
+  const result = await runtime.execute(start(), signal());
+  assert.equal(result.type, "result");
+  assert.equal(result.scanStatus, "clean");
+});
