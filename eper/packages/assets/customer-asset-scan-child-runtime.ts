@@ -71,9 +71,6 @@ export class CustomerAssetScanChildRuntime {
     } catch {
       return failure("SCANNER_BOOTSTRAP_FAILED");
     }
-    // A provider adapter may settle after cancellation. Do not start scanner
-    // work against a stream returned after the parent has revoked this attempt.
-    if (signal.aborted) return failure("SCANNER_BOOTSTRAP_FAILED");
     if (!isAsyncIterable(providerStream)) return failure("SCANNER_BOOTSTRAP_FAILED");
 
     let exhausted = false;
@@ -84,6 +81,12 @@ export class CustomerAssetScanChildRuntime {
       iteratorClosed = true;
       await providerIterator.return?.();
     };
+    // A provider adapter may settle after cancellation. The returned stream
+    // may already own a socket/body, so close it before rejecting the attempt.
+    if (signal.aborted) {
+      try { await closeProviderIterator(); } catch { /* cancellation remains fail-closed */ }
+      return failure("SCANNER_BOOTSTRAP_FAILED");
+    }
     const verifiedSource: AsyncIterable<Uint8Array> = {
       async *[Symbol.asyncIterator]() {
         try {
