@@ -190,6 +190,10 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
             options.onError?.(error);
           } finally {
             clearInterval(renewTimer);
+            // Also cover early exits (claim lookup failure or missing session)
+            // that occur before the scanner execution block installs its own cleanup.
+            options.signal.removeEventListener("abort", abortScanOnShutdown);
+            scanController.abort();
             // Do not let a lease-renewal query outlive this job's lifecycle.
             await renewalInFlight;
           }
