@@ -24,6 +24,16 @@ export type CustomerAssetScanChildOutcome =
 
 const MAX_TIMEOUT_MS = 900_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 16_384;
+const ALLOWED_CHILD_ENVIRONMENT_KEYS = new Set([
+  "NODE_ENV",
+  "EPER_SCANNER_CHILD_SPIFFE_WORKLOAD_API_SOCKET",
+  "EPER_SCANNER_CHILD_EXPECTED_SPIFFE_ID",
+  "EPER_SCANNER_CHILD_SPIFFE_AUDIENCE",
+  "EPER_SCANNER_CHILD_COMPOSITION_MODULE",
+  "EPER_SCANNER_CHILD_TIMEOUT_MS",
+  "PGHOST", "PGPORT", "PGDATABASE", "PGUSER", "PGSSLMODE",
+  "PGSSLROOTCERT", "PGSSLCERT", "PGSSLKEY",
+]);
 
 /**
  * Runs one scanner attempt in a killable OS process. The caller supplies an
@@ -47,10 +57,9 @@ export async function runCustomerAssetScanChild(
   }
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(options.environment ?? {})) {
-    if (!/^[A-Z][A-Z0-9_]{0,127}$/.test(key) ||
-        /(?:^|_)(?:DATABASE_URL|DB_URL|PASSWORD|PRIVATE_KEY|SECRET)(?:_|$)/.test(key) ||
-        /^(?:NODE_OPTIONS|NODE_PATH|NODE_EXTRA_CA_CERTS|OPENSSL_CONF|OPENSSL_MODULES|SSLKEYLOGFILE|LD_PRELOAD|LD_LIBRARY_PATH|DYLD_INSERT_LIBRARIES|DYLD_LIBRARY_PATH)$/.test(key) ||
-        key.startsWith("DYLD_") || typeof value !== "string" || value.length > 4096) {
+    if (!ALLOWED_CHILD_ENVIRONMENT_KEYS.has(key) ||
+        typeof value !== "string" || value.length > 4096 ||
+        /[\\u0000-\\u001f\\u007f]/.test(value)) {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_ENVIRONMENT_INVALID");
     }
     env[key] = value;
