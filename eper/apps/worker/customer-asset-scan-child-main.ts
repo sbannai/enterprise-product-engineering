@@ -128,9 +128,10 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
         typeof module.createCustomerAssetScanChildRuntimeDependencies !== "function") {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_DATABASE_TLS_BOOTSTRAP_REQUIRED");
     }
-    bootstrapFailureCode = "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED";
+    bootstrapFailureCode = "SCANNER_TLS_BOOTSTRAP_FAILED";
     tlsBootstrap = await module.createCustomerAssetScanChildDatabaseTlsBootstrap({ env: process.env });
     assertCustomerAssetScanChildDatabaseTlsBootstrap(tlsBootstrap);
+    bootstrapFailureCode = "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED";
     tlsMaterial = await provisionCustomerAssetScanChildDatabaseTlsMaterial({
       identity: tlsBootstrap.identity,
       issuer: tlsBootstrap.issuer,
