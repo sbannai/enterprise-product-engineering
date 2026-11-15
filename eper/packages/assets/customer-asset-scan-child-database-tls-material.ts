@@ -34,6 +34,7 @@ export async function provisionCustomerAssetScanChildDatabaseTlsMaterial(input: 
   readonly issuer: Pick<CustomerAssetScanChildDatabaseCredentialIssuer, "issue">;
   readonly caPem: string;
   readonly signal?: AbortSignal;
+  readonly onStage?: (stage: "identity" | "key" | "issuer" | "certificate") => void;
 }): Promise<CustomerAssetScanChildDatabaseTlsMaterial> {
   let keyRequest: Awaited<ReturnType<typeof createCustomerAssetScanChildEphemeralKeyRequest>> | undefined;
   try {
@@ -45,10 +46,13 @@ export async function provisionCustomerAssetScanChildDatabaseTlsMaterial(input: 
       throw new Error("CA_MATERIAL_INVALID");
     }
     if (input.signal?.aborted) throw new Error("BOOTSTRAP_ABORTED");
+    input.onStage?.("identity");
     const workload = await input.identity.verifyCurrentProcessIdentity(input.signal);
     if (input.signal?.aborted) throw new Error("BOOTSTRAP_ABORTED");
+    input.onStage?.("key");
     keyRequest = await createCustomerAssetScanChildEphemeralKeyRequest();
     if (input.signal?.aborted) throw new Error("BOOTSTRAP_ABORTED");
+    input.onStage?.("issuer");
     const credential = await input.issuer.issue({ workload, csrPem: keyRequest.csrPem });
     if (!/^[a-z_][a-z0-9_]{0,62}$/.test(credential.databaseRole) ||
         !Number.isSafeInteger(credential.expiresAt) ||
@@ -63,6 +67,7 @@ export async function provisionCustomerAssetScanChildDatabaseTlsMaterial(input: 
     }
     if (input.signal?.aborted) throw new Error("BOOTSTRAP_ABORTED");
 
+    input.onStage?.("certificate");
     const directory = dirname(keyRequest.privateKeyPath);
     const caPath = join(directory, "database-ca.pem");
     const certificatePath = join(directory, "database-client.pem");
