@@ -64,7 +64,8 @@ test("scanner child supervisor enforces output and environment bounds", async ()
 
 test("scanner child environment rejects unapproved provider credentials and control characters", async () => {
   for (const key of ["AWS_ACCESS_KEY_ID", "AWS_SESSION_TOKEN", "GOOGLE_APPLICATION_CREDENTIALS",
-    "AZURE_CLIENT_SECRET", "PROVIDER_API_TOKEN", "CUSTOM_SECRET_VALUE"]) {
+    "AZURE_CLIENT_SECRET", "PROVIDER_API_TOKEN", "CUSTOM_SECRET_VALUE",
+    "PGUSER", "PGSSLMODE", "PGSSLROOTCERT", "PGSSLCERT", "PGSSLKEY"]) {
     await assert.rejects(runCustomerAssetScanChild({
       executable: node, args: ["-e", "process.exit(0)"], start: start(), timeoutMs: 2_000,
       environment: { [key]: "must-not-cross-process-boundary" },
