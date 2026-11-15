@@ -66,6 +66,15 @@ test("scanner child failure exposes only bounded stable error codes", () => {
     code: "SCANNER_EXECUTION_FAILED",
   };
   assert.equal(isCustomerAssetScanChildFailure(failure), true);
+  for (const code of [
+    "SCANNER_COMPOSITION_PATH_INVALID",
+    "SCANNER_COMPOSITION_MODULE_LOAD_FAILED",
+    "SCANNER_COMPOSITION_EXPORTS_INVALID",
+    "SCANNER_COMPOSITION_DEPENDENCIES_FAILED",
+    "SCANNER_COMPOSITION_CONTRACT_INVALID",
+  ]) {
+    assert.equal(isCustomerAssetScanChildFailure({ ...failure, code }), true, code);
+  }
   assert.equal(isCustomerAssetScanChildFailure({ ...failure, code: "provider-secret-error" }), false);
   assert.equal(isCustomerAssetScanChildFailure({ ...failure, rawError: "secret" }), false);
 });
