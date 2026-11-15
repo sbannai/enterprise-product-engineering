@@ -37,19 +37,28 @@ export class CustomerAssetScanChildRuntime {
     });
     if (signal.aborted) return failure("SCANNER_BOOTSTRAP_FAILED");
 
+    let workload;
+    try {
+      workload = await this.dependencies.identity.verifyCurrentProcessIdentity(signal);
+    } catch {
+      return failure("SCANNER_IDENTITY_FAILED");
+    }
     let context: CustomerAssetScanChildResolvedInput;
+    try {
+      context = await this.dependencies.input.resolve({ start, workload });
+    } catch {
+      return failure("SCANNER_INPUT_RESOLUTION_FAILED");
+    }
+    if (context.scannerServiceId !== start.scannerServiceId ||
+        context.tenantId !== start.input.tenantId ||
+        context.applicationId !== start.input.applicationId ||
+        context.assetId !== start.input.assetId ||
+        context.checksumSha256 !== start.input.checksumSha256.toLowerCase() ||
+        context.sizeBytes !== start.input.sizeBytes || context.mimeType !== start.input.mimeType) {
+      return failure("SCANNER_INPUT_RESOLUTION_FAILED");
+    }
     let providerStream: ProviderStorageOperationResult;
     try {
-      const workload = await this.dependencies.identity.verifyCurrentProcessIdentity(signal);
-      context = await this.dependencies.input.resolve({ start, workload });
-      if (context.scannerServiceId !== start.scannerServiceId ||
-          context.tenantId !== start.input.tenantId ||
-          context.applicationId !== start.input.applicationId ||
-          context.assetId !== start.input.assetId ||
-          context.checksumSha256 !== start.input.checksumSha256.toLowerCase() ||
-          context.sizeBytes !== start.input.sizeBytes || context.mimeType !== start.input.mimeType) {
-        return failure("SCANNER_BOOTSTRAP_FAILED");
-      }
       providerStream = await this.dependencies.provider.dispatch({
         tenantId: context.tenantId,
         applicationId: context.applicationId,
@@ -69,7 +78,7 @@ export class CustomerAssetScanChildRuntime {
         },
       });
     } catch {
-      return failure("SCANNER_BOOTSTRAP_FAILED");
+      return failure("SCANNER_PROVIDER_READ_FAILED");
     }
     if (!isAsyncIterable(providerStream)) return failure("SCANNER_BOOTSTRAP_FAILED");
 
