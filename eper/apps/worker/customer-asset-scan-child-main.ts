@@ -6,6 +6,8 @@ import { pathToFileURL } from "node:url";
 import { CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE } from "../../packages/assets/customer-asset-scan-child-spiffe-identity.js";
 import { assertTrustedCustomerAssetScanCompositionModule } from "../../packages/assets/customer-asset-scan-child-composition-loader.js";
 import { CustomerAssetScanChildRuntime } from "../../packages/assets/customer-asset-scan-child-runtime.js";
+import { provisionCustomerAssetScanChildDatabaseTlsMaterial } from "../../packages/assets/customer-asset-scan-child-database-tls-material.js";
+import { assertCustomerAssetScanChildDatabaseTlsBootstrap, type CustomerAssetScanChildDatabaseTlsBootstrap } from "../../packages/assets/customer-asset-scan-child-database-tls-bootstrap-contract.js";
 import { assertCustomerAssetScanChildRuntimeComposition, type CustomerAssetScanChildRuntimeComposition } from "../../packages/assets/customer-asset-scan-child-composition-contract.js";
 import {
   isCustomerAssetScanChildStart,
@@ -97,6 +99,8 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
 } else {
   let pool: { end(): Promise<void> } | undefined;
   let closeComposition: CustomerAssetScanChildRuntimeComposition["close"];
+  let tlsBootstrap: CustomerAssetScanChildDatabaseTlsBootstrap | undefined;
+  let tlsMaterial: Awaited<ReturnType<typeof provisionCustomerAssetScanChildDatabaseTlsMaterial>> | undefined;
   const controller = new AbortController();
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => controller.abort());
   try {
@@ -106,31 +110,49 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     const compositionPath = await assertTrustedCustomerAssetScanCompositionModule(
       resolveCompositionPath(required("EPER_SCANNER_CHILD_COMPOSITION_MODULE")),
     );
+    const module = await import(pathToFileURL(compositionPath).href) as {
+      createCustomerAssetScanChildDatabaseTlsBootstrap?: (input: {
+        env: NodeJS.ProcessEnv;
+      }) => Promise<CustomerAssetScanChildDatabaseTlsBootstrap> | CustomerAssetScanChildDatabaseTlsBootstrap;
+      createCustomerAssetScanChildRuntimeDependencies?: (input: {
+        pool: { end(): Promise<void>; query<T extends Record<string, unknown>>(text: string, values?: readonly unknown[]): Promise<{ rows: T[] }> };
+        env: NodeJS.ProcessEnv;
+        identity: CustomerAssetScanChildDatabaseTlsBootstrap["identity"];
+      }) => Promise<CustomerAssetScanChildRuntimeComposition> | CustomerAssetScanChildRuntimeComposition;
+    };
+    if (typeof module.createCustomerAssetScanChildDatabaseTlsBootstrap !== "function" ||
+        typeof module.createCustomerAssetScanChildRuntimeDependencies !== "function") {
+      throw new Error("CUSTOMER_ASSET_SCAN_CHILD_DATABASE_TLS_BOOTSTRAP_REQUIRED");
+    }
+    tlsBootstrap = await module.createCustomerAssetScanChildDatabaseTlsBootstrap({ env: process.env });
+    assertCustomerAssetScanChildDatabaseTlsBootstrap(tlsBootstrap);
+    tlsMaterial = await provisionCustomerAssetScanChildDatabaseTlsMaterial({
+      identity: tlsBootstrap.identity,
+      issuer: tlsBootstrap.issuer,
+      caPem: tlsBootstrap.caPem,
+      signal: controller.signal,
+    });
+    if (controller.signal.aborted) throw new Error("CUSTOMER_ASSET_SCAN_CHILD_BOOTSTRAP_ABORTED");
+
     const require = createRequire(import.meta.url);
     const pg = require("pg") as { Pool: new (options: Record<string, unknown>) => {
       end(): Promise<void>;
       query<T extends Record<string, unknown>>(text: string, values?: readonly unknown[]): Promise<{ rows: T[] }>;
     }};
     const databasePort = boundedInteger("PGPORT", 5432, 1, 65535);
-    const ca = await readDeploymentFile(required("PGSSLROOTCERT"));
-    const cert = await readDeploymentFile(required("PGSSLCERT"));
-    const key = await readDeploymentFile(required("PGSSLKEY"), true);
+    const ca = await readDeploymentFile(tlsMaterial.caPath);
+    const cert = await readDeploymentFile(tlsMaterial.certificatePath);
+    const key = await readDeploymentFile(tlsMaterial.privateKeyPath, true);
     const createdPool = new pg.Pool({
       host: required("PGHOST"), port: databasePort, database: required("PGDATABASE"),
-      user: required("PGUSER"), max: 2, connectionTimeoutMillis: 5000,
+      user: tlsMaterial.databaseRole, max: 2, connectionTimeoutMillis: 5000,
       statement_timeout: 15000, query_timeout: 20000, application_name: "eper-asset-scan-child",
       ssl: { ca, cert, key, rejectUnauthorized: true },
     });
     pool = createdPool;
-    const module = await import(pathToFileURL(compositionPath).href) as {
-      createCustomerAssetScanChildRuntimeDependencies?: (input: {
-        pool: typeof createdPool; env: NodeJS.ProcessEnv;
-      }) => Promise<CustomerAssetScanChildRuntimeComposition> | CustomerAssetScanChildRuntimeComposition;
-    };
-    if (typeof module.createCustomerAssetScanChildRuntimeDependencies !== "function") {
-      throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_FACTORY_REQUIRED");
-    }
-    const dependencies = await module.createCustomerAssetScanChildRuntimeDependencies({ pool: createdPool, env: process.env });
+    const dependencies = await module.createCustomerAssetScanChildRuntimeDependencies({
+      pool: createdPool, env: process.env, identity: tlsBootstrap.identity,
+    });
     if (dependencies && typeof dependencies === "object" && typeof dependencies.close === "function") {
       closeComposition = dependencies.close.bind(dependencies);
     }
@@ -151,5 +173,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
   } finally {
     await Promise.resolve().then(() => closeComposition?.()).catch(() => undefined);
     if (pool) await pool.end().catch(() => undefined);
+    await tlsMaterial?.cleanup().catch(() => {});
+    await Promise.resolve().then(() => tlsBootstrap?.close?.()).catch(() => undefined);
   }
 }
