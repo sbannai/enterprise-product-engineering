@@ -82,7 +82,7 @@ try {
     scanTimeoutMs: boundedInteger("EPER_CUSTOMER_ASSET_SCAN_TIMEOUT_MS", 120_000, 1_000, 900_000),
     // Never emit provider exceptions, opaque upload references, tenant IDs or session IDs to logs.
     onError() { console.error("EPER customer asset scan worker operation failed"); },
-    onJob(result) { console.log("EPER customer asset scan job outcome", result.outcome); },
+    onJob(result) { console.log("EPER customer asset scan job outcome", result.outcome, result.errorCode ?? ""); },
   });
 } finally {
   await pool.end();
