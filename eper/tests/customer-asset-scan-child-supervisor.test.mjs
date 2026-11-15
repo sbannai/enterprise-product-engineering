@@ -72,7 +72,7 @@ test("scanner child environment rejects unapproved provider credentials and cont
   }
   await assert.rejects(runCustomerAssetScanChild({
     executable: node, args: ["-e", "process.exit(0)"], start: start(), timeoutMs: 2_000,
-    environment: { NODE_ENV: "test\\nINJECTED=value" },
+    environment: { NODE_ENV: "test\nINJECTED=value" },
   }), /CUSTOMER_ASSET_SCAN_CHILD_ENVIRONMENT_INVALID/);
 });
 
