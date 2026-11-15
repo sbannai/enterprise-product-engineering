@@ -62,6 +62,20 @@ test("scanner child supervisor enforces output and environment bounds", async ()
 });
 
 
+test("scanner child environment rejects unapproved provider credentials and control characters", async () => {
+  for (const key of ["AWS_ACCESS_KEY_ID", "AWS_SESSION_TOKEN", "GOOGLE_APPLICATION_CREDENTIALS",
+    "AZURE_CLIENT_SECRET", "PROVIDER_API_TOKEN", "CUSTOM_SECRET_VALUE"]) {
+    await assert.rejects(runCustomerAssetScanChild({
+      executable: node, args: ["-e", "process.exit(0)"], start: start(), timeoutMs: 2_000,
+      environment: { [key]: "must-not-cross-process-boundary" },
+    }), /CUSTOMER_ASSET_SCAN_CHILD_ENVIRONMENT_INVALID/, key + " must not cross the process boundary");
+  }
+  await assert.rejects(runCustomerAssetScanChild({
+    executable: node, args: ["-e", "process.exit(0)"], start: start(), timeoutMs: 2_000,
+    environment: { NODE_ENV: "test\\nINJECTED=value" },
+  }), /CUSTOMER_ASSET_SCAN_CHILD_ENVIRONMENT_INVALID/);
+});
+
 test("scanner child receives only its explicit environment allowlist, never inherited parent secrets", async () => {
   const sentinel = "EPER_PARENT_SECRET_SENTINEL";
   const previous = process.env[sentinel];
