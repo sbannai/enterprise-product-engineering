@@ -189,3 +189,17 @@ test("scanner child supervisor rejects malformed executable and argument vectors
     start: start(), timeoutMs: 2_000,
   }), /CUSTOMER_ASSET_SCAN_CHILD_OPTIONS_INVALID/);
 });
+
+
+test("scanner child supervisor does not launch a process when cancellation predates the attempt", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(runCustomerAssetScanChild({
+    // A nonexistent executable proves the pre-aborted path returns before spawn.
+    executable: node + ".must-not-be-launched",
+    args: [],
+    start: start(),
+    timeoutMs: 2_000,
+    signal: controller.signal,
+  }), /CUSTOMER_ASSET_SCAN_CHILD_ABORTED/);
+});
