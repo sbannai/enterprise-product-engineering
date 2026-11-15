@@ -117,6 +117,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     const module = await import(pathToFileURL(compositionPath).href) as {
       createCustomerAssetScanChildDatabaseTlsBootstrap?: (input: {
         env: NodeJS.ProcessEnv;
+        onStage?: (stage: "sdk" | "identity" | "issuer" | "ca") => void;
       }) => Promise<CustomerAssetScanChildDatabaseTlsBootstrap> | CustomerAssetScanChildDatabaseTlsBootstrap;
       createCustomerAssetScanChildRuntimeDependencies?: (input: {
         pool: { end(): Promise<void>; query<T extends Record<string, unknown>>(text: string, values?: readonly unknown[]): Promise<{ rows: T[] }> };
@@ -129,7 +130,15 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_DATABASE_TLS_BOOTSTRAP_REQUIRED");
     }
     bootstrapFailureCode = "SCANNER_TLS_BOOTSTRAP_FAILED";
-    tlsBootstrap = await module.createCustomerAssetScanChildDatabaseTlsBootstrap({ env: process.env });
+    tlsBootstrap = await module.createCustomerAssetScanChildDatabaseTlsBootstrap({
+      env: process.env,
+      onStage(stage) {
+        bootstrapFailureCode = stage === "sdk" ? "SCANNER_TLS_BOOTSTRAP_FAILED" :
+          stage === "identity" ? "SCANNER_IDENTITY_FAILED" :
+          stage === "issuer" ? "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED" :
+          "SCANNER_CERTIFICATE_BOOTSTRAP_FAILED";
+      },
+    });
     bootstrapFailureCode = "SCANNER_TLS_CONTRACT_INVALID";
     assertCustomerAssetScanChildDatabaseTlsBootstrap(tlsBootstrap);
     bootstrapFailureCode = "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED";
