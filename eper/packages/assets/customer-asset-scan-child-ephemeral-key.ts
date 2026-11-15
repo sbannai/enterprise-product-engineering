@@ -1,5 +1,5 @@
 import { execFile as execFileCallback } from "node:child_process";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -24,7 +24,6 @@ export async function createCustomerAssetScanChildEphemeralKeyRequest():
   let directory: string | undefined;
   try {
     directory = await mkdtemp(join(tmpdir(), "eper-scan-child-key-"));
-    const { chmod } = await import("node:fs/promises");
     await chmod(directory, 0o700);
     const privateKeyPath = join(directory, "client-key.pem");
     const csrPath = join(directory, "client-request.pem");
@@ -38,6 +37,7 @@ export async function createCustomerAssetScanChildEphemeralKeyRequest():
       // its independently selected databaseRole.
       "-subj", "/CN=eper-scanner-child",
     ], { timeout: 15_000, maxBuffer: 16_384 });
+    await chmod(privateKeyPath, 0o600);
     const [keyMetadata, csrPem] = await Promise.all([
       stat(privateKeyPath),
       readFile(csrPath, "utf8"),
