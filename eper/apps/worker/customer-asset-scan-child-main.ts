@@ -115,7 +115,29 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
       resolveCompositionPath(required("EPER_SCANNER_CHILD_COMPOSITION_MODULE")),
     );
     bootstrapFailureCode = "SCANNER_COMPOSITION_MODULE_LOAD_FAILED";
-    const module = await import(pathToFileURL(compositionPath).href) as {
+    let module: {
+      createCustomerAssetScanChildDatabaseTlsBootstrap?: (input: {
+        env: NodeJS.ProcessEnv;
+        onStage?: (stage: "sdk" | "identity" | "issuer" | "ca") => void;
+      }) => Promise<CustomerAssetScanChildDatabaseTlsBootstrap> | CustomerAssetScanChildDatabaseTlsBootstrap;
+      createCustomerAssetScanChildRuntimeDependencies?: (input: {
+        pool: { end(): Promise<void>; query<T extends Record<string, unknown>>(text: string, values?: readonly unknown[]): Promise<{ rows: T[] }> };
+        env: NodeJS.ProcessEnv;
+        identity: CustomerAssetScanChildDatabaseTlsBootstrap["identity"];
+      }) => Promise<CustomerAssetScanChildRuntimeComposition> | CustomerAssetScanChildRuntimeComposition;
+    };
+    try {
+      module = await import(pathToFileURL(compositionPath).href) as typeof module;
+    } catch (error) {
+      const candidate = error && typeof error === "object" ? error as { code?: unknown; name?: unknown } : {};
+      bootstrapFailureCode = candidate.code === "ERR_MODULE_NOT_FOUND"
+        ? "SCANNER_COMPOSITION_MODULE_NOT_FOUND"
+        : candidate.name === "SyntaxError"
+          ? "SCANNER_COMPOSITION_MODULE_SYNTAX_INVALID"
+          : "SCANNER_COMPOSITION_MODULE_EVALUATION_FAILED";
+      throw error;
+    }
+    /* validated deployment-owned composition module */
       createCustomerAssetScanChildDatabaseTlsBootstrap?: (input: {
         env: NodeJS.ProcessEnv;
         onStage?: (stage: "sdk" | "identity" | "issuer" | "ca") => void;
