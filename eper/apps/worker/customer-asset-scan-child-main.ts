@@ -130,6 +130,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     }
     bootstrapFailureCode = "SCANNER_TLS_BOOTSTRAP_FAILED";
     tlsBootstrap = await module.createCustomerAssetScanChildDatabaseTlsBootstrap({ env: process.env });
+    bootstrapFailureCode = "SCANNER_TLS_CONTRACT_INVALID";
     assertCustomerAssetScanChildDatabaseTlsBootstrap(tlsBootstrap);
     bootstrapFailureCode = "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED";
     tlsMaterial = await provisionCustomerAssetScanChildDatabaseTlsMaterial({
