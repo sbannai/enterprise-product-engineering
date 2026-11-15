@@ -62,7 +62,7 @@ test("child runtime fails closed when provider authorization or object read fail
   const { runtime } = makeRuntime({ stream: undefined, dispatchError: new Error("sensitive provider detail") });
   const result = await runtime.execute(start(), signal());
   assert.equal(result.type, "failure");
-  assert.equal(result.code, "SCANNER_BOOTSTRAP_FAILED");
+  assert.equal(result.code, "SCANNER_PROVIDER_READ_FAILED");
   assert.equal(JSON.stringify(result).includes("sensitive"), false);
 });
 
