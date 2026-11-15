@@ -2,8 +2,10 @@ import type { CustomerAssetScanChildSpiffeIdentity } from "./customer-asset-scan
 import { isVerifiedCustomerAssetScanChildSpiffeIdentity } from "./customer-asset-scan-child-spiffe-identity.js";
 
 /**
- * Deployment-owned signer. It receives the CSR public key request and the
- * issuer-selected database role; it must never receive or return a private key.
+ * Deployment-owned signer. It must cryptographically validate the CSR signature,
+ * issue for its public key, ignore the CSR subject, set the certificate CN to
+ * databaseRole, add clientAuth EKU, enforce notAfter, and never receive or return
+ * a private key. This adapter cannot substitute for that real signer.
  */
 export interface CustomerAssetScanChildClientCertificateSigner {
   sign(input: {
@@ -42,8 +44,10 @@ function boundedPem(value: unknown, header: string): value is string {
  * This class is a contract adapter, not a production CA or SPIRE issuer.
  */
 export class CustomerAssetScanChildDatabaseCredentialIssuer {
+  private readonly roleBySpiffeId: ReadonlyMap<string, string>;
+
   constructor(
-    private readonly roleBySpiffeId: ReadonlyMap<string, string>,
+    roleBySpiffeId: ReadonlyMap<string, string>,
     private readonly signer: CustomerAssetScanChildClientCertificateSigner,
     private readonly lifetimeSeconds = 120,
     private readonly now: () => number = () => Math.floor(Date.now() / 1000),
@@ -51,12 +55,14 @@ export class CustomerAssetScanChildDatabaseCredentialIssuer {
     if (!Number.isSafeInteger(lifetimeSeconds) || lifetimeSeconds < 30 || lifetimeSeconds > 300) {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_CREDENTIAL_POLICY_INVALID");
     }
-    for (const [identity, role] of roleBySpiffeId) {
+    const snapshot = new Map(roleBySpiffeId);
+    for (const [identity, role] of snapshot) {
       if (!/^spiffe:\/\/[a-z0-9.-]+\/[A-Za-z0-9._~/-]+$/.test(identity) ||
           !/^[a-z_][a-z0-9_]{0,62}$/.test(role)) {
         throw new Error("CUSTOMER_ASSET_SCAN_CHILD_CREDENTIAL_POLICY_INVALID");
       }
     }
+    this.roleBySpiffeId = snapshot;
   }
 
   async issue(input: {
