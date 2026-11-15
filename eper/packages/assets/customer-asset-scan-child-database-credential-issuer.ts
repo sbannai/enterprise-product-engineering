@@ -78,8 +78,15 @@ export class CustomerAssetScanChildDatabaseCredentialIssuer {
       const databaseRole = this.roleBySpiffeId.get(workload.spiffeId);
       if (!databaseRole) throw new Error("identity not entitled");
       const issuedAt = this.now();
-      const expiresAt = issuedAt + this.lifetimeSeconds;
-      if (!Number.isSafeInteger(issuedAt) || issuedAt <= 0) throw new Error("invalid clock");
+      if (!Number.isSafeInteger(issuedAt) || issuedAt <= 0 ||
+          !Number.isSafeInteger(workload.expiresAt) || workload.expiresAt <= issuedAt) {
+        throw new Error("invalid or expired workload identity");
+      }
+      // Never let a database credential outlive the SVID that authorized it.
+      const expiresAt = Math.min(issuedAt + this.lifetimeSeconds, workload.expiresAt);
+      if (!Number.isSafeInteger(expiresAt) || expiresAt <= issuedAt) {
+        throw new Error("invalid credential expiry");
+      }
       const clientCertificatePem = await this.signer.sign({
         csrPem: input.csrPem,
         databaseRole,
