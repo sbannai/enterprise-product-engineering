@@ -108,6 +108,9 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     if (required("EPER_SCANNER_CHILD_SPIFFE_AUDIENCE") !== CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE) {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_AUDIENCE_INVALID");
     }
+    // Distinguish deployment module resolution/import from TLS credential
+    // bootstrap. Both remain fail-closed and expose only bounded protocol codes.
+    bootstrapFailureCode = "SCANNER_COMPOSITION_FAILED";
     const compositionPath = await assertTrustedCustomerAssetScanCompositionModule(
       resolveCompositionPath(required("EPER_SCANNER_CHILD_COMPOSITION_MODULE")),
     );
@@ -125,9 +128,9 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
         typeof module.createCustomerAssetScanChildRuntimeDependencies !== "function") {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_DATABASE_TLS_BOOTSTRAP_REQUIRED");
     }
+    bootstrapFailureCode = "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED";
     tlsBootstrap = await module.createCustomerAssetScanChildDatabaseTlsBootstrap({ env: process.env });
     assertCustomerAssetScanChildDatabaseTlsBootstrap(tlsBootstrap);
-    bootstrapFailureCode = "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED";
     tlsMaterial = await provisionCustomerAssetScanChildDatabaseTlsMaterial({
       identity: tlsBootstrap.identity,
       issuer: tlsBootstrap.issuer,
