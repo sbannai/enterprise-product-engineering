@@ -98,20 +98,28 @@ export class CustomerAssetScanChildRuntime {
       try { await closeProviderIterator(); } catch { /* cancellation remains fail-closed */ }
       return failure("SCANNER_BOOTSTRAP_FAILED");
     }
+    let sourceClaimed = false;
     const verifiedSource: AsyncIterable<Uint8Array> = {
-      async *[Symbol.asyncIterator]() {
-        try {
-          while (true) {
-            const next = await providerIterator.next();
-            if (next.done) {
-              exhausted = true;
-              return;
+      [Symbol.asyncIterator]() {
+        // A provider read is a one-shot stream. Multiple consumers could
+        // split chunks between scanners and make a partial inspection appear
+        // complete, so only one iterator may ever claim this source.
+        if (sourceClaimed) throw new Error("SCANNER_SOURCE_ALREADY_CLAIMED");
+        sourceClaimed = true;
+        return (async function* () {
+          try {
+            while (true) {
+              const next = await providerIterator.next();
+              if (next.done) {
+                exhausted = true;
+                return;
+              }
+              yield next.value;
             }
-            yield next.value;
+          } finally {
+            if (!exhausted) await closeProviderIterator();
           }
-        } finally {
-          if (!exhausted) await closeProviderIterator();
-        }
+        })();
       },
     };
 
