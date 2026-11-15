@@ -1101,9 +1101,9 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       const recovered = await client.query<{
-        upload_session_id: string; asset_id: string; correlation_id: string;
+        upload_session_id: string; asset_id: string; correlation_id: string; previous_error_code: string | null;
       }>(
-        `SELECT upload_session_id, asset_id, correlation_id
+        `SELECT upload_session_id, asset_id, correlation_id, previous_error_code
            FROM public.eper_recover_exhausted_customer_asset_scan_jobs($1, $2, $3, $4)`,
         [input.tenantId, input.applicationId, input.scannerServiceId, limit],
       );
@@ -1119,7 +1119,8 @@ export class PostgresCustomerAssetRepository {
           resourceId: item.asset_id, correlationId: item.correlation_id, source: "job",
           operationName: "independent customer asset scan recovery",
           payload: { assetId: item.asset_id, uploadSessionId: item.upload_session_id,
-            scanStatus: "error", resultingAssetStatus: "failed" },
+            scanStatus: "error", resultingAssetStatus: "failed",
+            previousErrorCode: item.previous_error_code },
         });
       }
       await client.query("COMMIT");
