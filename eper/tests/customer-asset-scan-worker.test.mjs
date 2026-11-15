@@ -184,8 +184,8 @@ test("customer asset scan worker waits for child process exit before persisting 
       await new Promise(resolve => setTimeout(resolve, 1_100));
       childExited = true; // Models the supervisor's close event after SIGKILL.
       return { kind: "failure", value: {
-        version: 3, type: "failure", jobToken: "a".repeat(64),
-        claimGeneration: 1, code: "SCANNER_EXECUTION_FAILED",
+        version: 3, type: "failure", jobToken: _message.jobToken,
+        claimGeneration: _message.claimGeneration, code: "SCANNER_EXECUTION_FAILED",
       } };
     },
     tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
