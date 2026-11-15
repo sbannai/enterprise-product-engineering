@@ -172,9 +172,9 @@ test("customer asset scan worker waits for child process exit before persisting 
   const f = fixture("clean");
   let childExited = false;
   let retryObservedAfterExit = false;
-  f.repository.retryScanJob = async () => {
+  f.repository.retryScanJob = async (input) => {
     retryObservedAfterExit = childExited;
-    f.calls.push(["retry", "SCANNER_PROVIDER_ERROR", 15_000]);
+    f.calls.push(["retry", input.errorCode, input.retryAfterMs]);
     return "pending";
   };
   await runCustomerAssetScanWorker({
