@@ -73,9 +73,20 @@ export class CustomerAssetScanChildRuntime {
     }
     if (!isAsyncIterable(providerStream)) return failure("SCANNER_BOOTSTRAP_FAILED");
 
+    let providerIterator: AsyncIterator<Uint8Array>;
+    try {
+      providerIterator = (providerStream as AsyncIterable<Uint8Array>)[Symbol.asyncIterator]();
+      if (!providerIterator || typeof providerIterator !== "object" ||
+          typeof providerIterator.next !== "function" ||
+          (providerIterator.return !== undefined && typeof providerIterator.return !== "function")) {
+        return failure("SCANNER_BOOTSTRAP_FAILED");
+      }
+    } catch {
+      return failure("SCANNER_BOOTSTRAP_FAILED");
+    }
+
     let exhausted = false;
     let iteratorClosed = false;
-    const providerIterator = (providerStream as AsyncIterable<Uint8Array>)[Symbol.asyncIterator]();
     const closeProviderIterator = async () => {
       if (iteratorClosed) return;
       iteratorClosed = true;
