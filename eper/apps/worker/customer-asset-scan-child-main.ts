@@ -149,7 +149,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     emitFailure(start, "SCANNER_BOOTSTRAP_FAILED");
     process.exitCode = 1;
   } finally {
-    await Promise.resolve(closeComposition?.()).catch(() => undefined);
+    await Promise.resolve().then(() => closeComposition?.()).catch(() => undefined);
     if (pool) await pool.end().catch(() => undefined);
   }
 }
