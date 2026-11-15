@@ -69,6 +69,9 @@ export async function runCustomerAssetScanChild(
     env[key] = value;
   }
 
+  // Do not launch a process for work the caller has already cancelled.
+  if (options.signal?.aborted) throw new Error("CUSTOMER_ASSET_SCAN_CHILD_ABORTED");
+
   const child = spawn(options.executable, options.args, {
     env,
     stdio: ["pipe", "pipe", "ignore"],
