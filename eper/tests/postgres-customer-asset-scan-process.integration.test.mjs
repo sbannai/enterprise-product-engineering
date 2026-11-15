@@ -180,15 +180,24 @@ test("process-level PostgreSQL 16 scan worker claims, invokes configured test sc
       await mkdir(dirname(compositionPath), { recursive: true });
       await writeFile(objectPath, fixture.testObjectBytes);
       const compositionSource = `import { createReadStream } from "node:fs";
+import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { execFile as execFileCallback } from "node:child_process";
+import { promisify } from "node:util";
 import { CustomerAssetScanChildSpiffeIdentityVerifier } from "../customer-asset-scan-child-spiffe-identity.js";
 import { createCustomerAssetScanChildSpiffeSdkRuntime } from "../customer-asset-scan-child-spiffe-sdk-adapter.js";
+import { CustomerAssetScanChildDatabaseCredentialIssuer } from "../customer-asset-scan-child-database-credential-issuer.js";
 import { PostgresCustomerAssetScanChildInputResolver } from "../customer-asset-scan-child-input-resolver.js";
 import { ProviderStorageDriverDispatchService } from "../../integrations/provider-storage-driver-dispatch-service.js";
+const execFile = promisify(execFileCallback);
 const objectPath = ${JSON.stringify(objectPath)};
 const expectedObjectReference = ${JSON.stringify(fixture.providerObjectReference)};
-export function createCustomerAssetScanChildRuntimeDependencies({ pool, env }) {
-  // Explicit test-only SDK stand-in. Production composition must use the real
-  // SPIFFE SDK/Workload API endpoint and is not supplied by this fixture.
+const spiffeId = "spiffe://eper.example/asset-scanner/ci-child";
+function opensslTime(epochSeconds) {
+  return new Date(epochSeconds * 1000).toISOString().slice(2).replace(/[-:T]/g, "").replace(/\\.\\d{3}Z$/, "Z");
+}
+export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env }) {
   class TestSpiffeClient {
     constructor(options) {
       if (options.connection !== env.EPER_SCANNER_CHILD_SPIFFE_WORKLOAD_API_SOCKET ||
@@ -207,7 +216,56 @@ export function createCustomerAssetScanChildRuntimeDependencies({ pool, env }) {
   const identity = new CustomerAssetScanChildSpiffeIdentityVerifier(
     spiffe.adapter, env.EPER_SCANNER_CHILD_EXPECTED_SPIFFE_ID,
   );
-  const input = new PostgresCustomerAssetScanChildInputResolver(pool);
+  const issuer = new CustomerAssetScanChildDatabaseCredentialIssuer(
+    new Map([[spiffeId, "eper_scan_child_ci"]]),
+    { async sign(input) {
+      const directory = await mkdtemp(join(tmpdir(), "eper-child-ci-issuer-"));
+      try {
+        const newCerts = join(directory, "newcerts");
+        const index = join(directory, "index.txt");
+        const serial = join(directory, "serial");
+        const config = join(directory, "ca.cnf");
+        const csrPath = join(directory, "child.csr");
+        const certPath = join(directory, "child.crt");
+        await mkdir(newCerts);
+        await writeFile(index, "", { mode: 0o600 });
+        await writeFile(serial, "01\\n", { mode: 0o600 });
+        await writeFile(csrPath, input.csrPem, { mode: 0o600 });
+        await writeFile(config, [
+          "[ ca ]", "default_ca = CA_default", "[ CA_default ]",
+          "dir = " + directory, "database = " + index, "new_certs_dir = " + newCerts,
+          "certificate = " + join(env.EPER_SCAN_CHILD_CERT_DIR, "ca.crt"),
+          "private_key = " + join(env.EPER_SCAN_CHILD_CERT_DIR, "ca.key"),
+          "serial = " + serial, "default_md = sha256", "default_days = 1",
+          "default_crl_days = 1", "policy = policy_any", "unique_subject = no",
+          "copy_extensions = none", "[ policy_any ]", "commonName = supplied",
+          "[ client ]", "basicConstraints = critical,CA:FALSE",
+          "keyUsage = critical,digitalSignature", "extendedKeyUsage = clientAuth", "",
+        ].join("\\n"), { mode: 0o600 });
+        await execFile("openssl", ["req", "-inform", "PEM", "-in", csrPath, "-noout", "-verify"],
+          { timeout: 10000, maxBuffer: 16384 });
+        await execFile("openssl", [
+          "ca", "-batch", "-notext", "-config", config, "-in", csrPath, "-out", certPath,
+          "-startdate", opensslTime(Math.floor(Date.now() / 1000) - 5),
+          "-enddate", opensslTime(input.notAfterEpochSeconds),
+          "-subj", "/CN=" + input.databaseRole, "-extensions", "client",
+        ], { timeout: 10000, maxBuffer: 16384 });
+        return await readFile(certPath, "utf8");
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    } },
+    120,
+  );
+  return {
+    identity, issuer,
+    caPem: await readFile(join(env.EPER_SCAN_CHILD_CERT_DIR, "ca.crt"), "utf8"),
+    close() { spiffe.adapter.close?.(); },
+  };
+}
+export function createCustomerAssetScanChildRuntimeDependencies({ pool, identity }) {
+${marker}
+
   const driver = {
     dependencyIds: [],
     capabilities: {
