@@ -232,7 +232,7 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env, on
         const certPath = join(directory, "child.crt");
         await mkdir(newCerts);
         await writeFile(index, "", { mode: 0o600 });
-        await writeFile(serial, "01\\n", { mode: 0o600 });
+        await writeFile(serial, "01\n", { mode: 0o600 });
         await writeFile(csrPath, input.csrPem, { mode: 0o600 });
         await writeFile(config, [
           "[ ca ]", "default_ca = CA_default", "[ CA_default ]",
@@ -244,7 +244,7 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env, on
           "copy_extensions = none", "[ policy_any ]", "commonName = supplied",
           "[ client ]", "basicConstraints = critical,CA:FALSE",
           "keyUsage = critical,digitalSignature", "extendedKeyUsage = clientAuth", "",
-        ].join("\\n"), { mode: 0o600 });
+        ].join("\n"), { mode: 0o600 });
         await execFile("openssl", ["req", "-inform", "PEM", "-in", csrPath, "-noout", "-verify"],
           { timeout: 10000, maxBuffer: 16384 });
         onStage?.("ca");
