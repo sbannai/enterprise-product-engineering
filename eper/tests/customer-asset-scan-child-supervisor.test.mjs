@@ -68,6 +68,16 @@ test("scanner child supervisor rejects malformed output and non-zero exits", asy
   }), /CUSTOMER_ASSET_SCAN_CHILD_EXITED/);
 });
 
+test("scanner child supervisor preserves a token-bound failure envelope from a non-zero child exit", async () => {
+  const outcome = await runCustomerAssetScanChild({
+    executable: node,
+    args: ["-e", "let s='';process.stdin.on('data',c=>s+=c);process.stdin.on('end',()=>{const m=JSON.parse(s);process.stdout.write(JSON.stringify({version:3,type:'failure',jobToken:m.jobToken,claimGeneration:m.claimGeneration,code:'SCANNER_BOOTSTRAP_FAILED'}));process.exitCode=1;});"],
+    start: start(), timeoutMs: 2_000,
+  });
+  assert.equal(outcome.kind, "failure");
+  assert.equal(outcome.value.code, "SCANNER_BOOTSTRAP_FAILED");
+});
+
 test("scanner child supervisor rejects a response for another claim generation", async () => {
   await assert.rejects(runCustomerAssetScanChild({
     executable: node,
