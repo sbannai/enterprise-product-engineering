@@ -71,7 +71,7 @@ test("child runtime rejects a database context that does not match the IPC asset
   const { runtime, calls } = makeRuntime({ resolvedContext: mismatched });
   const result = await runtime.execute(start(), signal());
   assert.equal(result.type, "failure");
-  assert.equal(result.code, "SCANNER_BOOTSTRAP_FAILED");
+  assert.equal(result.code, "SCANNER_INPUT_RESOLUTION_FAILED");
   assert.equal(calls.dispatch, 0);
 });
 
