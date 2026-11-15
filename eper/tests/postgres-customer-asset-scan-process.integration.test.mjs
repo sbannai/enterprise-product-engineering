@@ -195,7 +195,7 @@ const objectPath = ${JSON.stringify(objectPath)};
 const expectedObjectReference = ${JSON.stringify(fixture.providerObjectReference)};
 const spiffeId = "spiffe://eper.example/asset-scanner/ci-child";
 function opensslTime(epochSeconds) {
-  return new Date(epochSeconds * 1000).toISOString().slice(2).replace(/[-:T]/g, "").replace(/\\.\\d{3}Z$/, "Z");
+  return new Date(epochSeconds * 1000).toISOString().slice(2).replace(/[-:T]/g, "").replace(/\.\d{3}Z$/, "Z");
 }
 export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env }) {
   class TestSpiffeClient {
