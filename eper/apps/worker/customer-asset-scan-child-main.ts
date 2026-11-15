@@ -150,8 +150,9 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
       onStage(stage) {
         bootstrapFailureCode = stage === "identity" ? "SCANNER_IDENTITY_FAILED" :
           stage === "key" ? "SCANNER_KEY_BOOTSTRAP_FAILED" :
-          stage === "certificate" ? "SCANNER_CERTIFICATE_BOOTSTRAP_FAILED" :
+          stage.startsWith("certificate-") ? "SCANNER_CERTIFICATE_BOOTSTRAP_FAILED" :
           "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED";
+        console.error("EPER scanner child TLS provisioning stage: " + stage);
       },
     });
     if (controller.signal.aborted) throw new Error("CUSTOMER_ASSET_SCAN_CHILD_BOOTSTRAP_ABORTED");
