@@ -102,6 +102,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
   let tlsBootstrap: CustomerAssetScanChildDatabaseTlsBootstrap | undefined;
   let tlsMaterial: Awaited<ReturnType<typeof provisionCustomerAssetScanChildDatabaseTlsMaterial>> | undefined;
   const controller = new AbortController();
+  let bootstrapFailureCode: CustomerAssetScanChildFailure["code"] = "SCANNER_BOOTSTRAP_FAILED";
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => controller.abort());
   try {
     if (required("EPER_SCANNER_CHILD_SPIFFE_AUDIENCE") !== CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE) {
@@ -126,6 +127,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     }
     tlsBootstrap = await module.createCustomerAssetScanChildDatabaseTlsBootstrap({ env: process.env });
     assertCustomerAssetScanChildDatabaseTlsBootstrap(tlsBootstrap);
+    bootstrapFailureCode = "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED";
     tlsMaterial = await provisionCustomerAssetScanChildDatabaseTlsMaterial({
       identity: tlsBootstrap.identity,
       issuer: tlsBootstrap.issuer,
@@ -143,6 +145,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     const ca = await readDeploymentFile(tlsMaterial.caPath);
     const cert = await readDeploymentFile(tlsMaterial.certificatePath);
     const key = await readDeploymentFile(tlsMaterial.privateKeyPath, true);
+    bootstrapFailureCode = "SCANNER_DATABASE_CONNECTION_FAILED";
     const createdPool = new pg.Pool({
       host: required("PGHOST"), port: databasePort, database: required("PGDATABASE"),
       user: tlsMaterial.databaseRole, max: 2, connectionTimeoutMillis: 5000,
@@ -150,6 +153,8 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
       ssl: { ca, cert, key, rejectUnauthorized: true },
     });
     pool = createdPool;
+    await createdPool.query("SELECT 1");
+    bootstrapFailureCode = "SCANNER_BOOTSTRAP_FAILED";
     const dependencies = await module.createCustomerAssetScanChildRuntimeDependencies({
       pool: createdPool, env: process.env, identity: tlsBootstrap.identity,
     });
@@ -171,7 +176,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
       clearTimeout(timer);
     }
   } catch {
-    emitFailure(start, "SCANNER_BOOTSTRAP_FAILED");
+    emitFailure(start, bootstrapFailureCode);
     process.exitCode = 1;
   } finally {
     await Promise.resolve().then(() => closeComposition?.()).catch(() => undefined);
