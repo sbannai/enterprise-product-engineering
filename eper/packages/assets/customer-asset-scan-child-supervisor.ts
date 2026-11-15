@@ -167,7 +167,7 @@ function supervise(
       if (isCustomerAssetScanChildFailure(message) &&
           message.jobToken === start.jobToken &&
           message.claimGeneration === start.claimGeneration &&
-          code === 1) {
+          (code === 0 || code === 1)) {
         return finish(undefined, { kind: "failure", value: message });
       }
       if (code !== 0) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_EXITED"));
