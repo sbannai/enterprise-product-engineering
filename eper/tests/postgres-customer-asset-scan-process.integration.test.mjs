@@ -260,7 +260,7 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env }) 
   return {
     identity, issuer,
     caPem: await readFile(join(env.EPER_SCAN_CHILD_CERT_DIR, "ca.crt"), "utf8"),
-    close() { spiffe.adapter.close?.(); },
+    close() { return spiffe.close(); },
   };
 }
 export function createCustomerAssetScanChildRuntimeDependencies({ pool, identity }) {
