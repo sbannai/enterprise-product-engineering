@@ -203,3 +203,15 @@ test("scanner child supervisor does not launch a process when cancellation preda
     signal: controller.signal,
   }), /CUSTOMER_ASSET_SCAN_CHILD_ABORTED/);
 });
+
+
+test("scanner child supervisor rejects sparse argument vectors before spawn", async () => {
+  const sparseArgs = new Array(2);
+  sparseArgs[0] = "-e";
+  await assert.rejects(runCustomerAssetScanChild({
+    executable: node,
+    args: sparseArgs,
+    start: start(),
+    timeoutMs: 2_000,
+  }), /CUSTOMER_ASSET_SCAN_CHILD_OPTIONS_INVALID/);
+});
