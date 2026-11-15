@@ -110,10 +110,11 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     }
     // Distinguish deployment module resolution/import from TLS credential
     // bootstrap. Both remain fail-closed and expose only bounded protocol codes.
-    bootstrapFailureCode = "SCANNER_COMPOSITION_FAILED";
+    bootstrapFailureCode = "SCANNER_COMPOSITION_PATH_INVALID";
     const compositionPath = await assertTrustedCustomerAssetScanCompositionModule(
       resolveCompositionPath(required("EPER_SCANNER_CHILD_COMPOSITION_MODULE")),
     );
+    bootstrapFailureCode = "SCANNER_COMPOSITION_MODULE_LOAD_FAILED";
     const module = await import(pathToFileURL(compositionPath).href) as {
       createCustomerAssetScanChildDatabaseTlsBootstrap?: (input: {
         env: NodeJS.ProcessEnv;
@@ -127,7 +128,8 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     };
     if (typeof module.createCustomerAssetScanChildDatabaseTlsBootstrap !== "function" ||
         typeof module.createCustomerAssetScanChildRuntimeDependencies !== "function") {
-      throw new Error("CUSTOMER_ASSET_SCAN_CHILD_DATABASE_TLS_BOOTSTRAP_REQUIRED");
+      bootstrapFailureCode = "SCANNER_COMPOSITION_EXPORTS_INVALID";
+      throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_EXPORTS_INVALID");
     }
     bootstrapFailureCode = "SCANNER_TLS_BOOTSTRAP_FAILED";
     tlsBootstrap = await module.createCustomerAssetScanChildDatabaseTlsBootstrap({
@@ -178,16 +180,18 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     // From this point onward the database is connected and TLS bootstrap has
     // completed. Keep composition failures distinct from earlier bootstrap
     // failures so process-level diagnostics identify the failing boundary.
-    bootstrapFailureCode = "SCANNER_COMPOSITION_FAILED";
+    bootstrapFailureCode = "SCANNER_COMPOSITION_DEPENDENCIES_FAILED";
     const dependencies = await module.createCustomerAssetScanChildRuntimeDependencies({
       pool: createdPool, env: process.env, identity: tlsBootstrap.identity,
     });
     if (!dependencies || dependencies.identity !== tlsBootstrap.identity) {
+      bootstrapFailureCode = "SCANNER_COMPOSITION_CONTRACT_INVALID";
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_COMPOSITION_MISMATCH");
     }
     if (dependencies && typeof dependencies === "object" && typeof dependencies.close === "function") {
       closeComposition = dependencies.close.bind(dependencies);
     }
+    bootstrapFailureCode = "SCANNER_COMPOSITION_CONTRACT_INVALID";
     assertCustomerAssetScanChildRuntimeComposition(dependencies);
     const runtime = new CustomerAssetScanChildRuntime(dependencies);
     const timeoutMs = boundedInteger("EPER_SCANNER_CHILD_TIMEOUT_MS", 120_000, 1_000, MAX_TIMEOUT_MS);
