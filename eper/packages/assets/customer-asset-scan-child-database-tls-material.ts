@@ -73,7 +73,7 @@ export async function provisionCustomerAssetScanChildDatabaseTlsMaterial(input: 
       throw new Error("ISSUED_CERTIFICATE_BINDING_INVALID");
     }
     const details = await execFile("openssl", [
-      "x509", "-in", certificatePath, "-noout", "-subject", "-enddate",
+      "x509", "-in", certificatePath, "-noout", "-subject", "-nameopt", "RFC2253", "-enddate",
       "-ext", "extendedKeyUsage",
     ], { timeout: 10_000, maxBuffer: 16_384 });
     const subject = details.stdout.split("\\n").find(line => line.startsWith("subject=")) ?? "";
