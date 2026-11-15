@@ -194,7 +194,8 @@ test("customer asset scan worker waits for child process exit before persisting 
   });
   assert.equal(retryObservedAfterExit, true,
     "retry must not be persisted until the child supervisor confirms process exit");
-  assert.ok(f.calls.some(call => call[0] === "retry"));
+  assert.ok(f.calls.some(call => call[0] === "retry" && call[1] === "SCANNER_EXECUTION_FAILED"),
+    "the worker must preserve the child's typed failure code instead of flattening it to a provider error");
   assert.equal(f.calls.filter(call => call[0] === "record").length, 0);
 });
 
