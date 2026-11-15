@@ -107,3 +107,23 @@ test("child runtime does not start scanner work when provider read settles after
   assert.equal(calls.dispatch, 1);
   assert.equal(scannerCalls, 0);
 });
+
+test("child runtime closes a provider iterator when the scanner never consumes it", async () => {
+  let closeCalls = 0;
+  const source = {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() { return { done: false, value: new Uint8Array([1, 2, 3, 4]) }; },
+        async return() { closeCalls++; return { done: true, value: undefined }; },
+      };
+    },
+  };
+  const { runtime } = makeRuntime({
+    stream: source,
+    scanner: { async scan() { return { scanStatus: "clean" }; } },
+  });
+  const result = await runtime.execute(start(), signal());
+  assert.equal(result.type, "failure");
+  assert.equal(result.code, "SCANNER_RESULT_INVALID");
+  assert.equal(closeCalls, 1);
+});
