@@ -127,3 +127,32 @@ test("child runtime closes a provider iterator when the scanner never consumes i
   assert.equal(result.code, "SCANNER_RESULT_INVALID");
   assert.equal(closeCalls, 1);
 });
+
+test("child runtime closes a provider stream that is returned after cancellation", async () => {
+  const controller = new AbortController();
+  let closeCalls = 0;
+  let scannerCalls = 0;
+  const source = {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() { return { done: false, value: new Uint8Array([1, 2, 3, 4]) }; },
+        async return() { closeCalls++; return { done: true, value: undefined }; },
+      };
+    },
+  };
+  const { runtime } = makeRuntime({
+    stream: source,
+    scanner: { async scan() { scannerCalls++; return { scanStatus: "clean" }; } },
+  });
+  const dispatch = runtime["dependencies"].provider.dispatch;
+  runtime["dependencies"].provider.dispatch = async input => {
+    const result = await dispatch(input);
+    controller.abort();
+    return result;
+  };
+  const result = await runtime.execute(start(), controller.signal);
+  assert.equal(result.type, "failure");
+  assert.equal(result.code, "SCANNER_BOOTSTRAP_FAILED");
+  assert.equal(scannerCalls, 0);
+  assert.equal(closeCalls, 1);
+});
