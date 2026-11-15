@@ -264,7 +264,7 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env }) 
   };
 }
 export function createCustomerAssetScanChildRuntimeDependencies({ pool, identity }) {
-${marker}
+  const input = new PostgresCustomerAssetScanChildInputResolver(pool);
 
   const driver = {
     dependencyIds: [],
