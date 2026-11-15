@@ -5,7 +5,8 @@ import { isAbsolute, resolve, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE } from "../../packages/assets/customer-asset-scan-child-spiffe-identity.js";
 import { assertTrustedCustomerAssetScanCompositionModule } from "../../packages/assets/customer-asset-scan-child-composition-loader.js";
-import { CustomerAssetScanChildRuntime, type CustomerAssetScanChildRuntimeDependencies } from "../../packages/assets/customer-asset-scan-child-runtime.js";
+import { CustomerAssetScanChildRuntime } from "../../packages/assets/customer-asset-scan-child-runtime.js";
+import { assertCustomerAssetScanChildRuntimeComposition, type CustomerAssetScanChildRuntimeComposition } from "../../packages/assets/customer-asset-scan-child-composition-contract.js";
 import {
   isCustomerAssetScanChildStart,
   type CustomerAssetScanChildFailure,
@@ -95,6 +96,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
   process.exitCode = 1;
 } else {
   let pool: { end(): Promise<void> } | undefined;
+  let closeComposition: CustomerAssetScanChildRuntimeComposition["close"];
   const controller = new AbortController();
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => controller.abort());
   try {
@@ -123,14 +125,16 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     const module = await import(pathToFileURL(compositionPath).href) as {
       createCustomerAssetScanChildRuntimeDependencies?: (input: {
         pool: typeof createdPool; env: NodeJS.ProcessEnv;
-      }) => Promise<CustomerAssetScanChildRuntimeDependencies> | CustomerAssetScanChildRuntimeDependencies;
+      }) => Promise<CustomerAssetScanChildRuntimeComposition> | CustomerAssetScanChildRuntimeComposition;
     };
     if (typeof module.createCustomerAssetScanChildRuntimeDependencies !== "function") {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_FACTORY_REQUIRED");
     }
     const dependencies = await module.createCustomerAssetScanChildRuntimeDependencies({ pool: createdPool, env: process.env });
-    if (!dependencies || !dependencies.identity || !dependencies.input || !dependencies.provider ||
-        !dependencies.scanner) throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_INVALID");
+    if (dependencies && typeof dependencies === "object" && typeof dependencies.close === "function") {
+      closeComposition = dependencies.close.bind(dependencies);
+    }
+    assertCustomerAssetScanChildRuntimeComposition(dependencies);
     const runtime = new CustomerAssetScanChildRuntime(dependencies);
     const timeoutMs = boundedInteger("EPER_SCANNER_CHILD_TIMEOUT_MS", 120_000, 1_000, MAX_TIMEOUT_MS);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -145,6 +149,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     emitFailure(start, "SCANNER_BOOTSTRAP_FAILED");
     process.exitCode = 1;
   } finally {
+    await Promise.resolve(closeComposition?.()).catch(() => undefined);
     if (pool) await pool.end().catch(() => undefined);
   }
 }
