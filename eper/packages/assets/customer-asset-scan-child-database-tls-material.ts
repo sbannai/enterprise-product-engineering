@@ -34,7 +34,7 @@ export async function provisionCustomerAssetScanChildDatabaseTlsMaterial(input: 
   readonly issuer: Pick<CustomerAssetScanChildDatabaseCredentialIssuer, "issue">;
   readonly caPem: string;
   readonly signal?: AbortSignal;
-  readonly onStage?: (stage: "identity" | "key" | "issuer" | "certificate") => void;
+  readonly onStage?: (stage: "identity" | "key" | "issuer" | "certificate-write" | "certificate-key-binding" | "certificate-ca-validation" | "certificate-policy") => void;
 }): Promise<CustomerAssetScanChildDatabaseTlsMaterial> {
   let keyRequest: Awaited<ReturnType<typeof createCustomerAssetScanChildEphemeralKeyRequest>> | undefined;
   try {
@@ -67,24 +67,28 @@ export async function provisionCustomerAssetScanChildDatabaseTlsMaterial(input: 
     }
     if (input.signal?.aborted) throw new Error("BOOTSTRAP_ABORTED");
 
-    input.onStage?.("certificate");
     const directory = dirname(keyRequest.privateKeyPath);
     const caPath = join(directory, "database-ca.pem");
     const certificatePath = join(directory, "database-client.pem");
+    input.onStage?.("certificate-write");
     await writeFile(caPath, input.caPem, { mode: 0o600, flag: "wx" });
     await writeFile(certificatePath, credential.clientCertificatePem, { mode: 0o600, flag: "wx" });
     await chmod(caPath, 0o600);
     await chmod(certificatePath, 0o600);
 
-    const [certificatePublicKey, privatePublicKey, verified] = await Promise.all([
+    input.onStage?.("certificate-key-binding");
+    const [certificatePublicKey, privatePublicKey] = await Promise.all([
       execFile("openssl", ["x509", "-in", certificatePath, "-pubkey", "-noout"], { timeout: 10_000, maxBuffer: 16_384 }),
       execFile("openssl", ["pkey", "-in", keyRequest.privateKeyPath, "-pubout"], { timeout: 10_000, maxBuffer: 16_384 }),
-      execFile("openssl", ["verify", "-CAfile", caPath, "-purpose", "sslclient", certificatePath], { timeout: 10_000, maxBuffer: 16_384 }),
     ]);
     if (certificatePublicKey.stdout.trim() !== privatePublicKey.stdout.trim() ||
-        !verified.stdout.includes(certificatePath)) {
+        false) {
       throw new Error("ISSUED_CERTIFICATE_BINDING_INVALID");
     }
+    input.onStage?.("certificate-ca-validation");
+    const verified = await execFile("openssl", ["verify", "-CAfile", caPath, "-purpose", "sslclient", certificatePath], { timeout: 10_000, maxBuffer: 16_384 });
+    if (!verified.stdout.includes(certificatePath)) throw new Error("ISSUED_CERTIFICATE_CA_INVALID");
+    input.onStage?.("certificate-policy");
     const details = await execFile("openssl", [
       "x509", "-in", certificatePath, "-noout", "-subject", "-nameopt", "RFC2253", "-enddate",
       "-ext", "extendedKeyUsage",
