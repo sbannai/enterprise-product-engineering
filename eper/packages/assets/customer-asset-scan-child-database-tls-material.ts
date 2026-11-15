@@ -8,6 +8,13 @@ import { createCustomerAssetScanChildEphemeralKeyRequest } from "./customer-asse
 
 const execFile = promisify(execFileCallback);
 
+/** Extract the role CN from OpenSSL's RFC2253 subject output. */
+export function parseCustomerAssetScanChildDatabaseCertificateRole(subjectOutput: string): string | undefined {
+  if (typeof subjectOutput !== "string" || subjectOutput.length > 16_384) return undefined;
+  const subject = subjectOutput.split(/\\r?\\n/).find(line => line.startsWith("subject=")) ?? "";
+  return subject.match(/(?:^|,)CN=([^,]+)/)?.[1];
+}
+
 export interface CustomerAssetScanChildDatabaseTlsMaterial {
   readonly databaseRole: string;
   readonly caPath: string;
@@ -76,8 +83,7 @@ export async function provisionCustomerAssetScanChildDatabaseTlsMaterial(input: 
       "x509", "-in", certificatePath, "-noout", "-subject", "-nameopt", "RFC2253", "-enddate",
       "-ext", "extendedKeyUsage",
     ], { timeout: 10_000, maxBuffer: 16_384 });
-    const subject = details.stdout.split("\n").find(line => line.startsWith("subject=")) ?? "";
-    const cn = subject.match(/(?:^|,)CN=([^,]+)/)?.[1];
+    const cn = parseCustomerAssetScanChildDatabaseCertificateRole(details.stdout);
     const endDate = details.stdout.match(/notAfter=(.+)/)?.[1];
     const expiry = endDate ? Math.floor(Date.parse(endDate) / 1000) : 0;
     if (cn !== credential.databaseRole ||
