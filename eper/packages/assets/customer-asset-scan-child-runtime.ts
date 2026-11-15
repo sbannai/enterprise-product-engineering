@@ -71,6 +71,9 @@ export class CustomerAssetScanChildRuntime {
     } catch {
       return failure("SCANNER_BOOTSTRAP_FAILED");
     }
+    // A provider adapter may settle after cancellation. Do not start scanner
+    // work against a stream returned after the parent has revoked this attempt.
+    if (signal.aborted) return failure("SCANNER_BOOTSTRAP_FAILED");
     if (!isAsyncIterable(providerStream)) return failure("SCANNER_BOOTSTRAP_FAILED");
 
     let exhausted = false;
