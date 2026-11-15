@@ -81,8 +81,7 @@ export async function provisionCustomerAssetScanChildDatabaseTlsMaterial(input: 
       execFile("openssl", ["x509", "-in", certificatePath, "-pubkey", "-noout"], { timeout: 10_000, maxBuffer: 16_384 }),
       execFile("openssl", ["pkey", "-in", keyRequest.privateKeyPath, "-pubout"], { timeout: 10_000, maxBuffer: 16_384 }),
     ]);
-    if (certificatePublicKey.stdout.trim() !== privatePublicKey.stdout.trim() ||
-        false) {
+    if (certificatePublicKey.stdout.trim() !== privatePublicKey.stdout.trim()) {
       throw new Error("ISSUED_CERTIFICATE_BINDING_INVALID");
     }
     input.onStage?.("certificate-ca-validation");
