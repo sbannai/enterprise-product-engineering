@@ -103,6 +103,7 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
             );
             if (!session) { leaseLost = true; options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "lease_lost" }); return; }
             let outcome: TrustedMalwareScanOutcome;
+            let scanErrorCode = "SCANNER_PROVIDER_ERROR";
             let scanTimer: ReturnType<typeof setTimeout> | undefined;
             try {
               // Child supervision owns its hard deadline and does not settle until the
@@ -123,6 +124,7 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
                 outcome = child.kind === "result"
                   ? { scanStatus: child.value.scanStatus, scannerServiceId: child.value.scannerServiceId }
                   : { scanStatus: "error", scannerServiceId: options.scannerServiceId };
+                if (child.kind === "failure") scanErrorCode = child.value.code;
               } else {
                 // Legacy in-process scanners use cooperative cancellation only.
                 // Production bootstrap rejects this path until child isolation is enabled.
@@ -150,6 +152,9 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
               }
             } catch (error) {
               options.onError?.(error);
+              if (error instanceof Error && /^CUSTOMER_ASSET_SCAN_CHILD_[A-Z0-9_]+$/.test(error.message)) {
+                scanErrorCode = error.message.replace(/^CUSTOMER_ASSET_SCAN_CHILD_/, "SCANNER_CHILD_");
+              }
               outcome = { scanStatus: "error", scannerServiceId: options.scannerServiceId };
             } finally {
               if (scanTimer) clearTimeout(scanTimer);
@@ -168,7 +173,7 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
               const retry = await options.repository.retryScanJob({
                 tenantId: options.tenantId, applicationId: options.applicationId,
                 uploadSessionId: job.uploadSessionId, workerId: options.workerId,
-                claimGeneration: job.claimGeneration, errorCode: "SCANNER_PROVIDER_ERROR", retryAfterMs,
+                claimGeneration: job.claimGeneration, errorCode: scanErrorCode, retryAfterMs,
               });
               if (retry === "pending") {
                 options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "retry" }); return;
