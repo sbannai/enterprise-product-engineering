@@ -44,11 +44,11 @@ test("child identity is independently verified and pinned to tenant, application
   const result = await service.authorize({
     tenantId: "tenant-1", applicationId: "application-1", scannerServiceId: "scanner.synthetic.v1",
   });
-  assert.equal(result.identity.capability, "storage.object.scan");
+  assert.equal(result.identity.capability, "storage.object.read.internal");
   assert.equal(result.credentials.marker, "synthetic-only");
   assert.deepEqual(calls, [{
     tenantId: "tenant-1", applicationId: "application-1", connectionId: "connection-7",
-    scannerServiceId: "scanner.synthetic.v1", capability: "storage.object.scan",
+    scannerServiceId: "scanner.synthetic.v1", capability: "storage.object.read.internal",
   }]);
 });
 

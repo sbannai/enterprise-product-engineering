@@ -146,3 +146,53 @@ test("SPIFFE SDK adapter forwards cancellation to the Workload API call", async 
   });
   assert.equal(receivedSignal, controller.signal);
 });
+
+
+test("SPIFFE SDK runtime pins the explicit Unix socket and disables nested retries", async () => {
+  const { createCustomerAssetScanChildSpiffeSdkRuntime } = await import(
+    "../dist/packages/assets/customer-asset-scan-child-spiffe-sdk-adapter.js"
+  );
+  const constructions = [];
+  let closeCalls = 0;
+  class FakeSpiffeClient {
+    constructor(options) { constructions.push(options); }
+    async getJwtSvid() { return null; }
+    async close() { closeCalls += 1; }
+  }
+  const runtime = createCustomerAssetScanChildSpiffeSdkRuntime({
+    endpoint: "unix:///run/spire/sockets/agent.sock",
+    SpiffeClient: FakeSpiffeClient,
+  });
+  assert.deepEqual(constructions, [{
+    connection: "unix:///run/spire/sockets/agent.sock",
+    retry: { enabled: false },
+  }]);
+  await runtime.close();
+  await runtime.close();
+  assert.equal(closeCalls, 1);
+});
+
+test("SPIFFE SDK runtime rejects ambient, relative, and malformed socket endpoints", async () => {
+  const { createCustomerAssetScanChildSpiffeSdkRuntime } = await import(
+    "../dist/packages/assets/customer-asset-scan-child-spiffe-sdk-adapter.js"
+  );
+  class FakeSpiffeClient {
+    constructor() { throw new Error("must not construct for invalid endpoint"); }
+  }
+  for (const endpoint of [
+    "",
+    "/run/spire/agent.sock",
+    "unix://relative/agent.sock",
+    "unix:///run/spire/../agent.sock",
+    "unix:///run/spire/agent.sock?fallback=1",
+    "tcp://127.0.0.1:8081",
+  ]) {
+    assert.throws(
+      () => createCustomerAssetScanChildSpiffeSdkRuntime({
+        endpoint,
+        SpiffeClient: FakeSpiffeClient,
+      }),
+      { message: "CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_SOCKET_INVALID" },
+    );
+  }
+});

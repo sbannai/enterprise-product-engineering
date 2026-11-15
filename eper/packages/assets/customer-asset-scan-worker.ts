@@ -1,4 +1,7 @@
+import { randomBytes } from "node:crypto";
 import type { AuditEnvironment } from "../audit/audit-event-store.js";
+import type { CustomerAssetScanChildStart } from "./customer-asset-scan-child-protocol.js";
+import type { CustomerAssetScanChildOutcome } from "./customer-asset-scan-child-supervisor.js";
 import type { PostgresCustomerAssetRepository } from "./postgres-customer-asset-repository.js";
 import type { TrustedMalwareScanOutcome } from "./storage-malware-scan-adapter.js";
 
@@ -16,7 +19,8 @@ export interface CustomerAssetScanner {
 }
 export interface CustomerAssetScanWorkerOptions {
   repository: PostgresCustomerAssetRepository;
-  scanner: CustomerAssetScanner;
+  scanner?: CustomerAssetScanner;
+  childRunner?: (start: CustomerAssetScanChildStart, signal: AbortSignal, timeoutMs: number) => Promise<CustomerAssetScanChildOutcome>;
   tenantId: string; applicationId: string; workerId: string; scannerServiceId: string;
   environment: AuditEnvironment; signal: AbortSignal;
   pollIntervalMs?: number; leaseMs?: number; batchSize?: number; concurrency?: number; scanTimeoutMs?: number;
@@ -41,6 +45,7 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
   const batchSize = options.batchSize ?? 10;
   const concurrency = options.concurrency ?? 2;
   const scanTimeoutMs = options.scanTimeoutMs ?? 120_000;
+  if (!!options.scanner === !!options.childRunner) throw new Error("EPER_CUSTOMER_ASSET_SCAN_EXECUTOR_INVALID");
   if (!Number.isInteger(pollIntervalMs) || pollIntervalMs < 100 || pollIntervalMs > 60_000 ||
       !Number.isInteger(leaseMs) || leaseMs < 5_000 || leaseMs > 900_000 ||
       !Number.isInteger(batchSize) || batchSize < 1 || batchSize > 50 ||
@@ -61,6 +66,13 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
           let leaseLost = false;
           let renewing = false;
           let renewalInFlight: Promise<void> | undefined;
+          // A lost lease must stop the isolated scanner immediately, not merely
+          // fence its eventual database write. This also bounds provider work
+          // after another worker has become eligible to claim the attempt.
+          const scanController = new AbortController();
+          const abortScanOnShutdown = () => scanController.abort();
+          if (options.signal.aborted) scanController.abort();
+          else options.signal.addEventListener("abort", abortScanOnShutdown, { once: true });
           const renewTimer = setInterval(() => {
             if (renewing || leaseLost || options.signal.aborted) return;
             renewing = true;
@@ -71,9 +83,13 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
                   uploadSessionId: job.uploadSessionId, workerId: options.workerId, leaseMs,
                   claimGeneration: job.claimGeneration,
                 });
-                if (!renewed) leaseLost = true;
+                if (!renewed) {
+                  leaseLost = true;
+                  scanController.abort();
+                }
               } catch (error) {
                 leaseLost = true;
+                scanController.abort();
                 options.onError?.(error);
               } finally {
                 renewing = false;
@@ -87,38 +103,50 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
             );
             if (!session) { leaseLost = true; options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "lease_lost" }); return; }
             let outcome: TrustedMalwareScanOutcome;
-            const scanController = new AbortController();
-            const abortScanOnShutdown = () => scanController.abort();
-            if (options.signal.aborted) scanController.abort();
-            else options.signal.addEventListener("abort", abortScanOnShutdown, { once: true });
             let scanTimer: ReturnType<typeof setTimeout> | undefined;
             try {
-              // Keep the scanner promise in the race so normal completion and rejection are observed.
-              // On timeout, do not await it: cancellation is cooperative and generation fencing rejects late writes.
-              const scanPromise = Promise.resolve().then(() => options.scanner.scan({
-                tenantId: options.tenantId, applicationId: options.applicationId,
-                assetId: session.assetId, uploadSessionId: job.uploadSessionId,
-                providerUploadReference: session.providerUploadReference,
-                checksumSha256: session.checksumSha256, sizeBytes: session.sizeBytes, mimeType: session.mimeType,
-              }, job.correlationId, scanController.signal));
-              const timeout = new Promise<never>((_, reject) => {
-                scanTimer = setTimeout(() => {
-                  // Cancellation is cooperative. Stop renewing this claim immediately so
-                  // a replacement worker can take over after lease expiry even when the
-                  // provider never settles. Generation fencing rejects any late callback.
-                  leaseLost = true;
-                  clearInterval(renewTimer);
-                  scanController.abort();
-                  reject(new Error("EPER_CUSTOMER_ASSET_SCAN_TIMEOUT"));
-                }, scanTimeoutMs);
-              });
-              try {
-                outcome = await Promise.race([scanPromise, timeout]);
-              } catch (error) {
-                // Promise.race has already attached a rejection handler to scanPromise.
-                // Do not await it here: a non-cooperative provider may never settle.
-                // The expired lease permits takeover; claimGeneration fences late writes.
-                throw error;
+              // Child supervision owns its hard deadline and does not settle until the
+              // OS process emits close. Never race it against the parent's cooperative
+              // timeout: that could release the claim while a killed child is still exiting.
+              if (options.childRunner) {
+                const start: CustomerAssetScanChildStart = {
+                  version: 3, type: "start", jobToken: randomBytes(32).toString("hex"),
+                  claimGeneration: job.claimGeneration, requestId: job.correlationId,
+                  workerId: options.workerId, scannerServiceId: options.scannerServiceId,
+                  input: {
+                    tenantId: options.tenantId, applicationId: options.applicationId,
+                    assetId: session.assetId, checksumSha256: session.checksumSha256,
+                    sizeBytes: session.sizeBytes, mimeType: session.mimeType,
+                  },
+                };
+                const child = await options.childRunner(start, scanController.signal, scanTimeoutMs);
+                outcome = child.kind === "result"
+                  ? { scanStatus: child.value.scanStatus, scannerServiceId: child.value.scannerServiceId }
+                  : { scanStatus: "error", scannerServiceId: options.scannerServiceId };
+              } else {
+                // Legacy in-process scanners use cooperative cancellation only.
+                // Production bootstrap rejects this path until child isolation is enabled.
+                const scanPromise = Promise.resolve().then(() => options.scanner!.scan({
+                  tenantId: options.tenantId, applicationId: options.applicationId,
+                  assetId: session.assetId, uploadSessionId: job.uploadSessionId,
+                  providerUploadReference: session.providerUploadReference,
+                  checksumSha256: session.checksumSha256, sizeBytes: session.sizeBytes, mimeType: session.mimeType,
+                }, job.correlationId, scanController.signal));
+                const timeout = new Promise<never>((_, reject) => {
+                  scanTimer = setTimeout(() => {
+                    // Stop renewing this claim immediately; generation fencing rejects late writes.
+                    leaseLost = true;
+                    clearInterval(renewTimer);
+                    scanController.abort();
+                    reject(new Error("EPER_CUSTOMER_ASSET_SCAN_TIMEOUT"));
+                  }, scanTimeoutMs);
+                });
+                try {
+                  outcome = await Promise.race([scanPromise, timeout]);
+                } catch (error) {
+                  // The legacy provider promise may ignore cancellation; do not await it.
+                  throw error;
+                }
               }
             } catch (error) {
               options.onError?.(error);
@@ -162,6 +190,10 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
             options.onError?.(error);
           } finally {
             clearInterval(renewTimer);
+            // Also cover early exits (claim lookup failure or missing session)
+            // that occur before the scanner execution block installs its own cleanup.
+            options.signal.removeEventListener("abort", abortScanOnShutdown);
+            scanController.abort();
             // Do not let a lease-renewal query outlive this job's lifecycle.
             await renewalInFlight;
           }

@@ -36,6 +36,13 @@ export interface ProviderObjectVerificationRequest {
   expectedSha256: string;
 }
 
+export interface ProviderInternalObjectReadRequest {
+  assetId: string;
+  providerObjectReference: string;
+  expectedSizeBytes: number;
+  expectedSha256: string;
+}
+
 export interface ProviderMalwareScanRequest {
   assetId: string;
   providerObjectReference: string;
@@ -49,6 +56,8 @@ export interface ProviderStorageDriver<TCredentials> {
     verifyObject: boolean;
     downloadGrant: boolean;
     malwareScan: boolean;
+    /** Optional internal scanner byte-read capability; never implied by malwareScan. */
+    internalObjectRead?: boolean;
   };
   createUploadGrant(
     context: ProviderDriverContext<TCredentials>,
@@ -86,6 +95,13 @@ export interface ProviderStorageDriver<TCredentials> {
     requestId: string,
     signal?: AbortSignal,
   ): Promise<ProviderMalwareScanOutcome>;
+  /** Returns a bounded provider byte stream. The caller enforces byte count and SHA-256. */
+  readObjectInternal?(
+    context: ProviderDriverContext<TCredentials>,
+    request: ProviderInternalObjectReadRequest,
+    requestId: string,
+    signal?: AbortSignal,
+  ): Promise<AsyncIterable<Uint8Array>>;
 }
 
 export class ProviderStorageDriverContractError extends Error {
@@ -118,6 +134,7 @@ export function assertProviderStorageDriver<TCredentials>(
     ["verifyObject", driver.capabilities.verifyObject],
     ["createDownloadGrant", driver.capabilities.downloadGrant],
     ["scanObject", driver.capabilities.malwareScan],
+    ["readObjectInternal", driver.capabilities.internalObjectRead === true],
   ];
   if (typeof driver.createUploadGrant !== "function" ||
       typeof driver.capabilities.idempotentCreateByUploadSessionId !== "boolean" ||
@@ -125,7 +142,9 @@ export function assertProviderStorageDriver<TCredentials>(
       typeof driver.capabilities.renewByProviderReference !== "boolean" ||
       typeof driver.capabilities.verifyObject !== "boolean" ||
       typeof driver.capabilities.downloadGrant !== "boolean" ||
-      typeof driver.capabilities.malwareScan !== "boolean") {
+      typeof driver.capabilities.malwareScan !== "boolean" ||
+      (driver.capabilities.internalObjectRead !== undefined &&
+       typeof driver.capabilities.internalObjectRead !== "boolean")) {
     throw new ProviderStorageDriverContractError("PROVIDER_DRIVER_INVALID");
   }
   for (const [method, required] of requirements) {

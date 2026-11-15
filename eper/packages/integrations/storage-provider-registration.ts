@@ -12,6 +12,7 @@ export const STORAGE_CAPABILITIES = [
   "storage.object.verify",
   "storage.download.grant",
   "storage.object.scan",
+  "storage.object.read.internal",
 ] as const;
 
 export type StorageCapability = typeof STORAGE_CAPABILITIES[number];

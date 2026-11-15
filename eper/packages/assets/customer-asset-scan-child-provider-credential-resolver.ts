@@ -55,6 +55,7 @@ export class CustomerAssetScanChildProviderCredentialResolver<TCredentials> {
         tenantId: input.tenantId,
         applicationId: input.applicationId,
         capability: CUSTOMER_ASSET_SCAN_CHILD_CAPABILITY,
+        expectedConnectionId: input.connectionId,
       });
     } catch {
       throw new CustomerAssetScanChildProviderCredentialResolverError(

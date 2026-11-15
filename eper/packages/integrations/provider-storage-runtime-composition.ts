@@ -8,6 +8,7 @@ import { ProviderRuntimeAdapterRegistry, type ProviderRuntimeAdapterRegistration
 import { assertProviderStorageDriver, type ProviderStorageDriver } from "./provider-storage-driver-contract.js";
 import { ProviderStorageDriverDispatchService } from "./provider-storage-driver-dispatch-service.js";
 import type { DependencyInventoryReader } from "../dependencies/runtime-gate.js";
+import type { ProviderRuntimeDeploymentPolicy } from "./provider-runtime-deployment-policy.js";
 
 export type ProviderStorageRuntimeEnvironment = "development" | "test" | "uat" | "production";
 
@@ -17,14 +18,21 @@ export type ProviderStorageRuntimeRegistration<TCredentials> =
     synthetic: boolean;
   };
 
+export type ProviderStorageSecretResolverRegistration<TCredentials> = ProviderSecretResolverPort<TCredentials> & {
+  /** Exact deployment-owned secret-manager identity; never inferred from the implementation. */
+  adapterKey: string;
+  adapterVersion: string;
+};
+
 export type ProviderStorageRuntimeCompositionInput<TCredentials> = {
   enabled: boolean;
+  deploymentPolicy: ProviderRuntimeDeploymentPolicy;
   environment?: ProviderStorageRuntimeEnvironment;
   registrations?: readonly ProviderStorageRuntimeRegistration<TCredentials>[];
   dispatch?: Pick<ProviderDispatchConfigurationService, "resolve">;
   catalogue?: Pick<PostgresProviderCatalogueRepository, "get">;
   connections?: Pick<PostgresProviderConnectionRepository, "getRuntimeSecretReference" | "assertDispatchAuthorization">;
-  secretResolver?: ProviderSecretResolverPort<TCredentials>;
+  secretResolver?: ProviderStorageSecretResolverRegistration<TCredentials>;
   dependencyInventory?: DependencyInventoryReader;
   scannerIdentity?: string;
   allowedHosts?: readonly string[];
@@ -45,7 +53,9 @@ export class ProviderStorageRuntimeCompositionError extends Error {
     | "PROVIDER_STORAGE_RUNTIME_SCANNER_IDENTITY_REQUIRED"
     | "PROVIDER_STORAGE_RUNTIME_ALLOWED_HOSTS_INVALID"
     | "PROVIDER_STORAGE_RUNTIME_DRIVER_INVALID"
-    | "PROVIDER_STORAGE_RUNTIME_DEPENDENCY_INVENTORY_REQUIRED") {
+    | "PROVIDER_STORAGE_RUNTIME_DEPENDENCY_INVENTORY_REQUIRED"
+    | "PROVIDER_STORAGE_RUNTIME_DEPLOYMENT_POLICY_REQUIRED"
+    | "PROVIDER_STORAGE_RUNTIME_SECRET_MANAGER_NOT_ALLOWED") {
     super(code);
     this.name = "ProviderStorageRuntimeCompositionError";
   }
@@ -73,8 +83,17 @@ export function createProviderStorageRuntimeComposition<TCredentials>(
       input.environment !== "uat" && input.environment !== "production") {
     throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_DEPENDENCIES_REQUIRED");
   }
+  if (!input.deploymentPolicy?.enabled || input.deploymentPolicy.environment !== input.environment) {
+    throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_DEPLOYMENT_POLICY_REQUIRED");
+  }
   if (!input.dispatch || !input.catalogue || !input.connections || !input.secretResolver) {
     throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_DEPENDENCIES_REQUIRED");
+  }
+  // The configured secret-manager key/version must identify the resolver that
+  // is actually composed. A generic resolve() port alone is not sufficient.
+  if (input.secretResolver.adapterKey !== input.deploymentPolicy.secretManager.adapterKey ||
+      input.secretResolver.adapterVersion !== input.deploymentPolicy.secretManager.adapterVersion) {
+    throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_SECRET_MANAGER_NOT_ALLOWED");
   }
   if (!Array.isArray(input.registrations) || input.registrations.length === 0) {
     throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_REGISTRATIONS_REQUIRED");
@@ -119,7 +138,7 @@ export function createProviderStorageRuntimeComposition<TCredentials>(
   });
 
   const adapters = new ProviderRuntimeAdapterRegistry(registrations);
-  const runtime = new ProviderRuntimeResolutionService(input.dispatch, input.catalogue, adapters);
+  const runtime = new ProviderRuntimeResolutionService(input.dispatch, input.catalogue, adapters, input.deploymentPolicy);
   const credentials = new ProviderCredentialResolutionService(input.secretResolver);
   const runtimeWithCredentials = new ProviderRuntimeCredentialResolutionService(
     runtime, input.connections, credentials,
