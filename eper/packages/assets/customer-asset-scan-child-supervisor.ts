@@ -59,7 +59,7 @@ export async function runCustomerAssetScanChild(
   for (const [key, value] of Object.entries(options.environment ?? {})) {
     if (!ALLOWED_CHILD_ENVIRONMENT_KEYS.has(key) ||
         typeof value !== "string" || value.length > 4096 ||
-        /[\\u0000-\\u001f\\u007f]/.test(value)) {
+        /[\u0000-\u001f\u007f]/.test(value)) {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_ENVIRONMENT_INVALID");
     }
     env[key] = value;
