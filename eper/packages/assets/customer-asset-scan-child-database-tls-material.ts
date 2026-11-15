@@ -76,7 +76,7 @@ export async function provisionCustomerAssetScanChildDatabaseTlsMaterial(input: 
       "x509", "-in", certificatePath, "-noout", "-subject", "-nameopt", "RFC2253", "-enddate",
       "-ext", "extendedKeyUsage",
     ], { timeout: 10_000, maxBuffer: 16_384 });
-    const subject = details.stdout.split("\\n").find(line => line.startsWith("subject=")) ?? "";
+    const subject = details.stdout.split("\n").find(line => line.startsWith("subject=")) ?? "";
     const cn = subject.match(/(?:^|,)CN=([^,]+)/)?.[1];
     const endDate = details.stdout.match(/notAfter=(.+)/)?.[1];
     const expiry = endDate ? Math.floor(Date.parse(endDate) / 1000) : 0;
