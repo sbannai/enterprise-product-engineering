@@ -66,6 +66,13 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
           let leaseLost = false;
           let renewing = false;
           let renewalInFlight: Promise<void> | undefined;
+          // A lost lease must stop the isolated scanner immediately, not merely
+          // fence its eventual database write. This also bounds provider work
+          // after another worker has become eligible to claim the attempt.
+          const scanController = new AbortController();
+          const abortScanOnShutdown = () => scanController.abort();
+          if (options.signal.aborted) scanController.abort();
+          else options.signal.addEventListener("abort", abortScanOnShutdown, { once: true });
           const renewTimer = setInterval(() => {
             if (renewing || leaseLost || options.signal.aborted) return;
             renewing = true;
@@ -76,9 +83,13 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
                   uploadSessionId: job.uploadSessionId, workerId: options.workerId, leaseMs,
                   claimGeneration: job.claimGeneration,
                 });
-                if (!renewed) leaseLost = true;
+                if (!renewed) {
+                  leaseLost = true;
+                  scanController.abort();
+                }
               } catch (error) {
                 leaseLost = true;
+                scanController.abort();
                 options.onError?.(error);
               } finally {
                 renewing = false;
@@ -92,10 +103,6 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
             );
             if (!session) { leaseLost = true; options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "lease_lost" }); return; }
             let outcome: TrustedMalwareScanOutcome;
-            const scanController = new AbortController();
-            const abortScanOnShutdown = () => scanController.abort();
-            if (options.signal.aborted) scanController.abort();
-            else options.signal.addEventListener("abort", abortScanOnShutdown, { once: true });
             let scanTimer: ReturnType<typeof setTimeout> | undefined;
             try {
               // Child supervision owns its hard deadline and does not settle until the
