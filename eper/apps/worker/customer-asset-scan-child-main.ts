@@ -137,17 +137,6 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
           : "SCANNER_COMPOSITION_MODULE_EVALUATION_FAILED";
       throw error;
     }
-    /* validated deployment-owned composition module */
-      createCustomerAssetScanChildDatabaseTlsBootstrap?: (input: {
-        env: NodeJS.ProcessEnv;
-        onStage?: (stage: "sdk" | "identity" | "issuer" | "ca") => void;
-      }) => Promise<CustomerAssetScanChildDatabaseTlsBootstrap> | CustomerAssetScanChildDatabaseTlsBootstrap;
-      createCustomerAssetScanChildRuntimeDependencies?: (input: {
-        pool: { end(): Promise<void>; query<T extends Record<string, unknown>>(text: string, values?: readonly unknown[]): Promise<{ rows: T[] }> };
-        env: NodeJS.ProcessEnv;
-        identity: CustomerAssetScanChildDatabaseTlsBootstrap["identity"];
-      }) => Promise<CustomerAssetScanChildRuntimeComposition> | CustomerAssetScanChildRuntimeComposition;
-    };
     if (typeof module.createCustomerAssetScanChildDatabaseTlsBootstrap !== "function" ||
         typeof module.createCustomerAssetScanChildRuntimeDependencies !== "function") {
       bootstrapFailureCode = "SCANNER_COMPOSITION_EXPORTS_INVALID";
