@@ -77,10 +77,27 @@ export class CustomerAssetScanChildRuntime {
     if (!isAsyncIterable(providerStream)) return failure("SCANNER_BOOTSTRAP_FAILED");
 
     let exhausted = false;
+    let iteratorClosed = false;
+    const providerIterator = (providerStream as AsyncIterable<Uint8Array>)[Symbol.asyncIterator]();
+    const closeProviderIterator = async () => {
+      if (iteratorClosed) return;
+      iteratorClosed = true;
+      await providerIterator.return?.();
+    };
     const verifiedSource: AsyncIterable<Uint8Array> = {
       async *[Symbol.asyncIterator]() {
-        for await (const chunk of providerStream as AsyncIterable<Uint8Array>) yield chunk;
-        exhausted = true;
+        try {
+          while (true) {
+            const next = await providerIterator.next();
+            if (next.done) {
+              exhausted = true;
+              return;
+            }
+            yield next.value;
+          }
+        } finally {
+          if (!exhausted) await closeProviderIterator();
+        }
       },
     };
 
@@ -94,6 +111,9 @@ export class CustomerAssetScanChildRuntime {
       }, start.requestId, signal);
       // A scanner that returns before consuming the entire verified stream
       // cannot produce a trusted verdict: size and SHA-256 checks run at EOF.
+      // Close explicitly as well: a scanner may never request the iterable,
+      // in which case its generator/finally block would never start.
+      if (!exhausted) await closeProviderIterator();
       if (!exhausted || signal.aborted ||
           !outcome || !["clean", "infected", "error"].includes(outcome.scanStatus)) {
         return failure("SCANNER_RESULT_INVALID");
@@ -104,6 +124,7 @@ export class CustomerAssetScanChildRuntime {
         scanStatus: outcome.scanStatus,
       };
     } catch {
+      try { await closeProviderIterator(); } catch { /* preserve the scan failure */ }
       return failure("SCANNER_EXECUTION_FAILED");
     }
   }
