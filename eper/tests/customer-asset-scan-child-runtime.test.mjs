@@ -86,3 +86,24 @@ test("child runtime rejects a scanner result if shutdown aborts during execution
   assert.equal(result.type, "failure");
   assert.equal(result.code, "SCANNER_RESULT_INVALID");
 });
+
+test("child runtime does not start scanner work when provider read settles after cancellation", async () => {
+  const controller = new AbortController();
+  let scannerCalls = 0;
+  const source = { async *[Symbol.asyncIterator]() { yield new Uint8Array([1, 2, 3, 4]); } };
+  const { runtime, calls } = makeRuntime({
+    stream: source,
+    scanner: { async scan() { scannerCalls++; return { scanStatus: "clean" }; } },
+  });
+  const originalDispatch = runtime["dependencies"].provider.dispatch;
+  runtime["dependencies"].provider.dispatch = async input => {
+    const result = await originalDispatch(input);
+    controller.abort();
+    return result;
+  };
+  const result = await runtime.execute(start(), controller.signal);
+  assert.equal(result.type, "failure");
+  assert.equal(result.code, "SCANNER_BOOTSTRAP_FAILED");
+  assert.equal(calls.dispatch, 1);
+  assert.equal(scannerCalls, 0);
+});
