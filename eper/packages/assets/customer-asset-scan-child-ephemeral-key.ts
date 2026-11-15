@@ -48,6 +48,14 @@ export async function createCustomerAssetScanChildEphemeralKeyRequest():
         !csrPem.includes("-----END CERTIFICATE REQUEST-----")) {
       throw new Error("EPHEMERAL_KEY_REQUEST_INVALID");
     }
+    // Verify the PKCS#10 proof-of-possession before the CSR leaves this child.
+    // The issuer must independently repeat this validation at its trust boundary.
+    const verification = await execFile("openssl", [
+      "req", "-inform", "PEM", "-in", csrPath, "-noout", "-verify",
+    ], { timeout: 10_000, maxBuffer: 16_384 });
+    if (!(verification.stdout + verification.stderr).includes("verify OK")) {
+      throw new Error("EPHEMERAL_CSR_SIGNATURE_INVALID");
+    }
     let cleaned = false;
     return Object.freeze({
       csrPem,
