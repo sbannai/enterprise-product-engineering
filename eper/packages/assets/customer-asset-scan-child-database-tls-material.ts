@@ -12,7 +12,7 @@ const execFile = promisify(execFileCallback);
 export function parseCustomerAssetScanChildDatabaseCertificateRole(subjectOutput: string): string | undefined {
   if (typeof subjectOutput !== "string" || subjectOutput.length > 16_384) return undefined;
   const subject = subjectOutput.split(/\\r?\\n/).find(line => line.startsWith("subject=")) ?? "";
-  return subject.match(/(?:^|,)CN=([^,]+)/)?.[1];
+  return subject.match(/(?:^|,)CN=([^,]+)/)?.[1]?.trim();
 }
 
 export interface CustomerAssetScanChildDatabaseTlsMaterial {
