@@ -46,7 +46,7 @@ test("credential issuer maps verified workload identity to a fixed DB role", asy
   assert.equal(Object.isFrozen(credential), true);
 });
 
-test("CSR-supplied subject cannot select or override the database role", async () => {
+test("issuer selects the fixed database role separately from untrusted CSR subject bytes", async () => {
   const calls = [];
   const attackerCsr = `-----BEGIN CERTIFICATE REQUEST-----
 ${"C".repeat(96)}
@@ -121,4 +121,18 @@ test("issuer enforces bounded short-lived certificate policy", () => {
     90,
     () => now,
   ), /CREDENTIAL_POLICY_INVALID/);
+});
+
+test("issuer snapshots the allowlisted identity-to-role policy at construction", async () => {
+  const policy = new Map([[spiffeId, "eper_scan_child_ci"]]);
+  const calls = [];
+  const issuer = new CustomerAssetScanChildDatabaseCredentialIssuer(
+    policy,
+    { async sign(input) { calls.push(input); return certificatePem; } },
+    90,
+    () => now,
+  );
+  policy.set(spiffeId, "postgres_superuser");
+  await issuer.issue({ workload: await verifiedIdentity(), csrPem });
+  assert.equal(calls[0].databaseRole, "eper_scan_child_ci");
 });
