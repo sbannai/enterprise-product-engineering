@@ -75,8 +75,9 @@ test("issuer rejects unverified and non-entitled identities without invoking sig
     workload: { spiffeId, trustDomain: "eper.example", audience: "eper:customer-asset-scan-child", expiresAt: now + 60 },
     csrPem,
   }), { code: "CUSTOMER_ASSET_SCAN_CHILD_CREDENTIAL_ISSUANCE_UNAVAILABLE" });
+  const unentitled = await verifiedIdentity("spiffe://eper.example/unentitled/child");
   await assert.rejects(() => issuer.issue({
-    workload: await verifiedIdentity("spiffe://eper.example/unentitled/child"),
+    workload: unentitled,
     csrPem,
   }), { code: "CUSTOMER_ASSET_SCAN_CHILD_CREDENTIAL_ISSUANCE_UNAVAILABLE" });
   assert.equal(signerCalls, 0);
