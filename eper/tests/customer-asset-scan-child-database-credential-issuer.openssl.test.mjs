@@ -79,8 +79,8 @@ test("OpenSSL test signer verifies CSR, overrides its subject with the allowlist
     assert.equal(credential.clientCertificatePem, await readFile(certPath, "utf8"));
     assert.equal(credential.expiresAt, now + 120);
 
-    const invalidCsr = request.csrPem.replace(/\\n([A-Za-z0-9+/])/, (_, character) =>
-      "\\n" + (character === "A" ? "B" : "A"));
+    const invalidCsr = request.csrPem.replace(/\n([A-Za-z0-9+/])/, (_, character) =>
+      "\n" + (character === "A" ? "B" : "A"));
     await assert.rejects(() => issuer.issue({ workload, csrPem: invalidCsr }), {
       code: "CUSTOMER_ASSET_SCAN_CHILD_CREDENTIAL_ISSUANCE_UNAVAILABLE",
     });
