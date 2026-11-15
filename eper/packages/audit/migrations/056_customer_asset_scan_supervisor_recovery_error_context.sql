@@ -132,6 +132,8 @@ CREATE POLICY customer_asset_scan_supervisor_recovery_job
   TO eper_customer_asset_scan_supervisor_definer
   USING (tenant_id = current_setting('eper.tenant_id', true)
      AND application_id = current_setting('eper.application_id', true));
+DROP POLICY IF EXISTS customer_asset_scan_supervisor_recovery_job_update
+  ON public.eper_customer_asset_scan_jobs;
 CREATE POLICY customer_asset_scan_supervisor_recovery_job_update
   ON public.eper_customer_asset_scan_jobs FOR UPDATE
   TO eper_customer_asset_scan_supervisor_definer
