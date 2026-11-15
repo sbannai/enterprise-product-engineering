@@ -154,7 +154,10 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     });
     pool = createdPool;
     await createdPool.query("SELECT 1");
-    bootstrapFailureCode = "SCANNER_BOOTSTRAP_FAILED";
+    // From this point onward the database is connected and TLS bootstrap has
+    // completed. Keep composition failures distinct from earlier bootstrap
+    // failures so process-level diagnostics identify the failing boundary.
+    bootstrapFailureCode = "SCANNER_COMPOSITION_FAILED";
     const dependencies = await module.createCustomerAssetScanChildRuntimeDependencies({
       pool: createdPool, env: process.env, identity: tlsBootstrap.identity,
     });
