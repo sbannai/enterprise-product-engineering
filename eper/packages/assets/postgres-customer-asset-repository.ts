@@ -1027,8 +1027,8 @@ export class PostgresCustomerAssetRepository {
           [input.tenantId, candidate.asset_id],
         );
         if (!asset.rows[0] || asset.rows[0].upload_status !== "scanning") continue;
-        const job = await client.query<{ correlation_id: string }>(
-          `SELECT correlation_id
+        const job = await client.query<{ correlation_id: string; last_error_code: string | null }>(
+          `SELECT correlation_id, last_error_code
              FROM eper_customer_asset_scan_jobs
             WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
               AND state = 'leased' AND lease_expires_at <= clock_timestamp()
@@ -1066,7 +1066,8 @@ export class PostgresCustomerAssetRepository {
           resourceId: candidate.asset_id, correlationId: job.rows[0].correlation_id, source: "job",
           operationName: "independent customer asset scan recovery",
           payload: { assetId: candidate.asset_id, uploadSessionId: candidate.upload_session_id,
-            scanStatus: "error", resultingAssetStatus: "failed" },
+            scanStatus: "error", resultingAssetStatus: "failed",
+            previousErrorCode: job.rows[0].last_error_code },
         });
         recovered += 1;
       }
