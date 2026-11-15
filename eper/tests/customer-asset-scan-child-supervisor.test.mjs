@@ -177,11 +177,11 @@ test("scanner child supervisor creates a killable process group on POSIX", async
 
 test("scanner child supervisor rejects malformed executable and argument vectors before spawn", async () => {
   await assert.rejects(runCustomerAssetScanChild({
-    executable: node, args: ["-e", "process.exit(0)", "bad\\u0000argument"],
+    executable: node, args: ["-e", "process.exit(0)", "bad\u0000argument"],
     start: start(), timeoutMs: 2_000,
   }), /CUSTOMER_ASSET_SCAN_CHILD_OPTIONS_INVALID/);
   await assert.rejects(runCustomerAssetScanChild({
-    executable: "node\\u0000--require=untrusted", args: [],
+    executable: "node\u0000--require=untrusted", args: [],
     start: start(), timeoutMs: 2_000,
   }), /CUSTOMER_ASSET_SCAN_CHILD_OPTIONS_INVALID/);
   await assert.rejects(runCustomerAssetScanChild({
