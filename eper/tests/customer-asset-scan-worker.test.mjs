@@ -211,3 +211,34 @@ test("customer asset scan worker rejects ambiguous or missing scan executors", a
     scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
   }), /EPER_CUSTOMER_ASSET_SCAN_EXECUTOR_INVALID/);
 });
+
+
+test("customer asset scan worker aborts the child immediately when lease renewal is rejected", async () => {
+  const f = fixture("clean");
+  let childSignal;
+  f.repository.renewScanJobLease = async () => false;
+  await runCustomerAssetScanWorker({
+    repository: f.repository,
+    childRunner: async (message, signal) => {
+      childSignal = signal;
+      return new Promise((resolve) => signal.addEventListener("abort", () => resolve({
+        kind: "failure",
+        value: {
+          version: 3, type: "failure", jobToken: message.jobToken,
+          claimGeneration: message.claimGeneration, code: "SCANNER_EXECUTION_FAILED",
+        },
+      }), { once: true }));
+    },
+    tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
+    scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
+    leaseMs: 5_000, onJob(result) {
+      assert.equal(result.outcome, "lease_lost");
+      f.controller.abort();
+    },
+  });
+  assert.equal(childSignal?.aborted, true, "lease loss must cancel the active child");
+  assert.equal(f.calls.filter(call => call[0] === "retry").length, 0,
+    "a stale generation must not retry itself");
+  assert.equal(f.calls.filter(call => call[0] === "record").length, 0,
+    "a stale generation must not finalize a result");
+});
