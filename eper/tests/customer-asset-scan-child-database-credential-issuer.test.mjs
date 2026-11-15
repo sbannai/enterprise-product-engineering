@@ -37,11 +37,11 @@ test("credential issuer maps verified workload identity to a fixed DB role", asy
   assert.equal(calls.length, 1);
   assert.equal(calls[0].databaseRole, "eper_scan_child_ci");
   assert.equal(calls[0].csrPem, csrPem);
-  assert.equal(calls[0].notAfterEpochSeconds, now + 90);
+  assert.equal(calls[0].notAfterEpochSeconds, now + 60);
   assert.deepEqual(credential, {
     databaseRole: "eper_scan_child_ci",
     clientCertificatePem: certificatePem,
-    expiresAt: now + 90,
+    expiresAt: now + 60,
   });
   assert.equal(Object.isFrozen(credential), true);
 });
@@ -135,4 +135,19 @@ test("issuer snapshots the allowlisted identity-to-role policy at construction",
   policy.set(spiffeId, "postgres_superuser");
   await issuer.issue({ workload: await verifiedIdentity(), csrPem });
   assert.equal(calls[0].databaseRole, "eper_scan_child_ci");
+});
+
+test("issued database credential never outlives its authorizing workload SVID", async () => {
+  let signerCalls = 0;
+  const issuer = new CustomerAssetScanChildDatabaseCredentialIssuer(
+    new Map([[spiffeId, "eper_scan_child_ci"]]),
+    { async sign() { signerCalls += 1; return certificatePem; } },
+    90,
+    () => now + 61,
+  );
+  const workload = await verifiedIdentity();
+  await assert.rejects(() => issuer.issue({ workload, csrPem }), {
+    code: "CUSTOMER_ASSET_SCAN_CHILD_CREDENTIAL_ISSUANCE_UNAVAILABLE",
+  });
+  assert.equal(signerCalls, 0);
 });
