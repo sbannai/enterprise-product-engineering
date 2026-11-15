@@ -25,7 +25,7 @@ export interface CustomerAssetScanWorkerOptions {
   environment: AuditEnvironment; signal: AbortSignal;
   pollIntervalMs?: number; leaseMs?: number; batchSize?: number; concurrency?: number; scanTimeoutMs?: number;
   onError?: (error: unknown) => void;
-  onJob?: (result: { uploadSessionId: string; outcome: "completed" | "retry" | "dead_letter" | "lease_lost" }) => void;
+  onJob?: (result: { uploadSessionId: string; outcome: "completed" | "retry" | "dead_letter" | "lease_lost"; errorCode?: string }) => void;
 }
 const sleep = (ms: number, signal: AbortSignal) => new Promise<void>((resolve) => {
   if (signal.aborted) return resolve();
@@ -176,7 +176,7 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
                 claimGeneration: job.claimGeneration, errorCode: scanErrorCode, retryAfterMs,
               });
               if (retry === "pending") {
-                options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "retry" }); return;
+                options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "retry", errorCode: scanErrorCode }); return;
               }
               if (retry === "lease_lost") {
                 options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "lease_lost" }); return;
