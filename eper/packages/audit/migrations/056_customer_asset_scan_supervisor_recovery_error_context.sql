@@ -85,7 +85,8 @@ CREATE POLICY customer_asset_scan_supervisor_recovery_link
      AND application_id = current_setting('eper.application_id', true));
 GRANT SELECT (
   tenant_id, application_id, upload_session_id, asset_id, correlation_id,
-  state, attempt_count, max_attempts, lease_owner, lease_expires_at
+  state, attempt_count, max_attempts, lease_owner, lease_expires_at,
+  last_error_code
 )
   ON public.eper_customer_asset_scan_jobs
   TO eper_customer_asset_scan_supervisor_definer;
