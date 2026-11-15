@@ -247,7 +247,8 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env, on
         ].join("\\n"), { mode: 0o600 });
         await execFile("openssl", ["req", "-inform", "PEM", "-in", csrPath, "-noout", "-verify"],
           { timeout: 10000, maxBuffer: 16384 });
-        await execFile("openssl", [
+        onStage?.("ca");
+      await execFile("openssl", [
           "ca", "-batch", "-notext", "-config", config, "-in", csrPath, "-out", certPath,
           "-startdate", opensslTime(Math.floor(Date.now() / 1000) - 5),
           "-enddate", opensslTime(input.notAfterEpochSeconds),
