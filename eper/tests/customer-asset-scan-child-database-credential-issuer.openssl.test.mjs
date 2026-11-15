@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -19,7 +19,11 @@ const execFile = promisify(execFileCallback);
 const now = Math.floor(Date.now() / 1000);
 const spiffeId = "spiffe://eper.example/asset-scanner/child";
 
-test("OpenSSL test signer verifies CSR, overrides its subject with the allowlisted DB role and issues clientAuth certificate", async () => {
+function opensslTime(epochSeconds) {
+  return new Date(epochSeconds * 1000).toISOString().slice(2).replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+test("OpenSSL test signer verifies CSR, overrides its subject, enforces notAfter and issues clientAuth certificate", async () => {
   const directory = await mkdtemp(join(tmpdir(), "eper-child-issuer-test-"));
   const request = await createCustomerAssetScanChildEphemeralKeyRequest();
   try {
@@ -27,14 +31,43 @@ test("OpenSSL test signer verifies CSR, overrides its subject with the allowlist
     const caCert = join(directory, "ca.crt");
     const csrPath = join(directory, "child.csr");
     const certPath = join(directory, "child.crt");
-    const extensions = join(directory, "client.ext");
+    const newCerts = join(directory, "newcerts");
+    const index = join(directory, "index.txt");
+    const serial = join(directory, "serial");
+    const config = join(directory, "ca.cnf");
+    await mkdir(newCerts);
+    await writeFile(index, "", { mode: 0o600 });
+    await writeFile(serial, "01\n", { mode: 0o600 });
     await execFile("openssl", [
       "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256",
       "-keyout", caKey, "-out", caCert, "-days", "2",
       "-subj", "/CN=EPER isolated test CA",
     ], { timeout: 20_000, maxBuffer: 16_384 });
     await writeFile(csrPath, request.csrPem, { mode: 0o600 });
-    await writeFile(extensions, "[client]\nextendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\n", { mode: 0o600 });
+    await writeFile(config, [
+      "[ ca ]",
+      "default_ca = CA_default",
+      "[ CA_default ]",
+      "dir = " + directory,
+      "database = " + index,
+      "new_certs_dir = " + newCerts,
+      "certificate = " + caCert,
+      "private_key = " + caKey,
+      "serial = " + serial,
+      "default_md = sha256",
+      "default_days = 1",
+      "default_crl_days = 1",
+      "policy = policy_any",
+      "unique_subject = no",
+      "copy_extensions = none",
+      "[ policy_any ]",
+      "commonName = supplied",
+      "[ client ]",
+      "basicConstraints = critical,CA:FALSE",
+      "keyUsage = critical,digitalSignature",
+      "extendedKeyUsage = clientAuth",
+      "",
+    ].join("\n"), { mode: 0o600 });
 
     const workload = await new CustomerAssetScanChildSpiffeIdentityVerifier({
       async fetchJwtSvid() {
@@ -53,11 +86,12 @@ test("OpenSSL test signer verifies CSR, overrides its subject with the allowlist
             "req", "-inform", "PEM", "-in", csrPath, "-noout", "-verify",
           ], { timeout: 10_000, maxBuffer: 16_384 });
           await execFile("openssl", [
-            "x509", "-req", "-in", csrPath, "-CA", caCert, "-CAkey", caKey,
-            "-set_serial", "7", "-days", "1", "-sha256",
+            "ca", "-batch", "-notext", "-config", config,
+            "-in", csrPath, "-out", certPath,
+            "-startdate", opensslTime(now - 5),
+            "-enddate", opensslTime(input.notAfterEpochSeconds),
             "-subj", "/CN=" + input.databaseRole,
-            "-extfile", extensions, "-extensions", "client",
-            "-out", certPath,
+            "-extensions", "client",
           ], { timeout: 10_000, maxBuffer: 16_384 });
           return readFile(certPath, "utf8");
         },
@@ -71,10 +105,12 @@ test("OpenSSL test signer verifies CSR, overrides its subject with the allowlist
       "verify", "-CAfile", caCert, "-purpose", "sslclient", certPath,
     ], { timeout: 10_000, maxBuffer: 16_384 });
     const details = await execFile("openssl", [
-      "x509", "-in", certPath, "-noout", "-subject", "-ext", "extendedKeyUsage",
+      "x509", "-in", certPath, "-noout", "-subject", "-enddate", "-ext", "extendedKeyUsage",
     ], { timeout: 10_000, maxBuffer: 16_384 });
     assert.match(details.stdout, /CN\s*=\s*eper_scan_child_ci/);
     assert.match(details.stdout, /TLS Web Client Authentication|clientAuth/);
+    const certificateExpiry = Date.parse(details.stdout.match(/notAfter=(.+)/)?.[1] ?? "") / 1000;
+    assert.equal(certificateExpiry, now + 120);
     assert.equal(credential.databaseRole, "eper_scan_child_ci");
     assert.equal(credential.clientCertificatePem, await readFile(certPath, "utf8"));
     assert.equal(credential.expiresAt, now + 120);
