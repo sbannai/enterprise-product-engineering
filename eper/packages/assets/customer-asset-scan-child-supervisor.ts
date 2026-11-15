@@ -152,23 +152,30 @@ function supervise(
       if (aborted) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_ABORTED"));
       if (timedOut) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_TIMEOUT"));
       if (overflowed) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_OUTPUT_LIMIT"));
-      if (code !== 0 || signal !== null) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_EXITED"));
+      if (signal !== null) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_EXITED"));
       let message: unknown;
       try {
         message = JSON.parse(output);
       } catch {
-        return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_INVALID"));
+        return finish(new Error(code === 0
+          ? "CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_INVALID"
+          : "CUSTOMER_ASSET_SCAN_CHILD_EXITED"));
       }
+      // The child deliberately exits non-zero after emitting a bounded failure
+      // envelope. Validate that envelope before classifying the process exit so
+      // callers retain the typed failure code without trusting arbitrary output.
+      if (isCustomerAssetScanChildFailure(message) &&
+          message.jobToken === start.jobToken &&
+          message.claimGeneration === start.claimGeneration &&
+          code === 1) {
+        return finish(undefined, { kind: "failure", value: message });
+      }
+      if (code !== 0) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_EXITED"));
       if (isCustomerAssetScanChildResult(message) &&
           message.jobToken === start.jobToken &&
           message.claimGeneration === start.claimGeneration &&
           message.scannerServiceId === start.scannerServiceId) {
         return finish(undefined, { kind: "result", value: message });
-      }
-      if (isCustomerAssetScanChildFailure(message) &&
-          message.jobToken === start.jobToken &&
-          message.claimGeneration === start.claimGeneration) {
-        return finish(undefined, { kind: "failure", value: message });
       }
       return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_INVALID"));
     });
