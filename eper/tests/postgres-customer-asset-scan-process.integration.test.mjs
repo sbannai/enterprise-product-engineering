@@ -182,7 +182,7 @@ test("process-level PostgreSQL 16 scan worker claims, invokes configured test sc
       const compositionSource = `import { createReadStream } from "node:fs";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 import { CustomerAssetScanChildSpiffeIdentityVerifier } from "../customer-asset-scan-child-spiffe-identity.js";
@@ -237,8 +237,8 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env, on
         await writeFile(config, [
           "[ ca ]", "default_ca = CA_default", "[ CA_default ]",
           "dir = " + directory, "database = " + index, "new_certs_dir = " + newCerts,
-          "certificate = " + join(env.EPER_SCAN_CHILD_CERT_DIR, "ca.crt"),
-          "private_key = " + join(env.EPER_SCAN_CHILD_CERT_DIR, "ca.key"),
+          "certificate = " + env.PGSSLROOTCERT,
+          "private_key = " + join(dirname(env.PGSSLROOTCERT), "ca.key"),
           "serial = " + serial, "default_md = sha256", "default_days = 1",
           "default_crl_days = 1", "policy = policy_any", "unique_subject = no",
           "copy_extensions = none", "[ policy_any ]", "commonName = supplied",
@@ -263,7 +263,7 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env, on
   onStage?.("ca");
   return {
     identity, issuer,
-    caPem: await readFile(join(env.EPER_SCAN_CHILD_CERT_DIR, "ca.crt"), "utf8"),
+    caPem: await readFile(env.PGSSLROOTCERT, "utf8"),
     close() { return spiffe.close(); },
   };
 }
