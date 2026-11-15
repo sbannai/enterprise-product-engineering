@@ -45,7 +45,11 @@ const ALLOWED_CHILD_ENVIRONMENT_KEYS = new Set([
 export async function runCustomerAssetScanChild(
   options: CustomerAssetScanChildSupervisorOptions,
 ): Promise<CustomerAssetScanChildOutcome> {
-  if (!options.executable || !Array.isArray(options.args) ||
+  if (typeof options.executable !== "string" || options.executable.length === 0 ||
+      options.executable.length > 4096 || /[\\u0000-\\u001f\\u007f]/.test(options.executable) ||
+      !Array.isArray(options.args) || options.args.length > 256 ||
+      !options.args.every(argument => typeof argument === "string" &&
+        argument.length <= 4096 && !/[\\u0000]/.test(argument)) ||
       !isCustomerAssetScanChildStart(options.start) ||
       !Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 100 ||
       options.timeoutMs > MAX_TIMEOUT_MS) {
