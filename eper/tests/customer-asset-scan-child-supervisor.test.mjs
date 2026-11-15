@@ -31,6 +31,32 @@ test("scanner child supervisor hard-kills a non-cooperative child at its deadlin
   assert.ok(Date.now() - began < 2_000, "hung child must be terminated within a bounded interval");
 });
 
+test("scanner child supervisor permits only the bounded PostgreSQL mTLS connection settings", async () => {
+  const environment = {
+    NODE_ENV: "test",
+    PGHOST: "127.0.0.1",
+    PGPORT: "5432",
+    PGDATABASE: "eper_test",
+    PGUSER: "eper_scan_child_ci",
+    PGSSLMODE: "verify-full",
+    PGSSLROOTCERT: "/tmp/ca.pem",
+    PGSSLCERT: "/tmp/client.pem",
+    PGSSLKEY: "/tmp/client-key.pem",
+  };
+  const script = [
+    "const expected=" + JSON.stringify(environment) + ";",
+    "for (const [key,value] of Object.entries(expected)) if (process.env[key] !== value) process.exit(43);",
+    "let s='';process.stdin.on('data',c=>s+=c);",
+    "process.stdin.on('end',()=>{const m=JSON.parse(s);",
+    "process.stdout.write(JSON.stringify({version:3,type:'result',jobToken:m.jobToken,",
+    "claimGeneration:m.claimGeneration,scannerServiceId:m.scannerServiceId,scanStatus:'clean'}));});",
+  ].join("");
+  const outcome = await runCustomerAssetScanChild({
+    executable: node, args: ["-e", script], start: start(), timeoutMs: 2_000, environment,
+  });
+  assert.equal(outcome.kind, "result");
+});
+
 test("scanner child supervisor rejects malformed output and non-zero exits", async () => {
   await assert.rejects(runCustomerAssetScanChild({
     executable: node, args: ["-e", "process.stdout.write('not-json')"],
@@ -64,8 +90,7 @@ test("scanner child supervisor enforces output and environment bounds", async ()
 
 test("scanner child environment rejects unapproved provider credentials and control characters", async () => {
   for (const key of ["AWS_ACCESS_KEY_ID", "AWS_SESSION_TOKEN", "GOOGLE_APPLICATION_CREDENTIALS",
-    "AZURE_CLIENT_SECRET", "PROVIDER_API_TOKEN", "CUSTOM_SECRET_VALUE",
-    "PGUSER", "PGSSLMODE", "PGSSLROOTCERT", "PGSSLCERT", "PGSSLKEY"]) {
+    "AZURE_CLIENT_SECRET", "PROVIDER_API_TOKEN", "CUSTOM_SECRET_VALUE"]) {
     await assert.rejects(runCustomerAssetScanChild({
       executable: node, args: ["-e", "process.exit(0)"], start: start(), timeoutMs: 2_000,
       environment: { [key]: "must-not-cross-process-boundary" },
