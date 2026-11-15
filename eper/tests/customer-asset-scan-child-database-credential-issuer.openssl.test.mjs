@@ -20,7 +20,7 @@ const now = Math.floor(Date.now() / 1000);
 const spiffeId = "spiffe://eper.example/asset-scanner/child";
 
 function opensslTime(epochSeconds) {
-  return new Date(epochSeconds * 1000).toISOString().slice(2).replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  return new Date(epochSeconds * 1000).toISOString().slice(2).replace(/[-:T]/g, "").replace(/\.\d{3}Z$/, "Z");
 }
 
 test("OpenSSL test signer verifies CSR, overrides its subject, enforces notAfter and issues clientAuth certificate", async () => {
