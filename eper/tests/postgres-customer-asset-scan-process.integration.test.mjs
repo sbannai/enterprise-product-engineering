@@ -197,7 +197,7 @@ const spiffeId = "spiffe://eper.example/asset-scanner/ci-child";
 function opensslTime(epochSeconds) {
   return new Date(epochSeconds * 1000).toISOString().slice(2).replace(/[-:T]/g, "").replace(/\.\d{3}Z$/, "Z");
 }
-export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env }) {
+export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env, onStage }) {
   class TestSpiffeClient {
     constructor(options) {
       if (options.connection !== env.EPER_SCANNER_CHILD_SPIFFE_WORKLOAD_API_SOCKET ||
@@ -209,13 +209,16 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env }) 
     }
     close() {}
   }
+  onStage?.("sdk");
   const spiffe = createCustomerAssetScanChildSpiffeSdkRuntime({
     endpoint: env.EPER_SCANNER_CHILD_SPIFFE_WORKLOAD_API_SOCKET,
     SpiffeClient: TestSpiffeClient,
   });
+  onStage?.("identity");
   const identity = new CustomerAssetScanChildSpiffeIdentityVerifier(
     spiffe.adapter, env.EPER_SCANNER_CHILD_EXPECTED_SPIFFE_ID,
   );
+  onStage?.("issuer");
   const issuer = new CustomerAssetScanChildDatabaseCredentialIssuer(
     new Map([[spiffeId, "eper_scan_child_ci"]]),
     { async sign(input) {
@@ -257,6 +260,7 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env }) 
     } },
     120,
   );
+  onStage?.("ca");
   return {
     identity, issuer,
     caPem: await readFile(join(env.EPER_SCAN_CHILD_CERT_DIR, "ca.crt"), "utf8"),
