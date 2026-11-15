@@ -340,6 +340,7 @@ test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease
       await pool.query(
         `UPDATE eper_customer_asset_scan_jobs
             SET attempt_count = max_attempts,
+                last_error_code = 'SCANNER_EXECUTION_FAILED',
                 lease_expires_at = clock_timestamp() - INTERVAL '1 second'
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
         [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId],
@@ -382,11 +383,12 @@ test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease
         upload_status: "failed", scan_status: "error", lifecycle_status: "quarantined", state: "dead_letter",
       });
       const audit = await pool.query(
-        `SELECT action FROM eper_audit_events
+        `SELECT action, payload FROM eper_audit_events
           WHERE tenant_id = $1 AND correlation_id = $2 AND action = 'customer.asset.scan.exhausted'`,
         [fixture.tenantId, fixture.correlationId],
       );
       assert.equal(audit.rowCount, 1, "recovery transition and audit must commit together");
+      assert.equal(audit.rows[0].payload.previousErrorCode, "SCANNER_EXECUTION_FAILED");
     } finally {
       if (child) await stopChild(child).catch(() => {});
       await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [workerLogin.role]).catch(() => {});
@@ -413,6 +415,7 @@ test("PostgreSQL 16 recovery sweeps and stale scanner finalization serialize in 
       await pool.query(
         `UPDATE eper_customer_asset_scan_jobs
             SET attempt_count = max_attempts,
+                last_error_code = 'SCANNER_EXECUTION_FAILED',
                 lease_expires_at = clock_timestamp() - INTERVAL '1 second'
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
         [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId],
@@ -861,6 +864,7 @@ test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { s
     await pool.query(
       `UPDATE public.eper_customer_asset_scan_jobs
           SET attempt_count = max_attempts,
+              last_error_code = 'SCANNER_EXECUTION_FAILED',
               lease_expires_at = clock_timestamp() - INTERVAL '1 second'
         WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
       [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId],
@@ -1086,12 +1090,13 @@ test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { s
       lifecycle_status: "quarantined", state: "dead_letter",
     });
     const audit = await pool.query(
-      `SELECT action FROM public.eper_audit_events
+      `SELECT action, payload FROM public.eper_audit_events
         WHERE tenant_id = $1 AND correlation_id = $2
           AND action = 'customer.asset.scan.exhausted'`,
       [fixture.tenantId, fixture.correlationId],
     );
     assert.equal(audit.rowCount, 1, "state transition must have its canonical audit event");
+    assert.equal(audit.rows[0].payload.previousErrorCode, "SCANNER_EXECUTION_FAILED");
   } finally {
     await supervisorPool.end();
     await pool.query(
