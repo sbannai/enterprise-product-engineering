@@ -153,6 +153,9 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     const dependencies = await module.createCustomerAssetScanChildRuntimeDependencies({
       pool: createdPool, env: process.env, identity: tlsBootstrap.identity,
     });
+    if (!dependencies || dependencies.identity !== tlsBootstrap.identity) {
+      throw new Error("CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_COMPOSITION_MISMATCH");
+    }
     if (dependencies && typeof dependencies === "object" && typeof dependencies.close === "function") {
       closeComposition = dependencies.close.bind(dependencies);
     }
