@@ -56,3 +56,21 @@ test("rejects invalid chunks and cancellation", async () => {
     expectedSizeBytes: 3, expectedSha256: sha256, signal: controller.signal,
   })), error => error.code === "PROVIDER_INTERNAL_OBJECT_READ_ABORTED");
 });
+
+test("forwards return to a provider iterator even when the consumer never calls next", async () => {
+  let returnCalls = 0;
+  const source = {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() { return { done: false, value: bytes }; },
+        async return() { returnCalls++; return { done: true, value: undefined }; },
+      };
+    },
+  };
+  const verified = verifiedProviderInternalObjectChunks({
+    source, expectedSizeBytes: 3, expectedSha256: sha256,
+  });
+  await verified.return();
+  assert.equal(returnCalls, 1);
+  assert.deepEqual(await verified.next(), { done: true, value: undefined });
+});
