@@ -251,3 +251,19 @@ test("scanner child supervisor rejects sparse argument vectors before spawn", as
     timeoutMs: 2_000,
   }), /CUSTOMER_ASSET_SCAN_CHILD_OPTIONS_INVALID/);
 });
+
+
+test("scanner child supervisor accepts only the parent-provided private temp root override", async () => {
+  const environment = { TMPDIR: "/tmp/eper-parent-owned-scratch" };
+  const script = [
+    "if (process.env.TMPDIR !== '/tmp/eper-parent-owned-scratch') process.exit(44);",
+    "let s='';process.stdin.on('data',c=>s+=c);",
+    "process.stdin.on('end',()=>{const m=JSON.parse(s);",
+    "process.stdout.write(JSON.stringify({version:3,type:'result',jobToken:m.jobToken,",
+    "claimGeneration:m.claimGeneration,scannerServiceId:m.scannerServiceId,scanStatus:'clean'}));});",
+  ].join("");
+  const outcome = await runCustomerAssetScanChild({
+    executable: node, args: ["-e", script], start: start(), timeoutMs: 2_000, environment,
+  });
+  assert.equal(outcome.kind, "result");
+});
