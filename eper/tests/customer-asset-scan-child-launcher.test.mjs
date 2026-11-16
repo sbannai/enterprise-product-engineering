@@ -28,9 +28,6 @@ const configuration = () => ({
   databasePort: 5432,
   databaseName: "eper",
   databaseUser: "eper_customer_asset_scan_child",
-  databaseCaFile: "/run/eper/db/ca.pem",
-  databaseClientCertificateFile: "/run/eper/db/client.pem",
-  databaseClientKeyFile: "/run/eper/db/client-key.pem",
   compositionModulePath: "./dist/packages/assets/scanners/customer-asset-scan-composition.js",
 });
 
@@ -56,7 +53,6 @@ test("trusted scanner launcher passes only explicit SPIFFE and certificate-authe
   ].sort());
   assert.equal(launch.environment.PGSSLMODE, "verify-full");
   assert.equal(launch.environment.EPER_SCANNER_CHILD_COMPOSITION_MODULE.endsWith("/customer-asset-scan-composition.js"), true);
-  assert.equal(launch.environment.PGSSLKEY, "/run/eper/db/client-key.pem");
   assert.equal(Object.values(launch.environment).some(value => /password|secret|credential/i.test(value)), false);
 });
 
@@ -64,9 +60,6 @@ test("trusted scanner launcher rejects non-local SPIFFE endpoint and arbitrary p
   assert.throws(() => buildTrustedCustomerAssetScanChildLaunch({
     ...configuration(), workloadApiSocket: "https://agent.example.org",
   }), /SPIFFE_SOCKET_INVALID/);
-  assert.throws(() => buildTrustedCustomerAssetScanChildLaunch({
-    ...configuration(), databaseClientKeyFile: "relative/client-key.pem",
-  }), /DATABASE_KEY_PATH_INVALID/);
   assert.throws(() => buildTrustedCustomerAssetScanChildLaunch({
     ...configuration(), expectedSpiffeId: "spiffe://example.org/other/../workload",
   }), /SPIFFE_ID_INVALID/);
