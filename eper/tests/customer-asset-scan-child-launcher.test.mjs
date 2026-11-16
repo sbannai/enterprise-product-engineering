@@ -48,8 +48,7 @@ test("trusted scanner launcher passes only explicit SPIFFE and certificate-authe
     "EPER_SCANNER_CHILD_EXPECTED_SPIFFE_ID",
     "EPER_SCANNER_CHILD_SPIFFE_AUDIENCE",
     "EPER_SCANNER_CHILD_SPIFFE_WORKLOAD_API_SOCKET",
-    "PGDATABASE", "PGHOST", "PGPORT", "PGSSLCERT", "PGSSLKEY", "PGSSLMODE",
-    "PGSSLROOTCERT", "PGUSER",
+    "PGDATABASE", "PGHOST", "PGPORT", "PGSSLMODE", "PGUSER",
   ].sort());
   assert.equal(launch.environment.PGSSLMODE, "verify-full");
   assert.equal(launch.environment.EPER_SCANNER_CHILD_COMPOSITION_MODULE.endsWith("/customer-asset-scan-composition.js"), true);
