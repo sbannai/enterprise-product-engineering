@@ -65,6 +65,8 @@ jobs:
         run: node --test tests/customer-asset-scan-child-protocol.test.mjs tests/customer-asset-scan-child-supervisor.test.mjs tests/customer-asset-scan-child-runtime.test.mjs tests/customer-asset-scan-child-stdio.test.mjs tests/customer-asset-scan-child-process.integration.test.mjs tests/customer-asset-scan-child-launcher.test.mjs tests/customer-asset-scan-child-composition-contract.test.mjs
       - name: Scanner child identity and scan-only authorization regressions
         run: node --test tests/customer-asset-scan-child-identity.test.mjs
+      - name: Scanner child SPIFFE SDK adapter contract regressions
+        run: node --test tests/customer-asset-scan-child-spiffe-sdk-adapter.test.mjs
       - name: Scanner child SPIFFE Workload API identity regressions
         run: node --test tests/customer-asset-scan-child-spiffe-identity.test.mjs
       - name: Scanner child-local provider credential resolution regressions
