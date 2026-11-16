@@ -393,6 +393,39 @@ test("aborts provider operation at configured request timeout", async () => {
   assert.equal(receivedSignal.aborted, true);
 });
 
+test("closes a provider stream that arrives after the dispatch deadline", async () => {
+  let resolveRead;
+  let returnCalls = 0;
+  const f = fixture({
+    runtimeLimits: { maxObjectBytes: 10_000, requestTimeoutMs: 10, maxConcurrentOperations: 1 },
+    driver: {
+      capabilities: { ...capabilities, internalObjectRead: true },
+      readObjectInternal() {
+        return new Promise(resolve => { resolveRead = resolve; });
+      },
+    },
+  });
+  await assert.rejects(() => f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-late-stream",
+    expectedConnectionId: "connection-a",
+    operation: { kind: "read_object_internal", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref",
+      expectedSizeBytes: 3, expectedSha256: "a".repeat(64),
+    } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_TIMEOUT");
+  resolveRead({
+    [Symbol.asyncIterator]() {
+      return {
+        async next() { return { done: false, value: new Uint8Array([1, 2, 3]) }; },
+        async return() { returnCalls++; return { done: true, value: undefined }; },
+      };
+    },
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(returnCalls, 1);
+});
+
 test("internal object read enforces deployment maxObjectBytes before credentials or provider invocation", async () => {
   let driverInvoked = false;
   const f = fixture({
