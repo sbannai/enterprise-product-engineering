@@ -42,9 +42,11 @@ for (const candidate of candidates) {
     if (dist.attestations?.url) {
       try {
         const attestationResponse = await fetch(dist.attestations.url);
-        result.provenanceFetchStatus = attestationResponse.status;\n        if (attestationResponse.ok) {
+        result.provenanceFetchStatus = attestationResponse.status;
+        if (attestationResponse.ok) {
           const envelope = await attestationResponse.json();
-          result.provenanceEnvelopeKeys = Object.keys(envelope);\n          result.provenanceEnvelope = envelope;\n        }
+          result.provenanceEnvelopeKeys = Object.keys(envelope);
+          result.provenanceEnvelope = envelope;\n        }
       } catch (error) {\n        result.reasons.push(`provenance fetch failed: ${error instanceof Error ? error.message : String(error)}`);\n      }\n    }
     if (!dist.integrity || !dist.tarball) throw new Error("registry metadata lacks dist.integrity or dist.tarball");
 
