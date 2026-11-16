@@ -17,7 +17,8 @@ for (const candidate of candidates) {
     tarballIntegrityMatches: false,
     registrySignatureMetadataPresent: false,
     provenanceMetadataPresent: false,
-    sourceCommitMatches: null,\n    provenanceEnvelopeKeys: [],\n    provenanceFetchStatus: null,
+    sourceCommitMatches: null,
+    provenanceEnvelopeKeys: [],\n    provenanceFetchStatus: null,
     npmAuditSignaturesExitCode: null,
     npmAuditSignaturesOutput: "",
     status: "BLOCKED",
@@ -36,7 +37,8 @@ for (const candidate of candidates) {
     const dist = metadata.dist ?? {};
     result.registrySignatureMetadataPresent = Array.isArray(dist.signatures) && dist.signatures.length > 0;
     result.provenanceMetadataPresent = Boolean(dist.attestations?.url || dist.attestations?.integrity);
-    result.sourceCommitMatches = metadata.gitHead ? metadata.gitHead === candidate.expectedGitHead : null;\n    if (dist.attestations?.url) {\n      try {\n        const attestationResponse = await fetch(dist.attestations.url);\n        result.provenanceFetchStatus = attestationResponse.status;\n        if (attestationResponse.ok) {\n          const envelope = await attestationResponse.json();\n          result.provenanceEnvelopeKeys = Object.keys(envelope);\n          result.provenanceEnvelope = envelope;\n        }\n      } catch (error) {\n        result.reasons.push(`provenance fetch failed: ${error instanceof Error ? error.message : String(error)}`);\n      }\n    }
+    result.sourceCommitMatches = metadata.gitHead ? metadata.gitHead === candidate.expectedGitHead : null;
+    if (dist.attestations?.url) {\n      try {\n        const attestationResponse = await fetch(dist.attestations.url);\n        result.provenanceFetchStatus = attestationResponse.status;\n        if (attestationResponse.ok) {\n          const envelope = await attestationResponse.json();\n          result.provenanceEnvelopeKeys = Object.keys(envelope);\n          result.provenanceEnvelope = envelope;\n        }\n      } catch (error) {\n        result.reasons.push(`provenance fetch failed: ${error instanceof Error ? error.message : String(error)}`);\n      }\n    }
     if (!dist.integrity || !dist.tarball) throw new Error("registry metadata lacks dist.integrity or dist.tarball");
 
     const tarballResponse = await fetch(dist.tarball);
@@ -47,7 +49,8 @@ for (const candidate of candidates) {
     if (!result.tarballIntegrityMatches) result.reasons.push("downloaded tarball SHA-512 does not match registry dist.integrity");
     if (!result.registrySignatureMetadataPresent) result.reasons.push("registry signature metadata absent");
     if (!result.provenanceMetadataPresent) result.reasons.push("registry provenance attestation metadata absent");
-    if (result.sourceCommitMatches === false) result.reasons.push(`registry gitHead mismatch (found ${metadata.gitHead})`);\n    if (result.sourceCommitMatches === null) result.reasons.push("registry gitHead absent; provenance source revision requires explicit verification");
+    if (result.sourceCommitMatches === false) result.reasons.push(`registry gitHead mismatch (found ${metadata.gitHead})`);
+    if (result.sourceCommitMatches === null) result.reasons.push("registry gitHead absent; provenance source revision requires explicit verification");
 
     temp = await mkdtemp(join(tmpdir(), "eper-spiffe-evidence-"));
     await writeFile(join(temp, "package.json"), JSON.stringify({ name: "eper-spiffe-artifact-evidence", version: "1.0.0", private: true }, null, 2));
