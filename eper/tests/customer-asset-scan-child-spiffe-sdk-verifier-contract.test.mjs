@@ -64,6 +64,6 @@ test("SDK adapter result with expired or excessive SVID lifetime is rejected", a
 test("SDK adapter result without a token fails closed before identity verification", async () => {
   const verifier = verifierForSdkResult({ spiffeId, token: "", expiresAtMs });
   await assert.rejects(verifier.verifyCurrentProcessIdentity(), {
-    code: "CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_UNAVAILABLE",
+    code: "CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_INVALID",
   });
 });
