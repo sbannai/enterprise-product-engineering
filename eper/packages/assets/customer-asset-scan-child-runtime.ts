@@ -71,7 +71,7 @@ export class CustomerAssetScanChildRuntime {
           kind: "read_object_internal",
           request: {
             assetId: context.assetId,
-            providerObjectReference: context.providerObjectReference,
+            providerObjectReference: context.providerUploadReference,
             expectedSizeBytes: context.sizeBytes,
             expectedSha256: context.checksumSha256,
           },
