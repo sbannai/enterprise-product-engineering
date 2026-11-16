@@ -21,12 +21,13 @@ test("dedicated synthetic driver traverses all six tenant-scoped dispatch operat
     renewByProviderReference: true, verifyObject: true, downloadGrant: true, malwareScan: true,
   };
   const service = new ProviderStorageDriverDispatchService({
-    async resolve(input) {
-      return { runtime: { selection: { tenantId: input.tenantId, applicationId: input.applicationId,
+    async resolveRuntime(input) {
+      return { selection: { tenantId: input.tenantId, applicationId: input.applicationId,
         capabilityKey: input.capability, connectionId: "conn-a", providerKey: "synthetic-storage" },
-        capability: input.capability, adapter: driver }, credentials };
+        capability: input.capability, adapter: driver };
     },
-  });
+    async resolveCredentials() { return credentials; },
+  }, undefined, { maxObjectBytes: 10_000_000, requestTimeoutMs: 30_000, maxConcurrentOperations: 10 });
   const scope = { tenantId: "tenant-a", applicationId: "app-a" };
   const dispatch = (kind, request) => service.dispatch({ ...scope, actorId: "actor-a", correlationId: "corr-" + kind, requestId: "req-" + kind,
     operation: { kind, request } });
