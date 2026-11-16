@@ -133,7 +133,7 @@ docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T spire-server \
 probe() {
   local uid="$1"
   docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --rm --no-deps \
-    --user "$uid:$uid" --group-add 1000 workload-probe \
+    --user "$uid:$uid" workload-probe \
     api fetch jwt -socketPath "$SOCKET" -audience "$AUDIENCE" -spiffeID "$EXPECTED_ID" 2>&1
 }
 
