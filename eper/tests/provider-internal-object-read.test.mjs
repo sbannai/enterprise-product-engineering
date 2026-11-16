@@ -57,6 +57,29 @@ test("rejects invalid chunks and cancellation", async () => {
   })), error => error.code === "PROVIDER_INTERNAL_OBJECT_READ_ABORTED");
 });
 
+test("closes a pending provider iterator when its AbortSignal fires", async () => {
+  let returnCalls = 0;
+  let releaseNext;
+  const source = {
+    [Symbol.asyncIterator]() {
+      return {
+        next() { return new Promise(resolve => { releaseNext = resolve; }); },
+        async return() { returnCalls++; return { done: true, value: undefined }; },
+      };
+    },
+  };
+  const controller = new AbortController();
+  const verified = verifiedProviderInternalObjectChunks({
+    source, expectedSizeBytes: 3, expectedSha256: sha256, signal: controller.signal,
+  });
+  const pending = verified.next();
+  controller.abort();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(returnCalls, 1);
+  releaseNext({ done: true, value: undefined });
+  await assert.rejects(pending, error => error.code === "PROVIDER_INTERNAL_OBJECT_READ_ABORTED");
+});
+
 test("forwards return to a provider iterator even when the consumer never calls next", async () => {
   let returnCalls = 0;
   const source = {

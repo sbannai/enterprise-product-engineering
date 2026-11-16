@@ -164,15 +164,31 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         controller.abort();
-        if (streaming) cleanup();
         reject(new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_TIMEOUT"));
       }, limits.requestTimeoutMs as number);
     });
     try {
-      const result = await Promise.race([
-        this.dispatchWithSignal({ ...input, signal: controller.signal }),
-        timeout,
-      ]);
+      const operation = this.dispatchWithSignal({ ...input, signal: controller.signal }).then(result => {
+        if (result && typeof result === "object" &&
+            typeof (result as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === "function") {
+          streaming = true;
+        } else {
+          cleanup();
+        }
+        return result;
+      }, error => {
+        cleanup();
+        throw error;
+      });
+      const callerAbort = input.signal ? new Promise<never>((_, reject) => {
+        if (input.signal?.aborted) {
+          reject(new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED"));
+        } else {
+          input.signal?.addEventListener("abort", () =>
+            reject(new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED")), { once: true });
+        }
+      }) : new Promise<never>(() => {});
+      const result = await Promise.race([operation, timeout, callerAbort]);
       if (controller.signal.aborted) {
         throw new ProviderStorageDispatchError(input.signal?.aborted
           ? "PROVIDER_STORAGE_DISPATCH_ABORTED"
@@ -198,11 +214,12 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
           }
         })();
       }
-      cleanup();
       return result;
     } catch (error) {
       controller.abort();
-      cleanup();
+      if (!streaming && input.signal?.aborted) {
+        // The in-flight operation owns the permit until it actually settles.
+      }
       throw error;
     }
   }

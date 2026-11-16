@@ -30,12 +30,18 @@ export function verifiedProviderInternalObjectChunks(input: {
   let received = 0;
   let validated = false;
   let closed = false;
+  let abortHandler: (() => void) | undefined;
 
   const close = async (): Promise<void> => {
     if (closed) return;
     closed = true;
+    if (abortHandler) input.signal?.removeEventListener("abort", abortHandler);
     await source.return?.();
   };
+
+  abortHandler = () => { void close().catch(() => undefined); };
+  if (input.signal?.aborted) abortHandler();
+  else input.signal?.addEventListener("abort", abortHandler, { once: true });
 
   const iterator: AsyncIterableIterator<Uint8Array> = {
     async next(): Promise<IteratorResult<Uint8Array>> {
