@@ -110,6 +110,10 @@ export class CustomerAssetScanChildSpiffeIdentityVerifier {
       return identity;
     } catch (error) {
       if (error instanceof CustomerAssetScanChildSpiffeIdentityError) throw error;
+      if (error instanceof Error &&
+          error.message === "CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_SVID_INVALID") {
+        throw new CustomerAssetScanChildSpiffeIdentityError("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_INVALID");
+      }
       throw new CustomerAssetScanChildSpiffeIdentityError("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_UNAVAILABLE");
     }
   }
