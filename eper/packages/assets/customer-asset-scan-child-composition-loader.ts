@@ -2,9 +2,11 @@ import { lstat, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, relative, sep } from "node:path";
 
 /**
- * Accept only immutable deployment-owned scanner composition code. Checking
- * the containing directory as well as the module prevents an untrusted writer
- * from replacing a previously validated module before it is imported.
+ * Validate the scanner composition path and reject group/world-writable
+ * modules and directory ancestors. This does not establish file ownership or
+ * reject owner-writable paths: deployment must separately ensure that the
+ * worker/child identities and untrusted actors cannot modify the composition
+ * module or any ancestor after validation.
  */
 export async function assertTrustedCustomerAssetScanCompositionModule(value: string): Promise<string> {
   if (typeof value !== "string" || !isAbsolute(value) || value.split(sep).includes("..") || !value.endsWith(".js")) {
