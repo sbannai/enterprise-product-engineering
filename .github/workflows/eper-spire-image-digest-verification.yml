@@ -1,0 +1,71 @@
+name: EPER SPIRE Image Digest Verification
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/eper-spire-image-digest-verification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-public-ghcr-manifests:
+    name: Verify pinned SPIRE v1.16.0 GHCR digests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Inspect and verify immutable image references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+
+          verify_image() {
+            local name="$1"
+            local repository="$2"
+            local tag="$3"
+            local expected_digest="$4"
+            local reference="${repository}:${tag}@${expected_digest}"
+            local output
+            local actual_digest
+
+            output="$(docker buildx imagetools inspect "${reference}")"
+            printf '%s\n' "${output}" > "evidence/${name}-imagetools-inspect.txt"
+            actual_digest="$(printf '%s\n' "${output}" | awk '$1 == "Digest:" { print $2; exit }')"
+
+            if [[ -z "${actual_digest}" ]]; then
+              echo "FAIL: registry did not return a manifest digest for ${reference}" >&2
+              return 1
+            fi
+            if [[ "${actual_digest}" != "${expected_digest}" ]]; then
+              echo "FAIL: digest mismatch for ${reference}; registry returned ${actual_digest}" >&2
+              return 1
+            fi
+
+            {
+              printf 'image=%s\n' "${repository}"
+              printf 'tag=%s\n' "${tag}"
+              printf 'expected_digest=%s\n' "${expected_digest}"
+              printf 'registry_digest=%s\n' "${actual_digest}"
+              printf 'verification=PASS\n'
+              printf '\nplatforms_and_manifest_details:\n%s\n' "${output}"
+            } > "evidence/${name}-verification.txt"
+            echo "PASS: ${reference}"
+          }
+
+          verify_image spire-server ghcr.io/spiffe/spire-server 1.16.0 sha256:ff546f4c62dafc479a0cd79eae9a7b6df2975754d75efd31706098e0d7548837
+          verify_image spire-agent ghcr.io/spiffe/spire-agent 1.16.0 sha256:ab3a8ce70435374cc5d84c81eabf0278dc046ddbc0a736d59694ba9e5975b1b6
+
+      - name: Upload registry verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eper-spire-image-digest-verification
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 14
