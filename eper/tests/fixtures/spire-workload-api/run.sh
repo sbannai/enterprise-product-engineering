@@ -19,7 +19,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$SPIRE_FIXTURE_DIR/server" "$SPIRE_FIXTURE_DIR/agent"
+mkdir -p "$SPIRE_FIXTURE_DIR/server" "$SPIRE_FIXTURE_DIR/agent" "$SPIRE_FIXTURE_DIR/agent-public"
+sudo chown 1000:1000 "$SPIRE_FIXTURE_DIR/agent-public"
+chmod 0770 "$SPIRE_FIXTURE_DIR/agent-public"
 
 # Ephemeral, test-only upstream CA. Never persisted in the repository or CI artifacts.
 openssl req -x509 -newkey rsa:2048 -nodes \
@@ -74,6 +76,7 @@ agent {
   server_address = "spire-server"
   server_port = "8081"
   socket_path = "$SOCKET"
+  socket_mode = "0770"
   trust_bundle_path = "/etc/spire/agent/test-upstream-ca.crt"
   trust_domain = "example.org"
   join_token = "PENDING"
