@@ -416,12 +416,7 @@ export function createCustomerAssetScanChildRuntimeDependencies({ pool, identity
         await childIdentityLock.query("SELECT pg_advisory_unlock(hashtext('eper:scan-child-ci-login')::bigint)").catch(() => {});
         childIdentityLock.release();
       }
-      await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [recoveryLogin.role]).catch(() => {});
-      await pool.query(`REVOKE eper_customer_asset_scan_supervisor_access FROM "${recoveryLogin.role}"`).catch(() => {});
-      await pool.query(`DROP ROLE IF EXISTS "${recoveryLogin.role}"`).catch(() => {});
-      await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [recoveryLogin.role]).catch(() => {});
-      await pool.query(`REVOKE eper_customer_asset_scan_supervisor_access FROM "${recoveryLogin.role}"`).catch(() => {});
-      await pool.query(`DROP ROLE IF EXISTS "${recoveryLogin.role}"`).catch(() => {});
+
       await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [workerLogin.role]).catch(() => {});
       await pool.query(`REVOKE eper_customer_asset_scan_supervisor_access FROM "${workerLogin.role}"`).catch(() => {});
       await pool.query(`REVOKE eper_customer_asset_access FROM "${workerLogin.role}"`).catch(() => {});
@@ -502,8 +497,12 @@ test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease
       assert.equal(audit.rows[0].payload.previousErrorCode, "SCANNER_EXECUTION_FAILED");
     } finally {
       if (child) await stopChild(child).catch(() => {});
+      await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [recoveryLogin.role]).catch(() => {});
+      await pool.query(`REVOKE eper_customer_asset_scan_supervisor_access FROM "${recoveryLogin.role}"`).catch(() => {});
+      await pool.query(`DROP ROLE IF EXISTS "${recoveryLogin.role}"`).catch(() => {});
       await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [workerLogin.role]).catch(() => {});
       await pool.query(`REVOKE eper_customer_asset_scan_supervisor_access FROM "${workerLogin.role}"`).catch(() => {});
+      await pool.query(`REVOKE eper_customer_asset_access FROM "${workerLogin.role}"`).catch(() => {});
       await pool.query(`DROP ROLE IF EXISTS "${workerLogin.role}"`).catch(() => {});
       await pool.end();
     }
