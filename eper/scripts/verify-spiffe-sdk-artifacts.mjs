@@ -46,8 +46,10 @@ for (const candidate of candidates) {
         if (attestationResponse.ok) {
           const envelope = await attestationResponse.json();
           result.provenanceEnvelopeKeys = Object.keys(envelope);
-          result.provenanceEnvelope = envelope;\n        }
-      } catch (error) {\n        result.reasons.push(`provenance fetch failed: ${error instanceof Error ? error.message : String(error)}`);\n      }\n    }
+          result.provenanceEnvelope = envelope;
+        }
+      } catch (error) {\n        result.reasons.push(`provenance fetch failed: ${error instanceof Error ? error.message : String(error)}`);\n      }
+    }
     if (!dist.integrity || !dist.tarball) throw new Error("registry metadata lacks dist.integrity or dist.tarball");
 
     const tarballResponse = await fetch(dist.tarball);
