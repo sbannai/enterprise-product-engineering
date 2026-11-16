@@ -17,7 +17,7 @@ services:
     volumes:
       - "${SPIRE_FIXTURE_DIR:?}/agent:/etc/spire/agent:ro"
       - agent-data:/var/lib/spire/agent
-      - agent-public:/run/spire/agent/public
+      - "${SPIRE_FIXTURE_DIR:?}/agent-public:/run/spire/agent/public"
     tmpfs:
       - /var/lib/spire/agent/.data:uid=1000,gid=1000,mode=0700
     networks: [spire-isolated]
@@ -30,7 +30,7 @@ services:
     network_mode: "none"
     group_add: ["1000"]
     volumes:
-      - agent-public:/run/spire/agent/public:ro
+      - "${SPIRE_FIXTURE_DIR:?}/agent-public:/run/spire/agent/public:ro"
     restart: "no"
 
 networks:
@@ -41,4 +41,3 @@ volumes:
   server-data:
   server-private:
   agent-data:
-  agent-public:
