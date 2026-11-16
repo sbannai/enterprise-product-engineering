@@ -68,7 +68,9 @@ for (const candidate of candidates) {
     const tarballResponse = await fetch(dist.tarball);
     if (!tarballResponse.ok) throw new Error(`tarball HTTP ${tarballResponse.status}`);
     const tarball = Buffer.from(await tarballResponse.arrayBuffer());
-    const actualIntegrity = `sha512-${createHash("sha512").update(tarball).digest("base64")}`;
+    const tarballSha512 = createHash("sha512").update(tarball).digest();
+    const actualIntegrity = `sha512-${tarballSha512.toString("base64")}`;
+    const actualSha512Hex = tarballSha512.toString("hex");
     result.tarballIntegrityMatches = actualIntegrity === dist.integrity;
     const statement = result.slsaStatement;
     if (statement) {
@@ -78,7 +80,7 @@ for (const candidate of candidates) {
       const source = build?.resolvedDependencies?.find((item) => item.uri?.startsWith("git+https://github.com/jeengbe/ts-packages@"));
       const revision = source?.digest?.gitCommit ?? null;
       result.provenanceSourceRevision = revision;
-      result.provenanceSubjectDigestMatches = Boolean(subject?.digest?.sha512 && subject.digest.sha512 === actualIntegrity.replace("sha512-", ""));
+      result.provenanceSubjectDigestMatches = Boolean(subject?.digest?.sha512 && subject.digest.sha512 === actualSha512Hex);
       const identityMatches = statement.predicateType === "https://slsa.dev/provenance/v1"
         && build?.externalParameters?.workflow?.repository === "https://github.com/jeengbe/ts-packages"
         && build?.externalParameters?.workflow?.path === ".github/workflows/ci.yml"
