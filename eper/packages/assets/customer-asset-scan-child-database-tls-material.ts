@@ -1,4 +1,5 @@
 import { chmod, writeFile, rm } from "node:fs/promises";
+import { isIP } from "node:net";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { execFile as execFileCallback } from "node:child_process";
@@ -7,6 +8,18 @@ import type { CustomerAssetScanChildDatabaseCredentialIssuer } from "./customer-
 import { createCustomerAssetScanChildEphemeralKeyRequest } from "./customer-asset-scan-child-ephemeral-key.js";
 
 const execFile = promisify(execFileCallback);
+
+/**
+ * Require a DNS hostname so node-postgres performs TLS hostname verification.
+ * Literal IPs need explicit IP-SAN verification, which this worker does not
+ * currently implement; reject them rather than silently verifying only CA trust.
+ */
+export function assertCustomerAssetScanChildPostgresDnsHost(host: string): string {
+  if (typeof host !== "string" || host.length === 0 || host.trim() !== host || isIP(host) !== 0) {
+    throw new Error("CUSTOMER_ASSET_SCAN_CHILD_DATABASE_HOST_IDENTITY_INVALID");
+  }
+  return host;
+}
 
 /** Extract the role CN from OpenSSL's RFC2253 subject output. */
 export function parseCustomerAssetScanChildDatabaseCertificateRole(subjectOutput: string): string | undefined {
