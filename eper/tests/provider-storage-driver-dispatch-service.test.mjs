@@ -252,9 +252,10 @@ test("forwards AbortSignal through tenant-scoped scan dispatch to the provider d
       assetId: "asset-a", providerObjectReference: "object-ref", expectedSha256: "a".repeat(64),
     } }, signal: controller.signal,
   });
-  assert.equal(receivedSignal, controller.signal);
+  assert.ok(receivedSignal instanceof AbortSignal);
+  assert.notEqual(receivedSignal, controller.signal, "dispatcher owns a deadline-composed signal");
   controller.abort();
-  assert.equal(receivedSignal.aborted, true);
+  assert.equal(receivedSignal.aborted, true, "caller cancellation must propagate to the provider signal");
 });
 
 test("rejects an already-aborted provider operation before resolving credentials", async () => {
@@ -297,7 +298,8 @@ test("does not invoke the provider when cancellation occurs during credential re
       await resolution;
       return { token: "test-only" };
     },
-  }, { async getDependencyInventory() { return []; } });
+  }, { async getDependencyInventory() { return []; } },
+  { maxObjectBytes: 10_000_000, requestTimeoutMs: 30_000, maxConcurrentOperations: 10 });
   const dispatch = service.dispatch.bind(service);
   service.dispatch = input => dispatch({ actorId: "actor-a", correlationId: "correlation-a", ...input });
   const controller = new AbortController();
@@ -429,7 +431,7 @@ test("closes a provider stream that arrives after the dispatch deadline", async 
 test("internal object read enforces deployment maxObjectBytes before credentials or provider invocation", async () => {
   let driverInvoked = false;
   const f = fixture({
-    runtimeLimits: { maxObjectBytes: 2 },
+    runtimeLimits: { maxObjectBytes: 2, requestTimeoutMs: 30_000, maxConcurrentOperations: 10 },
     driver: {
       capabilities: { ...capabilities, internalObjectRead: true },
       async readObjectInternal() {
