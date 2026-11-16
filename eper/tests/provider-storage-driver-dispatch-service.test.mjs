@@ -518,11 +518,15 @@ test("maps stream deadline cancellation to the dispatch timeout contract", async
     runtimeLimits: { maxObjectBytes: 10_000, requestTimeoutMs: 15, maxConcurrentOperations: 1 },
     driver: {
       capabilities: { ...capabilities, internalObjectRead: true },
-      readObjectInternal() {
+      readObjectInternal(_context, _request, _requestId, signal) {
         return {
           [Symbol.asyncIterator]() {
             return {
-              next() { return new Promise(() => {}); },
+              next() {
+                return new Promise((resolve, reject) => {
+                  signal.addEventListener("abort", () => reject(new Error("provider read aborted")), { once: true });
+                });
+              },
               async return() { return { done: true, value: undefined }; },
             };
           },
