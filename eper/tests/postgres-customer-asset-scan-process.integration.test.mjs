@@ -363,8 +363,6 @@ export function createCustomerAssetScanChildRuntimeDependencies({ pool, identity
         env: {
           ...baseWorkerEnv(fixture),
           EPER_CUSTOMER_ASSET_SCAN_DATABASE_URL: workerLogin.connectionString,
-          EPER_CUSTOMER_ASSET_SCAN_RECOVERY_DATABASE_URL: recoveryLogin.connectionString,
-          EPER_CUSTOMER_ASSET_SCAN_RECOVERY_DATABASE_URL: recoveryLogin.connectionString,
           EPER_CUSTOMER_ASSET_SCAN_WORKER_ENABLED: "true",
           EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID: "ci-asset-scanner",
           EPER_CUSTOMER_ASSET_SCAN_WORKER_ID: workerId,
@@ -421,6 +419,9 @@ export function createCustomerAssetScanChildRuntimeDependencies({ pool, identity
       await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [recoveryLogin.role]).catch(() => {});
       await pool.query(`REVOKE eper_customer_asset_scan_supervisor_access FROM "${recoveryLogin.role}"`).catch(() => {});
       await pool.query(`DROP ROLE IF EXISTS "${recoveryLogin.role}"`).catch(() => {});
+      await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [recoveryLogin.role]).catch(() => {});
+      await pool.query(`REVOKE eper_customer_asset_scan_supervisor_access FROM "${recoveryLogin.role}"`).catch(() => {});
+      await pool.query(`DROP ROLE IF EXISTS "${recoveryLogin.role}"`).catch(() => {});
       await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [workerLogin.role]).catch(() => {});
       await pool.query(`REVOKE eper_customer_asset_scan_supervisor_access FROM "${workerLogin.role}"`).catch(() => {});
       await pool.query(`REVOKE eper_customer_asset_access FROM "${workerLogin.role}"`).catch(() => {});
@@ -460,6 +461,7 @@ test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease
           DATABASE_URL: connectionString,
           EPER_PAYMENT_DATABASE_URL: connectionString,
           EPER_CUSTOMER_ASSET_SCAN_DATABASE_URL: workerLogin.connectionString,
+          EPER_CUSTOMER_ASSET_SCAN_RECOVERY_DATABASE_URL: recoveryLogin.connectionString,
           EPER_CUSTOMER_ASSET_PERSISTENCE: "postgres",
           EPER_AUDIT_PERSISTENCE: "postgres",
           EPER_AUDIT_ENVIRONMENT: "sandbox",
