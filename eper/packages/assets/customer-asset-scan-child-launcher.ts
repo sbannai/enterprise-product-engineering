@@ -1,4 +1,6 @@
-import { isAbsolute, resolve, relative, sep } from "node:path";
+import { isAbsolute, resolve, relative, sep, join } from "node:path";
+import { chmod, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { runCustomerAssetScanChild, type CustomerAssetScanChildOutcome } from "./customer-asset-scan-child-supervisor.js";
 import type { CustomerAssetScanChildStart } from "./customer-asset-scan-child-protocol.js";
@@ -103,6 +105,22 @@ export function buildTrustedCustomerAssetScanChildLaunch(configuration: TrustedC
   };
 }
 
+/** Parent-owned scratch root. The child creates its ephemeral key directory beneath
+ * this path; the parent removes the whole tree only after the child process closes,
+ * so SIGKILL and abrupt child exits cannot strand private keys in the shared temp dir.
+ */
+export async function withCustomerAssetScanChildPrivateTempDirectory<T>(
+  operation: (directory: string) => Promise<T>,
+): Promise<T> {
+  const directory = await mkdtemp(join(tmpdir(), "eper-scan-child-parent-"));
+  try {
+    await chmod(directory, 0o700);
+    return await operation(directory);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
 export async function runTrustedCustomerAssetScanChild(input: {
   start: CustomerAssetScanChildStart;
   timeoutMs: number;
@@ -110,10 +128,13 @@ export async function runTrustedCustomerAssetScanChild(input: {
   signal?: AbortSignal;
 }): Promise<CustomerAssetScanChildOutcome> {
   const launch = buildTrustedCustomerAssetScanChildLaunch(input.configuration);
-  return runCustomerAssetScanChild({
-    ...launch,
-    start: input.start,
-    timeoutMs: input.timeoutMs,
-    signal: input.signal,
-  });
+  return withCustomerAssetScanChildPrivateTempDirectory(privateTempDirectory =>
+    runCustomerAssetScanChild({
+      ...launch,
+      environment: { ...launch.environment, TMPDIR: privateTempDirectory },
+      start: input.start,
+      timeoutMs: input.timeoutMs,
+      signal: input.signal,
+    }),
+  );
 }
