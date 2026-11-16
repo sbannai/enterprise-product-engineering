@@ -45,6 +45,9 @@ export function verifiedProviderInternalObjectChunks(input: {
 
   const iterator: AsyncIterableIterator<Uint8Array> = {
     async next(): Promise<IteratorResult<Uint8Array>> {
+      if (input.signal?.aborted) {
+        throw new ProviderInternalObjectReadError("PROVIDER_INTERNAL_OBJECT_READ_ABORTED");
+      }
       if (closed) return { done: true, value: undefined };
       try {
         if (!validated) {
