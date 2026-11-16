@@ -164,6 +164,9 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
       input.signal?.removeEventListener("abort", abortFromCaller);
       this.activeOperations = Math.max(0, this.activeOperations - 1);
     };
+    // A stream may never be consumed. Its deadline/abort must still release
+    // the dispatcher permit and let the verifier close the provider iterator.
+    controller.signal.addEventListener("abort", cleanup, { once: true });
     let rejectCallerAbort: ((error: Error) => void) | undefined;
     const abortFromCaller = () => {
       controller.abort();
@@ -228,6 +231,13 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
               }
               yield chunk;
             }
+          } catch (error) {
+            if (controller.signal.aborted) {
+              throw new ProviderStorageDispatchError(input.signal?.aborted
+                ? "PROVIDER_STORAGE_DISPATCH_ABORTED"
+                : "PROVIDER_STORAGE_DISPATCH_TIMEOUT");
+            }
+            throw error;
           } finally {
             controller.abort();
             cleanup();
