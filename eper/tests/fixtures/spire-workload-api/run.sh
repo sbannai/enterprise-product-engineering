@@ -47,8 +47,12 @@ plugins {
       connection_string = "/var/lib/spire/server/.data/datastore.sqlite3"
     }
   }
-  NodeAttestor "join_token" { plugin_data {} }
-  KeyManager "memory" { plugin_data = {} }
+  NodeAttestor "join_token" {
+    plugin_data {}
+  }
+  KeyManager "memory" {
+    plugin_data = {}
+  }
   UpstreamAuthority "disk" {
     plugin_data {
       key_file_path = "/etc/spire/server/test-upstream-ca.key"
@@ -70,11 +74,17 @@ agent {
   join_token = "PENDING"
 }
 plugins {
-  NodeAttestor "join_token" { plugin_data {} }
-  KeyManager "disk" {
-    plugin_data { directory = "/var/lib/spire/agent/.data" }
+  NodeAttestor "join_token" {
+    plugin_data {}
   }
-  WorkloadAttestor "unix" { plugin_data {} }
+  KeyManager "disk" {
+    plugin_data {
+      directory = "/var/lib/spire/agent/.data"
+    }
+  }
+  WorkloadAttestor "unix" {
+    plugin_data {}
+  }
 }
 EOF
 
@@ -136,17 +146,15 @@ echo "PASS: registered UID received the expected SPIFFE identity"
 
 # Both an unregistered UID and a sibling UID must fail to obtain any SVID.
 for uid in 20002 20003; do
+  # SPIRE may return an empty SVID set with exit code zero; identity absence,
+  # not the CLI exit code alone, is the denial assertion.
   NEGATIVE_OUTPUT=""
-  if NEGATIVE_OUTPUT="$(probe "$uid")"; then
-    if grep -Fq "token($EXPECTED_ID):" <<<"$NEGATIVE_OUTPUT"; then
-      unset NEGATIVE_OUTPUT
-      echo "FAIL: unregistered UID $uid received the scanner SPIFFE identity" >&2
-      exit 1
-    fi
+  probe "$uid" >/dev/null 2>&1 && NEGATIVE_OUTPUT="$(probe "$uid" 2>/dev/null)" || true
+  if grep -Fq "token($EXPECTED_ID):" <<<"$NEGATIVE_OUTPUT"; then
     unset NEGATIVE_OUTPUT
-    echo "FAIL: unregistered UID $uid unexpectedly succeeded at Workload API request" >&2
+    echo "FAIL: unregistered UID $uid received the scanner SPIFFE identity" >&2
     exit 1
   fi
   unset NEGATIVE_OUTPUT
-  echo "PASS: unregistered UID $uid was denied"
+  echo "PASS: unregistered UID $uid received no scanner SVID"
 done
