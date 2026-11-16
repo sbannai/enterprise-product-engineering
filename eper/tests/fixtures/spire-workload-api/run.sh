@@ -8,7 +8,7 @@ PROJECT="eper-spire-459-local"
 export SPIRE_FIXTURE_DIR
 SPIRE_FIXTURE_DIR="$(mktemp -d)"
 EXPECTED_ID="spiffe://example.org/ns/scanner/sa/customer-asset-scan-child"
-AGENT_ID="spiffe://example.org/spire/agent/local"
+AGENT_ID="spiffe://example.org/host/local-node"
 SOCKET="/run/spire/agent/public/api.sock"
 SERVER_SOCKET="/run/spire/server/private/api.sock"
 AUDIENCE="eper-local-attestation-test"
