@@ -87,3 +87,37 @@ test("parent-owned scanner temp directory is removed when child execution reject
   }), /child failed/);
   await assert.rejects(access(directory));
 });
+
+
+test("parent-owned scanner temp directory is removed after a child is forcibly killed", async () => {
+  let directory;
+  await withCustomerAssetScanChildPrivateTempDirectory(async root => {
+    directory = root;
+    const child = (await import("node:child_process")).spawn(process.execPath, ["-e", [
+      "const fs=require('node:fs');const path=require('node:path');",
+      "fs.writeFileSync(path.join(process.env.TMPDIR,'client-key.pem'),'private-key');",
+      "process.stdout.write('credential-ready');",
+      "setInterval(()=>{},1000);",
+    ].join("")], {
+      env: { ...process.env, TMPDIR: root },
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    await new Promise((resolve, reject) => {
+      child.once("error", reject);
+      child.stdout.once("data", resolve);
+    });
+    const credentialPath = join(root, "client-key.pem");
+    await access(credentialPath);
+    child.kill("SIGKILL");
+    await new Promise((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", (code, signal) => {
+        if (signal === "SIGKILL") resolve();
+        else reject(new Error("child did not close from SIGKILL"));
+      });
+    });
+    // The parent cleanup wrapper must not remove the root before process close.
+    await access(credentialPath);
+  });
+  await assert.rejects(access(directory));
+});
