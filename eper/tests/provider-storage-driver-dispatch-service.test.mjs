@@ -29,13 +29,15 @@ function fixture({ selection = {}, driver = {}, resolveError = null, dependencyI
   };
   const credentials = { token: "must-not-escape" };
   const service = new ProviderStorageDriverDispatchService({
-    async resolve(input) {
-      calls.push(["resolve", input]);
+    async resolveRuntime(input) {
+      calls.push(["runtime", input]);
       if (resolveError) throw resolveError;
-      return {
-        runtime: { selection: { ...resolvedSelection, capabilityKey: selection.capabilityKey ?? input.capability }, capability: input.capability, adapter },
-        credentials,
-      };
+      return { selection: { ...resolvedSelection, capabilityKey: selection.capabilityKey ?? input.capability },
+        capability: input.capability, adapter };
+    },
+    async resolveCredentials(runtime) {
+      calls.push(["credentials", runtime]);
+      return credentials;
     },
   }, dependencyInventory);
   const dispatch = service.dispatch.bind(service);
@@ -52,7 +54,7 @@ test("resolves tenant-scoped runtime and invokes only the requested operation", 
   assert.deepEqual(result, { kind: "not_found" });
   assert.equal(f.calls[0][1].capability, "storage.upload.lookup");
   assert.equal(f.calls[1][0], "lookup");
-  assert.equal(f.calls[1][1].credentials, f.credentials);
+  assert.equal(f.calls[2][1].credentials, f.credentials);
   assert.equal(JSON.stringify(result).includes("must-not-escape"), false);
 });
 
@@ -114,7 +116,7 @@ test("rejects malformed operation inputs before runtime or secret resolution", a
     } },
   }), error => error instanceof ProviderStorageDispatchError &&
     error.code === "PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
-  assert.equal(f.calls.some(call => call[0] === "resolve"), false);
+  assert.equal(f.calls.some(call => call[0] === "runtime" || call[0] === "credentials"), false);
 });
 
 test("classifies renew tenant mismatch as scope failure, not missing capability", async () => {
@@ -207,11 +209,11 @@ test("routes all six storage operations through their exact capability and synth
       operation: { kind: item.kind, request: item.request },
     });
     assert.deepEqual(result, item.expectedResult, item.kind);
-    assert.equal(f.calls[0][0], "resolve", item.kind);
+    assert.equal(f.calls[0][0], "runtime", item.kind);
     assert.equal(f.calls[0][1].capability, item.capability, item.kind);
-    assert.equal(f.calls.filter(call => call[0] !== "resolve").length, 1, item.kind);
-    assert.equal(f.calls[1][0], item.expectedCall, item.kind);
-    assert.equal(f.calls[1][1].credentials, f.credentials, item.kind);
+    assert.equal(f.calls.filter(call => call[0] !== "runtime" && call[0] !== "credentials").length, 1, item.kind);
+    assert.equal(f.calls[2][0], item.expectedCall, item.kind);
+    assert.equal(f.calls[2][1].credentials, f.credentials, item.kind);
     assert.equal(JSON.stringify(result).includes("must-not-escape"), false, item.kind);
   }
 });
@@ -246,7 +248,7 @@ test("rejects an already-aborted provider operation before resolving credentials
     } }, signal: controller.signal,
   }), error => error instanceof ProviderStorageDispatchError &&
     error.code === "PROVIDER_STORAGE_DISPATCH_ABORTED");
-  assert.equal(f.calls.some(call => call[0] === "resolve"), false);
+  assert.equal(f.calls.some(call => call[0] === "runtime" || call[0] === "credentials"), false);
 });
 
 
@@ -264,17 +266,16 @@ test("does not invoke the provider when cancellation occurs during credential re
     async createDownloadGrant() { driverInvoked = true; return null; },
     async scanObject() { driverInvoked = true; return { kind: "timeout" }; },
   };
+  const resolvedRuntime = {
+    selection: { tenantId: "tenant-a", applicationId: "app-a",
+      capabilityKey: "storage.object.scan", connectionId: "connection-a", providerKey: "provider-a" },
+    capability: "storage.object.scan", adapter,
+  };
   const service = new ProviderStorageDriverDispatchService({
-    async resolve(input) {
+    async resolveRuntime() { return resolvedRuntime; },
+    async resolveCredentials() {
       await resolution;
-      return {
-        runtime: {
-          selection: { tenantId: input.tenantId, applicationId: input.applicationId,
-            capabilityKey: input.capability, connectionId: "connection-a", providerKey: "provider-a" },
-          capability: input.capability, adapter,
-        },
-        credentials: { token: "test-only" },
-      };
+      return { token: "test-only" };
     },
   }, { async getDependencyInventory() { return []; } });
   const dispatch = service.dispatch.bind(service);

@@ -114,7 +114,7 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
   constructor(
     private readonly runtime: Pick<
       ProviderRuntimeCredentialResolutionService<ProviderStorageDriver<TCredentials>, TCredentials>,
-      "resolve"
+      "resolveRuntime" | "resolveCredentials"
     >,
     private readonly dependencyInventory?: DependencyInventoryReader,
   ) {}
@@ -146,21 +146,21 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
       throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
     }
 
-    const resolved = await this.runtime.resolve({
+    const runtime = await this.runtime.resolveRuntime({
       tenantId: input.tenantId,
       applicationId: input.applicationId,
       capability,
       ...(input.expectedConnectionId !== undefined ? { expectedConnectionId: input.expectedConnectionId } : {}),
     });
     if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
-    const selection = resolved.runtime.selection;
+    const selection = runtime.selection;
     if (selection.tenantId !== input.tenantId || selection.applicationId !== input.applicationId ||
-        selection.capabilityKey !== capability || resolved.runtime.capability !== capability ||
+        selection.capabilityKey !== capability || runtime.capability !== capability ||
         (input.expectedConnectionId !== undefined && selection.connectionId !== input.expectedConnectionId)) {
       throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH");
     }
 
-    const driver = assertProviderStorageDriver(resolved.runtime.adapter);
+    const driver = assertProviderStorageDriver(runtime.adapter);
     if (driver.dependencyIds.length > 0) {
       if (!this.dependencyInventory) {
         throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_DEPENDENCY_BLOCKED");
@@ -183,12 +183,21 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
       }
     }
     if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
+    // Resolve credentials only after the dependency gate has admitted the adapter.
+    let credentials: TCredentials;
+    try {
+      credentials = await this.runtime.resolveCredentials(runtime);
+    } catch (error) {
+      if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
+      throw error;
+    }
+    if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
     const context = {
       tenantId: selection.tenantId,
       applicationId: selection.applicationId,
       connectionId: selection.connectionId,
       providerKey: selection.providerKey,
-      credentials: resolved.credentials,
+      credentials,
     };
 
     switch (input.operation.kind) {
