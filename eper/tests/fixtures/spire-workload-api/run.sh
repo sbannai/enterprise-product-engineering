@@ -121,6 +121,9 @@ if [[ -z "$TOKEN" ]]; then
 fi
 
 sed -i "s/join_token = \"PENDING\"/join_token = \"$TOKEN\"/" "$SPIRE_FIXTURE_DIR/agent/agent.conf"
+# The Agent config contains the ephemeral join token; restrict it to the Agent UID.
+chmod 600 "$SPIRE_FIXTURE_DIR/agent/agent.conf"
+sudo chown 1000:1000 "$SPIRE_FIXTURE_DIR/agent/agent.conf"
 unset TOKEN TOKEN_OUTPUT
 
 docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up -d spire-agent
@@ -134,9 +137,12 @@ docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T spire-server \
 
 probe() {
   local uid="$1"
-  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --rm --no-deps \
-    --user "$uid:$uid" workload-probe \
-    api fetch jwt -socketPath "$SOCKET" -audience "$AUDIENCE" -spiffeID "$EXPECTED_ID" 2>&1
+  # Unix WorkloadAttestor resolves the caller PID. Execute as the tested
+  # unprivileged UID in the Agent container's PID namespace.
+  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T \
+    --user "$uid:1000" spire-agent \
+    /opt/spire/bin/spire-agent api fetch jwt \
+    -socketPath "$SOCKET" -audience "$AUDIENCE" -spiffeID "$EXPECTED_ID" 2>&1
 }
 
 # Positive assertion. Keep the returned JWT entirely in memory and never print it.
