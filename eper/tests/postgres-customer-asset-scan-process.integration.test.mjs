@@ -289,22 +289,24 @@ export function createCustomerAssetScanChildRuntimeDependencies({ pool, identity
     },
   };
   const runtime = {
-    async resolve({ tenantId, applicationId, capability, expectedConnectionId }) {
+    async resolveRuntime({ tenantId, applicationId, capability, expectedConnectionId }) {
       if (expectedConnectionId !== "ci-storage-connection") throw new Error("test connection pin mismatch");
       return {
-        runtime: {
-          capability,
-          selection: {
-            tenantId, applicationId, capabilityKey: capability,
-            connectionId: "ci-storage-connection", providerKey: "ci-storage",
-          },
-          adapter: driver,
+        capability,
+        selection: {
+          tenantId, applicationId, capabilityKey: capability,
+          connectionId: "ci-storage-connection", providerKey: "ci-storage",
         },
-        credentials: Object.freeze({ testOnly: true }),
+        adapter: driver,
       };
     },
+    async resolveCredentials() {
+      return Object.freeze({ testOnly: true });
+    },
   };
-  const provider = new ProviderStorageDriverDispatchService(runtime);
+  const provider = new ProviderStorageDriverDispatchService(runtime, undefined, {
+    maxObjectBytes: 10_000_000, requestTimeoutMs: 30_000, maxConcurrentOperations: 1,
+  });
   const scanner = {
     async scan(scanInput) {
       const chunks = [];
