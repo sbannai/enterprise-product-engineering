@@ -7,7 +7,7 @@
  * in the job IPC envelope or inherited from the parent process environment.
  */
 export const CUSTOMER_ASSET_SCAN_CHILD_AUDIENCE = "eper:customer-asset-scan-child" as const;
-export const CUSTOMER_ASSET_SCAN_CHILD_CAPABILITY = "storage.object.scan" as const;
+export const CUSTOMER_ASSET_SCAN_CHILD_CAPABILITY = "storage.object.read.internal" as const;
 
 export interface CustomerAssetScanChildIdentityClaims {
   issuer: string;
@@ -116,7 +116,7 @@ function parseClaims(value: unknown): CustomerAssetScanChildIdentityClaims {
 /**
  * Child-local authorization boundary. The verifier is responsible for proving
  * process identity cryptographically; this service then pins the proof to the
- * exact scan tenant/application/scanner and a single scan capability.
+ * exact scan tenant/application/scanner and a single internal object-read capability.
  */
 export class CustomerAssetScanChildIdentityService<TCredentials> {
   constructor(

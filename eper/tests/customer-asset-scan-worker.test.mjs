@@ -54,6 +54,25 @@ test("customer asset scan worker persists bounded retry for a scanner error", as
 });
 
 
+test("customer asset scan worker leaves exhausted attempts for independent recovery", async () => {
+  const f = fixture("error");
+  f.repository.retryScanJob = async (input) => {
+    f.calls.push(["retry", input.errorCode, input.retryAfterMs]);
+    return "attempts_exhausted";
+  };
+  const outcomes = [];
+  await runCustomerAssetScanWorker({
+    ...f, tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
+    scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
+    onJob(result) { outcomes.push(result.outcome); },
+  });
+  assert.ok(f.calls.some((call) => call[0] === "retry" && call[1] === "SCANNER_PROVIDER_ERROR"));
+  assert.equal(f.calls.filter((call) => call[0] === "record").length, 0,
+    "the scanner worker must not finalize an exhausted job");
+  assert.equal(outcomes.includes("dead_letter"), false,
+    "only the independent recovery worker may report the final dead-letter outcome");
+});
+
 test("customer asset scan worker relinquishes a timed-out claim even when provider promptly aborts", async () => {
   const f = fixture("clean");
   f.scanner.scan = async (_input, _requestId, signal) => new Promise((_resolve, reject) => {
@@ -137,4 +156,109 @@ test("customer asset scan worker stops lease renewal and permits takeover when p
     "timed-out stale claim must not persist retry before takeover");
   assert.equal(f.calls.filter((call) => call[0] === "record").length, 0,
     "timed-out stale claim must not finalize a scan result");
+});
+
+
+test("customer asset scan worker delegates an allowlisted metadata envelope to the isolated child runner", async () => {
+  const f = fixture("clean");
+  let start;
+  await runCustomerAssetScanWorker({
+    repository: f.repository, childRunner: async (message, signal, timeoutMs) => {
+      start = message;
+      assert.equal(signal.aborted, false);
+      assert.equal(timeoutMs, 120_000);
+      return { kind: "result", value: {
+        version: 3, type: "result", jobToken: message.jobToken,
+        claimGeneration: message.claimGeneration, scannerServiceId: message.scannerServiceId,
+        scanStatus: "clean",
+      } };
+    },
+    tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
+    scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
+    onJob() { f.controller.abort(); },
+  });
+  assert.equal(start.version, 3);
+  assert.equal(start.input.assetId, "asset-1");
+  assert.equal(start.input.checksumSha256, "a".repeat(64));
+  assert.equal(start.input.sizeBytes, 10);
+  assert.equal("providerUploadReference" in start, false);
+  assert.equal("uploadSessionId" in start, false);
+  assert.ok(/^[a-f0-9]{64}$/.test(start.jobToken));
+  assert.ok(f.calls.some(call => call[0] === "record" && call[1] === "clean"));
+});
+
+test("customer asset scan worker waits for child process exit before persisting retry", async () => {
+  const f = fixture("clean");
+  let childExited = false;
+  let retryObservedAfterExit = false;
+  f.repository.retryScanJob = async (input) => {
+    retryObservedAfterExit = childExited;
+    f.calls.push(["retry", input.errorCode, input.retryAfterMs]);
+    return "pending";
+  };
+  await runCustomerAssetScanWorker({
+    repository: f.repository,
+    childRunner: async (_message, _signal, timeoutMs) => {
+      assert.equal(timeoutMs, 1_000);
+      await new Promise(resolve => setTimeout(resolve, 1_100));
+      childExited = true; // Models the supervisor's close event after SIGKILL.
+      return { kind: "failure", value: {
+        version: 3, type: "failure", jobToken: _message.jobToken,
+        claimGeneration: _message.claimGeneration, code: "SCANNER_EXECUTION_FAILED",
+      } };
+    },
+    tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
+    scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
+    scanTimeoutMs: 1_000, onJob() { f.controller.abort(); },
+  });
+  assert.equal(retryObservedAfterExit, true,
+    "retry must not be persisted until the child supervisor confirms process exit");
+  assert.ok(f.calls.some(call => call[0] === "retry" && call[1] === "SCANNER_EXECUTION_FAILED"),
+    "the worker must preserve the child's typed failure code instead of flattening it to a provider error");
+  assert.equal(f.calls.filter(call => call[0] === "record").length, 0);
+});
+
+test("customer asset scan worker rejects ambiguous or missing scan executors", async () => {
+  const f = fixture("clean");
+  await assert.rejects(runCustomerAssetScanWorker({
+    repository: f.repository, tenantId: "tenant-1", applicationId: "app-1",
+    workerId: "asset-scanner:worker-1", scannerServiceId: "asset-scanner",
+    environment: "sandbox", signal: f.controller.signal,
+  }), /EPER_CUSTOMER_ASSET_SCAN_EXECUTOR_INVALID/);
+  await assert.rejects(runCustomerAssetScanWorker({
+    ...f, childRunner: async () => ({ kind: "failure", value: {} }),
+    tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
+    scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
+  }), /EPER_CUSTOMER_ASSET_SCAN_EXECUTOR_INVALID/);
+});
+
+
+test("customer asset scan worker aborts the child immediately when lease renewal is rejected", async () => {
+  const f = fixture("clean");
+  let childSignal;
+  f.repository.renewScanJobLease = async () => false;
+  await runCustomerAssetScanWorker({
+    repository: f.repository,
+    childRunner: async (message, signal) => {
+      childSignal = signal;
+      return new Promise((resolve) => signal.addEventListener("abort", () => resolve({
+        kind: "failure",
+        value: {
+          version: 3, type: "failure", jobToken: message.jobToken,
+          claimGeneration: message.claimGeneration, code: "SCANNER_EXECUTION_FAILED",
+        },
+      }), { once: true }));
+    },
+    tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
+    scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
+    leaseMs: 5_000, onJob(result) {
+      assert.equal(result.outcome, "lease_lost");
+      f.controller.abort();
+    },
+  });
+  assert.equal(childSignal?.aborted, true, "lease loss must cancel the active child");
+  assert.equal(f.calls.filter(call => call[0] === "retry").length, 0,
+    "a stale generation must not retry itself");
+  assert.equal(f.calls.filter(call => call[0] === "record").length, 0,
+    "a stale generation must not finalize a result");
 });

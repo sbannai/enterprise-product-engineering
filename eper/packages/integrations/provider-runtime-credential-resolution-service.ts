@@ -30,17 +30,21 @@ export class ProviderRuntimeCredentialResolutionService<TAdapter, TCredentials> 
     private readonly secrets: Pick<ProviderCredentialResolutionService<TCredentials>, "resolve">,
   ) {}
 
-  async resolve(input: {
+  async resolveRuntime(input: {
     tenantId: string;
     applicationId: string;
     capability: string;
     expectedConnectionId?: string;
-  }): Promise<ProviderRuntimeWithCredentials<TAdapter, TCredentials>> {
+  }): Promise<ResolvedProviderRuntime<TAdapter>> {
     const runtime = await this.runtime.resolve(input);
     if (input.expectedConnectionId !== undefined &&
         runtime.selection.connectionId !== input.expectedConnectionId) {
       throw new ProviderRuntimeCredentialResolutionError("PROVIDER_RUNTIME_AUTHORIZATION_CHANGED");
     }
+    return runtime;
+  }
+
+  async resolveCredentials(runtime: ResolvedProviderRuntime<TAdapter>): Promise<TCredentials> {
     let connection: { secretReference: string; authMode: string };
     try {
       connection = await this.connections.getRuntimeSecretReference({
@@ -84,6 +88,17 @@ export class ProviderRuntimeCredentialResolutionService<TAdapter, TCredentials> 
     } catch {
       throw new ProviderRuntimeCredentialResolutionError("PROVIDER_RUNTIME_AUTHORIZATION_CHANGED");
     }
+    return credentials;
+  }
+
+  async resolve(input: {
+    tenantId: string;
+    applicationId: string;
+    capability: string;
+    expectedConnectionId?: string;
+  }): Promise<ProviderRuntimeWithCredentials<TAdapter, TCredentials>> {
+    const runtime = await this.resolveRuntime(input);
+    const credentials = await this.resolveCredentials(runtime);
     return { runtime, credentials };
   }
 }

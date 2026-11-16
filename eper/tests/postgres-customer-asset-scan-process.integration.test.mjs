@@ -86,9 +86,11 @@ async function createPendingScanFixture(pool, repository, prefix) {
     observedMimeType: "application/pdf", checksumSha256, scanStatus: "pending",
   });
   return { tenantId, applicationId, actorId, assetId, correlationId,
-    uploadSessionId: reservation.uploadSessionId, testObjectBytes };
+    uploadSessionId: reservation.uploadSessionId, testObjectBytes,
+    providerObjectReference: "opaque-process-object-" + suffix,
+    providerUploadReference: "opaque-process-provider-ref-" + suffix };
 }
-async function createWorkerLogin(pool, prefix) {
+async function createWorkerLogin(pool, prefix, fixture, workerId, scannerServiceId) {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 14);
   const role = "eper_scan_" + prefix + "_" + suffix;
   const password = randomUUID().replaceAll("-", "");
@@ -97,6 +99,13 @@ async function createWorkerLogin(pool, prefix) {
        NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`,
   );
   await pool.query(`GRANT eper_customer_asset_access TO "${role}"`);
+  await pool.query(`GRANT eper_customer_asset_scan_supervisor_access TO "${role}"`);
+  await pool.query(
+    `INSERT INTO public.eper_customer_asset_scan_supervisor_identities
+      (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
+     VALUES ($1, $2, $3, $4, $5, true)`,
+    [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
+  );
   const url = new URL(connectionString);
   url.username = role;
   url.password = password;
@@ -116,7 +125,61 @@ async function createWorkerLogin(pool, prefix) {
   } finally {
     await workerPool.end();
   }
-  return { role, connectionString: url.toString() };
+  return { role, workerId, connectionString: url.toString() };
+}
+
+async function createRecoveryLogin(pool, fixture, workerId, scannerServiceId) {
+  const suffix = randomUUID().replaceAll("-", "").slice(0, 14);
+  const role = "eper_scan_recovery_" + suffix;
+  const password = randomUUID().replaceAll("-", "");
+  await pool.query(
+    `CREATE ROLE "${role}" WITH LOGIN INHERIT PASSWORD '${password}'
+       NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`,
+  );
+  await pool.query(`GRANT eper_customer_asset_scan_supervisor_access TO "${role}"`);
+  await pool.query(
+    `INSERT INTO public.eper_customer_asset_scan_supervisor_identities
+      (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
+     VALUES ($1, $2, $3, $4, $5, true)`,
+    [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
+  );
+  const url = new URL(connectionString);
+  url.username = role;
+  url.password = password;
+  const supervisorPool = new Pool({ connectionString: url.toString(), max: 1 });
+  try {
+    const check = await supervisorPool.query(`
+      SELECT current_user,
+        has_table_privilege(current_user, 'eper_customer_asset_scan_jobs', 'SELECT') AS can_select_jobs,
+        has_table_privilege(current_user, 'eper_customer_asset_scan_jobs', 'UPDATE') AS can_update_jobs,
+        has_table_privilege(current_user, 'eper_customer_assets', 'SELECT') AS can_select_assets,
+        has_table_privilege(current_user, 'eper_customer_assets', 'UPDATE') AS can_update_assets
+    `);
+    assert.equal(check.rows[0].can_select_jobs, false);
+    assert.equal(check.rows[0].can_update_jobs, false);
+    assert.equal(check.rows[0].can_select_assets, false);
+    assert.equal(check.rows[0].can_update_assets, false);
+  } finally {
+    await supervisorPool.end();
+  }
+  return { role, workerId, connectionString: url.toString() };
+}
+
+async function createChildLogin(pool, fixture, workerId, scannerServiceId) {
+  const role = "eper_scan_child_ci";
+  const spiffeId = "spiffe://eper.example/asset-scanner/ci-child";
+  await pool.query(`CREATE ROLE "${role}" WITH LOGIN INHERIT
+    NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`);
+  await pool.query(`GRANT eper_customer_asset_scan_child_access TO "${role}"`);
+  await pool.query(
+    `INSERT INTO public.eper_customer_asset_scan_child_identities
+      (login_role, tenant_id, application_id, worker_id, scanner_service_id,
+       spiffe_id, provider_connection_id, enabled)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
+    [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId,
+      spiffeId, "ci-storage-connection"],
+  );
+  return { role, spiffeId };
 }
 
 function baseWorkerEnv(fixture) {
@@ -138,36 +201,183 @@ test("process-level PostgreSQL 16 scan worker claims, invokes configured test sc
     const pool = new Pool({ connectionString, max: 4 });
     const repository = new PostgresCustomerAssetRepository(pool);
     const fixture = await createPendingScanFixture(pool, repository, "scan-process");
-    const workerLogin = await createWorkerLogin(pool, "scan");
-    const scannerPath = resolve("dist/packages/assets/scanners/ci-postgres-test-scanner.js");
+    const workerId = "ci-asset-scanner:process-test";
+    const scannerServiceId = "ci-asset-scanner";
+    const workerLogin = await createWorkerLogin(pool, "scan", fixture, workerId, scannerServiceId);
+    let childLogin;
+    let childIdentityLock;
+    const certDirectory = process.env.EPER_SCAN_CHILD_CERT_DIR;
+    assert.ok(certDirectory, "CI client-certificate directory must be configured");
+    const compositionPath = resolve("dist/packages/assets/scanners/ci-postgres-test-composition.js");
     const objectPath = resolve("dist/packages/assets/scanners/ci-postgres-test-object-" + randomUUID() + ".bin");
     let child;
     try {
-      await mkdir(dirname(scannerPath), { recursive: true });
+      childIdentityLock = await pool.connect();
+      await childIdentityLock.query("SELECT pg_advisory_lock(hashtext('eper:scan-child-ci-login')::bigint)");
+      childLogin = await createChildLogin(pool, fixture, workerId, scannerServiceId);
+      await mkdir(dirname(compositionPath), { recursive: true });
       await writeFile(objectPath, fixture.testObjectBytes);
-      await writeFile(scannerPath, `import { readFile } from "node:fs/promises";
-import { createHash } from "node:crypto";
-export async function createCustomerAssetScanner({ env }) {
-  return { async scan(input) {
-    const bytes = await readFile(env.EPER_CUSTOMER_ASSET_TEST_OBJECT_PATH);
-    const checksumSha256 = createHash("sha256").update(bytes).digest("hex");
-    if (bytes.length !== input.sizeBytes || checksumSha256 !== input.checksumSha256 ||
-        input.mimeType !== "application/pdf") {
-      return { scanStatus: "infected", scannerServiceId: env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID };
-    }
-    return { scanStatus: "clean", scannerServiceId: env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID };
-  } };
+      const compositionSource = `import { createReadStream } from "node:fs";
+import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { execFile as execFileCallback } from "node:child_process";
+import { promisify } from "node:util";
+import { CustomerAssetScanChildSpiffeIdentityVerifier } from "../customer-asset-scan-child-spiffe-identity.js";
+import { createCustomerAssetScanChildSpiffeSdkRuntime } from "../customer-asset-scan-child-spiffe-sdk-adapter.js";
+import { CustomerAssetScanChildDatabaseCredentialIssuer } from "../customer-asset-scan-child-database-credential-issuer.js";
+import { PostgresCustomerAssetScanChildInputResolver } from "../customer-asset-scan-child-input-resolver.js";
+import { ProviderStorageDriverDispatchService } from "../../integrations/provider-storage-driver-dispatch-service.js";
+const execFile = promisify(execFileCallback);
+const objectPath = ${JSON.stringify(objectPath)};
+const expectedObjectReference = ${JSON.stringify(fixture.providerUploadReference)};
+const spiffeId = "spiffe://eper.example/asset-scanner/ci-child";
+function opensslTime(epochSeconds) {
+  return new Date(epochSeconds * 1000).toISOString().slice(2).replace(/[-:T]/g, "").replace(/\\.\\d{3}Z$/, "Z");
 }
-`);
+export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env, onStage }) {
+  class TestSpiffeClient {
+    constructor(options) {
+      if (options.connection !== env.EPER_SCANNER_CHILD_SPIFFE_WORKLOAD_API_SOCKET ||
+          options.retry.enabled !== false) throw new Error("test SPIFFE SDK configuration invalid");
+    }
+    async getJwtSvid(audience, filter) {
+      if (audience !== "eper:customer-asset-scan-child") return null;
+      return { spiffeId: filter.spiffeId, token: "test-only-svid", expiresAtMs: Date.now() + 120000 };
+    }
+    close() {}
+  }
+  onStage?.("sdk");
+  const spiffe = createCustomerAssetScanChildSpiffeSdkRuntime({
+    endpoint: env.EPER_SCANNER_CHILD_SPIFFE_WORKLOAD_API_SOCKET,
+    SpiffeClient: TestSpiffeClient,
+  });
+  onStage?.("identity");
+  const identity = new CustomerAssetScanChildSpiffeIdentityVerifier(
+    spiffe.adapter, env.EPER_SCANNER_CHILD_EXPECTED_SPIFFE_ID,
+  );
+  onStage?.("issuer");
+  const issuer = new CustomerAssetScanChildDatabaseCredentialIssuer(
+    new Map([[spiffeId, "eper_scan_child_ci"]]),
+    { async sign(input) {
+      const directory = await mkdtemp(join(tmpdir(), "eper-child-ci-issuer-"));
+      try {
+        const newCerts = join(directory, "newcerts");
+        const index = join(directory, "index.txt");
+        const serial = join(directory, "serial");
+        const config = join(directory, "ca.cnf");
+        const csrPath = join(directory, "child.csr");
+        const certPath = join(directory, "child.crt");
+        await mkdir(newCerts);
+        await writeFile(index, "", { mode: 0o600 });
+        await writeFile(serial, "01\\n", { mode: 0o600 });
+        await writeFile(csrPath, input.csrPem, { mode: 0o600 });
+        await writeFile(config, [
+          "[ ca ]", "default_ca = CA_default", "[ CA_default ]",
+          "dir = " + directory, "database = " + index, "new_certs_dir = " + newCerts,
+          "certificate = " + env.PGSSLROOTCERT,
+          "private_key = " + join(dirname(env.PGSSLROOTCERT), "ca.key"),
+          "serial = " + serial, "default_md = sha256", "default_days = 1",
+          "default_crl_days = 1", "policy = policy_any", "unique_subject = no",
+          "copy_extensions = none", "[ policy_any ]", "commonName = supplied",
+          "[ client ]", "basicConstraints = critical,CA:FALSE",
+          "keyUsage = critical,digitalSignature", "extendedKeyUsage = clientAuth", "",
+        ].join("\\n"), { mode: 0o600 });
+        await execFile("openssl", ["req", "-inform", "PEM", "-in", csrPath, "-noout", "-verify"],
+          { timeout: 10000, maxBuffer: 16384 });
+        onStage?.("ca");
+      await execFile("openssl", [
+          "ca", "-batch", "-notext", "-config", config, "-in", csrPath, "-out", certPath,
+          "-startdate", opensslTime(Math.floor(Date.now() / 1000) - 5),
+          "-enddate", opensslTime(input.notAfterEpochSeconds),
+          "-subj", "/CN=" + input.databaseRole, "-extensions", "client",
+        ], { timeout: 10000, maxBuffer: 16384 });
+        return await readFile(certPath, "utf8");
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    } },
+    120,
+  );
+  onStage?.("ca");
+  return {
+    identity, issuer,
+    caPem: await readFile(env.PGSSLROOTCERT, "utf8"),
+    close() { return spiffe.close(); },
+  };
+}
+export function createCustomerAssetScanChildRuntimeDependencies({ pool, identity }) {
+  const input = new PostgresCustomerAssetScanChildInputResolver(pool);
+
+  const driver = {
+    dependencyIds: [],
+    capabilities: {
+      idempotentCreateByUploadSessionId: true,
+      lookupByUploadSessionId: false, renewByProviderReference: false,
+      verifyObject: false, downloadGrant: false, malwareScan: false,
+      internalObjectRead: true,
+    },
+    async createUploadGrant() { return { kind: "unknown", reason: "test-only" }; },
+    async readObjectInternal(context, request) {
+      if (context.connectionId !== "ci-storage-connection" ||
+          request.providerObjectReference !== expectedObjectReference) {
+        throw new Error("test provider scope mismatch");
+      }
+      return createReadStream(objectPath);
+    },
+  };
+  const runtime = {
+    async resolveRuntime({ tenantId, applicationId, capability, expectedConnectionId }) {
+      if (expectedConnectionId !== "ci-storage-connection") throw new Error("test connection pin mismatch");
+      return {
+        capability,
+        selection: {
+          tenantId, applicationId, capabilityKey: capability,
+          connectionId: "ci-storage-connection", providerKey: "ci-storage",
+        },
+        adapter: driver,
+      };
+    },
+    async resolveCredentials() {
+      return Object.freeze({ testOnly: true });
+    },
+  };
+  const provider = new ProviderStorageDriverDispatchService(runtime, undefined, {
+    maxObjectBytes: 10_000_000, requestTimeoutMs: 30_000, maxConcurrentOperations: 1,
+  });
+  const scanner = {
+    async scan(scanInput) {
+      const chunks = [];
+      for await (const chunk of scanInput.source) chunks.push(Buffer.from(chunk));
+      const bytes = Buffer.concat(chunks);
+      const digest = await import("node:crypto").then(({ createHash }) =>
+        createHash("sha256").update(bytes).digest("hex"));
+      return bytes.length === scanInput.sizeBytes && digest === scanInput.checksumSha256 &&
+        scanInput.mimeType === "application/pdf" ? { scanStatus: "clean" } : { scanStatus: "infected" };
+    },
+  };
+  return { identity, input, provider, scanner };
+}
+`;
+      await writeFile(compositionPath, compositionSource);
       child = spawn(process.execPath, ["dist/apps/worker/customer-asset-scan-main.js"], {
         env: {
           ...baseWorkerEnv(fixture),
           EPER_CUSTOMER_ASSET_SCAN_DATABASE_URL: workerLogin.connectionString,
           EPER_CUSTOMER_ASSET_SCAN_WORKER_ENABLED: "true",
           EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID: "ci-asset-scanner",
-          EPER_CUSTOMER_ASSET_SCAN_WORKER_ID: "ci-asset-scanner:process-test",
-          EPER_CUSTOMER_ASSET_SCANNER_MODULE: "./dist/packages/assets/scanners/ci-postgres-test-scanner.js",
-          EPER_CUSTOMER_ASSET_TEST_OBJECT_PATH: objectPath,
+          EPER_CUSTOMER_ASSET_SCAN_WORKER_ID: workerId,
+          EPER_SCANNER_CHILD_SPIFFE_WORKLOAD_API_SOCKET: "unix:///tmp/eper-test-workload-api.sock",
+          EPER_SCANNER_CHILD_EXPECTED_SPIFFE_ID: childLogin.spiffeId,
+          EPER_SCANNER_CHILD_SPIFFE_AUDIENCE: "eper:customer-asset-scan-child",
+          EPER_CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_MODULE: "./dist/packages/assets/scanners/ci-postgres-test-composition.js",
+          EPER_SCANNER_CHILD_PGHOST: "localhost",
+          EPER_SCANNER_CHILD_PGPORT: new URL(connectionString).port || "5432",
+          EPER_SCANNER_CHILD_PGDATABASE: new URL(connectionString).pathname.slice(1),
+          EPER_SCANNER_CHILD_PGUSER: childLogin.role,
+          EPER_SCANNER_CHILD_PGSSLROOTCERT: resolve(certDirectory, "ca.crt"),
+          EPER_SCANNER_CHILD_PGSSLCERT: resolve(certDirectory, "child.crt"),
+          EPER_SCANNER_CHILD_PGSSLKEY: resolve(certDirectory, "child.key"),
           EPER_CUSTOMER_ASSET_SCAN_POLL_INTERVAL_MS: "100",
           EPER_CUSTOMER_ASSET_SCAN_LEASE_MS: "5000",
           EPER_CUSTOMER_ASSET_SCAN_BATCH_SIZE: "2",
@@ -196,9 +406,41 @@ export async function createCustomerAssetScanner({ env }) {
       });
     } finally {
       if (child) await stopChild(child).catch(() => {});
-      await rm(scannerPath, { force: true });
+      await rm(compositionPath, { force: true });
       await rm(objectPath, { force: true });
+      await pool.query("DELETE FROM public.eper_customer_asset_scan_child_identities WHERE login_role = $1", [childLogin?.role]).catch(() => {});
+      if (childLogin) {
+        await pool.query(`REVOKE eper_customer_asset_scan_child_access FROM "${childLogin.role}"`).catch(() => {});
+        await pool.query(`DROP ROLE IF EXISTS "${childLogin.role}"`).catch(() => {});
+      }
+      if (childIdentityLock) {
+        await childIdentityLock.query("SELECT pg_advisory_unlock(hashtext('eper:scan-child-ci-login')::bigint)").catch(() => {});
+        childIdentityLock.release();
+      }
+
+      await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [workerLogin.role]).catch(() => {});
+      await pool.query(`REVOKE eper_customer_asset_scan_supervisor_access FROM "${workerLogin.role}"`).catch(() => {});
+      await pool.query(`REVOKE eper_customer_asset_access FROM "${workerLogin.role}"`).catch(() => {});
       await pool.query(`DROP ROLE IF EXISTS "${workerLogin.role}"`).catch(() => {});
+      await pool.end();
+    }
+  });
+
+test("PostgreSQL 16 scan-job claim uses a single-connection pool without nested recovery checkout",
+  { skip: !connectionString }, async () => {
+    const pool = new Pool({ connectionString, max: 1, connectionTimeoutMillis: 1_000 });
+    const repository = new PostgresCustomerAssetRepository(pool);
+    try {
+      const fixture = await createPendingScanFixture(pool, repository, "scan-claim-single-connection");
+      const [job] = await repository.claimScanJobs({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        workerId: "ci-asset-scan-single-connection",
+        scannerServiceId: "ci-asset-scanner", environment: "sandbox",
+        limit: 1, leaseMs: 30_000,
+      });
+      assert.ok(job, "claim should complete and return the pending scan job");
+      assert.equal(job.uploadSessionId, fixture.uploadSessionId);
+    } finally {
       await pool.end();
     }
   });
@@ -208,19 +450,22 @@ test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease
     const pool = new Pool({ connectionString, max: 4 });
     const repository = new PostgresCustomerAssetRepository(pool);
     const fixture = await createPendingScanFixture(pool, repository, "recovery-process");
-    const workerLogin = await createWorkerLogin(pool, "recovery");
-    const workerId = "ci-recovery-expired-worker";
+    const workerId = "ci-asset-scan-recovery:expired-worker";
+    const scannerServiceId = "ci-asset-scan-recovery";
+    const workerLogin = await createWorkerLogin(pool, "recovery-runtime", fixture, workerId, scannerServiceId);
+    const recoveryLogin = await createRecoveryLogin(pool, fixture, workerId, scannerServiceId);
     let child;
     try {
       const [job] = await repository.claimScanJobs({
         tenantId: fixture.tenantId, applicationId: fixture.applicationId,
-        workerId, scannerServiceId: "ci-asset-scanner", environment: "sandbox",
+        workerId, scannerServiceId, environment: "sandbox",
         limit: 1, leaseMs: 5_000,
       });
       assert.ok(job, "fixture must create a claimable scan job");
       await pool.query(
         `UPDATE eper_customer_asset_scan_jobs
             SET attempt_count = max_attempts,
+                last_error_code = 'SCANNER_EXECUTION_FAILED',
                 lease_expires_at = clock_timestamp() - INTERVAL '1 second'
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
         [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId],
@@ -231,6 +476,7 @@ test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease
           DATABASE_URL: connectionString,
           EPER_PAYMENT_DATABASE_URL: connectionString,
           EPER_CUSTOMER_ASSET_SCAN_DATABASE_URL: workerLogin.connectionString,
+          EPER_CUSTOMER_ASSET_SCAN_RECOVERY_DATABASE_URL: recoveryLogin.connectionString,
           EPER_CUSTOMER_ASSET_PERSISTENCE: "postgres",
           EPER_AUDIT_PERSISTENCE: "postgres",
           EPER_AUDIT_ENVIRONMENT: "sandbox",
@@ -238,7 +484,7 @@ test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease
           EPER_CUSTOMER_ASSET_SCAN_RECOVERY_ENABLED: "true",
           EPER_CUSTOMER_ASSET_SCAN_RECOVERY_TENANT_ID: fixture.tenantId,
           EPER_CUSTOMER_ASSET_SCAN_RECOVERY_APPLICATION_ID: fixture.applicationId,
-          EPER_CUSTOMER_ASSET_SCAN_RECOVERY_SERVICE_ID: "ci-asset-scan-recovery",
+          EPER_CUSTOMER_ASSET_SCAN_RECOVERY_SERVICE_ID: scannerServiceId,
           EPER_CUSTOMER_ASSET_SCAN_RECOVERY_INTERVAL_MS: "30000",
           EPER_CUSTOMER_ASSET_SCAN_RECOVERY_BATCH_SIZE: "5",
         },
@@ -263,13 +509,20 @@ test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease
         upload_status: "failed", scan_status: "error", lifecycle_status: "quarantined", state: "dead_letter",
       });
       const audit = await pool.query(
-        `SELECT action FROM eper_audit_events
+        `SELECT action, payload FROM eper_audit_events
           WHERE tenant_id = $1 AND correlation_id = $2 AND action = 'customer.asset.scan.exhausted'`,
         [fixture.tenantId, fixture.correlationId],
       );
       assert.equal(audit.rowCount, 1, "recovery transition and audit must commit together");
+      assert.equal(audit.rows[0].payload.previousErrorCode, "SCANNER_EXECUTION_FAILED");
     } finally {
       if (child) await stopChild(child).catch(() => {});
+      await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [recoveryLogin.role]).catch(() => {});
+      await pool.query(`REVOKE eper_customer_asset_scan_supervisor_access FROM "${recoveryLogin.role}"`).catch(() => {});
+      await pool.query(`DROP ROLE IF EXISTS "${recoveryLogin.role}"`).catch(() => {});
+      await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [workerLogin.role]).catch(() => {});
+      await pool.query(`REVOKE eper_customer_asset_scan_supervisor_access FROM "${workerLogin.role}"`).catch(() => {});
+      await pool.query(`REVOKE eper_customer_asset_access FROM "${workerLogin.role}"`).catch(() => {});
       await pool.query(`DROP ROLE IF EXISTS "${workerLogin.role}"`).catch(() => {});
       await pool.end();
     }
@@ -292,6 +545,7 @@ test("PostgreSQL 16 recovery sweeps and stale scanner finalization serialize in 
       await pool.query(
         `UPDATE eper_customer_asset_scan_jobs
             SET attempt_count = max_attempts,
+                last_error_code = 'SCANNER_EXECUTION_FAILED',
                 lease_expires_at = clock_timestamp() - INTERVAL '1 second'
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
         [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId],
@@ -401,6 +655,55 @@ test("PostgreSQL scan claim generation fences stale same-worker renew, lookup, r
   });
 
 
+test("PostgreSQL retry reports attempts_exhausted while preserving the live lease for independent recovery",
+  { skip: !connectionString }, async () => {
+    const pool = new Pool({ connectionString, max: 2 });
+    const repository = new PostgresCustomerAssetRepository(pool);
+    const fixture = await createPendingScanFixture(pool, repository, "scan-retry-exhausted");
+    const workerId = "ci-scan-retry-exhausted-worker";
+    try {
+      const [claimed] = await repository.claimScanJobs({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId, workerId,
+        scannerServiceId: "ci-asset-scanner", environment: "sandbox", limit: 1, leaseMs: 30_000,
+      });
+      assert.ok(claimed, "fixture scan job must be claimed");
+
+      await pool.query(
+        `UPDATE eper_customer_asset_scan_jobs
+            SET attempt_count = max_attempts
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
+        [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId],
+      );
+
+      const outcome = await repository.retryScanJob({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        uploadSessionId: fixture.uploadSessionId, workerId,
+        claimGeneration: claimed.claimGeneration,
+        errorCode: "SCANNER_PROVIDER_ERROR", retryAfterMs: 15_000,
+      });
+      assert.equal(outcome, "attempts_exhausted",
+        "repository must report exhaustion distinctly from a scheduled retry or lost lease");
+
+      const state = await pool.query(
+        `SELECT state, lease_owner, lease_expires_at > clock_timestamp() AS lease_is_live,
+                attempt_count >= max_attempts AS attempts_are_exhausted, last_error_code
+           FROM eper_customer_asset_scan_jobs
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
+        [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId],
+      );
+      assert.deepEqual(state.rows[0], {
+        state: "leased",
+        lease_owner: workerId,
+        lease_is_live: true,
+        attempts_are_exhausted: true,
+        last_error_code: "SCANNER_PROVIDER_ERROR",
+      }, "retry must preserve the live lease so the independent recovery worker owns quarantine and audit");
+    } finally {
+      await pool.end();
+    }
+  });
+
+
 test("PostgreSQL timeout expiry permits generation-2 takeover and rejects every late generation-1 mutation",
   { skip: !connectionString }, async () => {
     const pool = new Pool({ connectionString, max: 5 });
@@ -484,6 +787,7 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
     const fixture = await createPendingScanFixture(pool, repository, "scan-child-readonly");
     const workerId = "ci-asset-scanner:child-readonly-test";
     const scannerServiceId = "ci-asset-scanner";
+    const spiffeId = "spiffe://eper.example/asset-scanner/ci-child";
     const suffix = randomUUID().replaceAll("-", "").slice(0, 14);
     const role = "eper_scan_child_" + suffix;
     const password = randomUUID().replaceAll("-", "");
@@ -505,9 +809,10 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
       await pool.query(`GRANT eper_customer_asset_scan_child_access TO "${role}"`);
       await pool.query(
         `INSERT INTO public.eper_customer_asset_scan_child_identities
-           (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
-         VALUES ($1, $2, $3, $4, $5, true)`,
-        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
+           (login_role, tenant_id, application_id, worker_id, scanner_service_id,
+            spiffe_id, provider_connection_id, enabled)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
+        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId, spiffeId, "ci-storage-connection"],
       );
 
       const privileges = await childPool.query(`
@@ -519,7 +824,7 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
           has_table_privilege(current_user, 'public.eper_customer_asset_scan_jobs', 'UPDATE') AS can_update_jobs,
           has_table_privilege(current_user, 'public.eper_audit_events', 'INSERT') AS can_insert_audit,
           has_function_privilege(current_user,
-            'public.eper_resolve_customer_asset_scan_child_input(varchar,varchar,uuid,varchar,varchar,bigint)',
+            'public.eper_resolve_customer_asset_scan_child_context(uuid,bigint)',
             'EXECUTE') AS can_resolve_scan_input
       `);
       assert.deepEqual(privileges.rows[0], {
@@ -542,8 +847,8 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
       );
 
       const resolved = await childPool.query(
-        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
-        [fixture.tenantId, fixture.applicationId, fixture.assetId, workerId, scannerServiceId, job.claimGeneration],
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
+        [fixture.assetId, job.claimGeneration],
       );
       assert.equal(resolved.rowCount, 1, "mapped child should resolve the exact active generation");
       assert.equal(resolved.rows[0].asset_id, fixture.assetId);
@@ -551,13 +856,11 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
       assert.equal(resolved.rows[0].mime_type, "application/pdf");
       assert.match(resolved.rows[0].provider_upload_reference, /^opaque-process-provider-ref-/);
 
-      await assert.rejects(
-        childPool.query(
-          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
-          [fixture.tenantId, fixture.applicationId + "-other", fixture.assetId, workerId, scannerServiceId, job.claimGeneration],
-        ),
-        /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/,
+      const staleGeneration = await childPool.query(
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
+        [fixture.assetId, job.claimGeneration + 1],
       );
+      assert.equal(staleGeneration.rowCount, 0, "stale claim generation must resolve no scan input");
     } finally {
       await childPool.end();
       await pool.query(
@@ -740,6 +1043,7 @@ test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { s
     await pool.query(
       `UPDATE public.eper_customer_asset_scan_jobs
           SET attempt_count = max_attempts,
+              last_error_code = 'SCANNER_EXECUTION_FAILED',
               lease_expires_at = clock_timestamp() - INTERVAL '1 second'
         WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
       [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId],
@@ -965,12 +1269,13 @@ test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { s
       lifecycle_status: "quarantined", state: "dead_letter",
     });
     const audit = await pool.query(
-      `SELECT action FROM public.eper_audit_events
+      `SELECT action, payload FROM public.eper_audit_events
         WHERE tenant_id = $1 AND correlation_id = $2
           AND action = 'customer.asset.scan.exhausted'`,
       [fixture.tenantId, fixture.correlationId],
     );
     assert.equal(audit.rowCount, 1, "state transition must have its canonical audit event");
+    assert.equal(audit.rows[0].payload.previousErrorCode, "SCANNER_EXECUTION_FAILED");
   } finally {
     await supervisorPool.end();
     await pool.query(
@@ -1052,6 +1357,91 @@ test("PostgreSQL 16 scanner-supervisor LOGIN claims only jobs in its exact mappe
       await supervisorPool.end();
       await pool.query(
         "DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1",
+        [role],
+      ).catch(() => {});
+      await pool.query(`DROP ROLE IF EXISTS "${role}"`).catch(() => {});
+      await pool.end();
+    }
+  });
+
+
+test("PostgreSQL 16 scanner child LOGIN is bound to its exact SPIFFE identity and read-only scan-input function",
+  { skip: !connectionString }, async () => {
+    const pool = new Pool({ connectionString, max: 5 });
+    const repository = new PostgresCustomerAssetRepository(pool);
+    const fixture = await createPendingScanFixture(pool, repository, "scan-child-spiffe");
+    const workerId = "ci-asset-scanner:spiffe-child-test";
+    const scannerServiceId = "ci-asset-scanner";
+    const spiffeId = "spiffe://eper.example/asset-scanner/ci-child";
+    const suffix = randomUUID().replaceAll("-", "").slice(0, 14);
+    const role = "eper_scan_child_" + suffix;
+    const password = randomUUID().replaceAll("-", "");
+    const childUrl = new URL(connectionString);
+    childUrl.username = role;
+    childUrl.password = password;
+    const childPool = new Pool({ connectionString: childUrl.toString(), max: 1 });
+    try {
+      const [job] = await repository.claimScanJobs({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        workerId, scannerServiceId, environment: "sandbox", limit: 1, leaseMs: 30_000,
+      });
+      assert.ok(job);
+      await pool.query(
+        `CREATE ROLE "${role}" WITH LOGIN INHERIT PASSWORD '${password}'
+           NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`,
+      );
+      await pool.query(`GRANT eper_customer_asset_scan_child_access TO "${role}"`);
+      await pool.query(
+        `INSERT INTO public.eper_customer_asset_scan_child_identities
+           (login_role, tenant_id, application_id, worker_id, scanner_service_id,
+            spiffe_id, provider_connection_id, enabled)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
+        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId, spiffeId, "ci-storage-connection"],
+      );
+
+      const boundary = await childPool.query(`
+        SELECT
+          has_table_privilege(current_user, 'public.eper_customer_asset_scan_jobs', 'SELECT') AS can_select_jobs,
+          has_table_privilege(current_user, 'public.eper_customer_asset_scan_jobs', 'UPDATE') AS can_update_jobs,
+          has_table_privilege(current_user, 'public.eper_customer_assets', 'SELECT') AS can_select_assets,
+          has_table_privilege(current_user, 'public.eper_customer_assets', 'UPDATE') AS can_update_assets,
+          has_function_privilege(current_user,
+            'public.eper_resolve_customer_asset_scan_child_context(uuid,bigint)',
+            'EXECUTE') AS can_resolve_input
+      `);
+      assert.deepEqual(boundary.rows[0], {
+        can_select_jobs: false,
+        can_update_jobs: false,
+        can_select_assets: false,
+        can_update_assets: false,
+        can_resolve_input: true,
+      });
+
+      const resolveInput = (claimGeneration = job.claimGeneration) =>
+        childPool.query(
+          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
+          [fixture.assetId, claimGeneration],
+        );
+      const resolved = await resolveInput();
+      assert.equal(resolved.rowCount, 1);
+      assert.equal(resolved.rows[0].asset_id, fixture.assetId);
+      assert.equal(resolved.rows[0].storage_adapter_key, "ci-storage");
+      assert.equal(resolved.rows[0].checksum_sha256, createHash("sha256").update(fixture.testObjectBytes).digest("hex"));
+      const staleGeneration = await resolveInput(job.claimGeneration + 1);
+      assert.equal(staleGeneration.rowCount, 0, "stale claim generation must resolve no scan input");
+      const staleGenerationAgain = await childPool.query(
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
+        [fixture.assetId, job.claimGeneration + 1],
+      );
+      assert.equal(staleGenerationAgain.rowCount, 0, "stale claim generation must resolve no scan input");
+      await assert.rejects(
+        childPool.query("SELECT * FROM public.eper_customer_asset_scan_jobs"),
+        error => error.code === "42501",
+      );
+    } finally {
+      await childPool.end();
+      await pool.query(
+        "DELETE FROM public.eper_customer_asset_scan_child_identities WHERE login_role = $1",
         [role],
       ).catch(() => {});
       await pool.query(`DROP ROLE IF EXISTS "${role}"`).catch(() => {});

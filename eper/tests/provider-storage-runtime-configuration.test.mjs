@@ -79,3 +79,34 @@ test("runtime opt-in accepts complete six-operation coverage split across adapte
   }) };
   assert.equal(readProviderStorageRuntimeConfiguration(config).adapters.length, 2);
 });
+
+
+test("internal object read is an optional seventh capability, not a runtime-wide requirement", () => {
+  const base = JSON.parse(valid.EPER_PROVIDER_STORAGE_RUNTIME_CONFIG_JSON);
+  const legacy = readProviderStorageRuntimeConfiguration(valid);
+  assert.equal(legacy.enabled, true);
+  const withRead = {
+    ...valid,
+    EPER_PROVIDER_STORAGE_RUNTIME_CONFIG_JSON: JSON.stringify({
+      ...base,
+      adapters: [{
+        ...base.adapters[0],
+        capabilities: [...base.adapters[0].capabilities, "storage.object.read.internal"],
+      }],
+    }),
+  };
+  const result = readProviderStorageRuntimeConfiguration(withRead);
+  assert.ok(result.adapters[0].capabilities.includes("storage.object.read.internal"));
+  const unsupported = {
+    ...valid,
+    EPER_PROVIDER_STORAGE_RUNTIME_CONFIG_JSON: JSON.stringify({
+      ...base,
+      adapters: [{
+        ...base.adapters[0],
+        capabilities: [...base.adapters[0].capabilities, "storage.object.read"],
+      }],
+    }),
+  };
+  assert.throws(() => readProviderStorageRuntimeConfiguration(unsupported),
+    e => e.code === "PROVIDER_STORAGE_RUNTIME_CONFIG_INVALID");
+});

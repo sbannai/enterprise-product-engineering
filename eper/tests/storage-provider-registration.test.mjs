@@ -283,3 +283,26 @@ test("storage registration rejects enum values that contradict declared scalar t
     validateStorageProviderRegistration({ ...provider, configurationSchema }, explicitProviderAllowlist);
   }
 });
+
+
+test("internal object read is recognized but requires provider-specific explicit opt-in", () => {
+  const provider = STORAGE_PROVIDER_CATALOGUE.find(item => item.providerKey === "aws-s3");
+  const capability = "storage.object.read.internal";
+  assert.ok(!provider.capabilities.includes(capability));
+  const optedIn = {
+    ...provider,
+    capabilities: [...provider.capabilities, capability],
+  };
+  const registries = {
+    providers: {
+      ...explicitProviderAllowlist.providers,
+      "aws-s3": {
+        ...explicitProviderAllowlist.providers["aws-s3"],
+        capabilities: [...explicitProviderAllowlist.providers["aws-s3"].capabilities, capability],
+      },
+    },
+  };
+  validateStorageProviderRegistration(optedIn, registries);
+  assert.throws(() => validateStorageProviderRegistration(optedIn, explicitProviderAllowlist),
+    /STORAGE_PROVIDER_CAPABILITIES_INVALID/);
+});

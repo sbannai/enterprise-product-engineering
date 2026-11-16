@@ -1027,8 +1027,8 @@ export class PostgresCustomerAssetRepository {
           [input.tenantId, candidate.asset_id],
         );
         if (!asset.rows[0] || asset.rows[0].upload_status !== "scanning") continue;
-        const job = await client.query<{ correlation_id: string }>(
-          `SELECT correlation_id
+        const job = await client.query<{ correlation_id: string; last_error_code: string | null }>(
+          `SELECT correlation_id, last_error_code
              FROM eper_customer_asset_scan_jobs
             WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
               AND state = 'leased' AND lease_expires_at <= clock_timestamp()
@@ -1066,7 +1066,8 @@ export class PostgresCustomerAssetRepository {
           resourceId: candidate.asset_id, correlationId: job.rows[0].correlation_id, source: "job",
           operationName: "independent customer asset scan recovery",
           payload: { assetId: candidate.asset_id, uploadSessionId: candidate.upload_session_id,
-            scanStatus: "error", resultingAssetStatus: "failed" },
+            scanStatus: "error", resultingAssetStatus: "failed",
+            previousErrorCode: job.rows[0].last_error_code },
         });
         recovered += 1;
       }
@@ -1100,9 +1101,9 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       const recovered = await client.query<{
-        upload_session_id: string; asset_id: string; correlation_id: string;
+        upload_session_id: string; asset_id: string; correlation_id: string; previous_error_code: string | null;
       }>(
-        `SELECT upload_session_id, asset_id, correlation_id
+        `SELECT upload_session_id, asset_id, correlation_id, previous_error_code
            FROM public.eper_recover_exhausted_customer_asset_scan_jobs($1, $2, $3, $4)`,
         [input.tenantId, input.applicationId, input.scannerServiceId, limit],
       );
@@ -1118,7 +1119,8 @@ export class PostgresCustomerAssetRepository {
           resourceId: item.asset_id, correlationId: item.correlation_id, source: "job",
           operationName: "independent customer asset scan recovery",
           payload: { assetId: item.asset_id, uploadSessionId: item.upload_session_id,
-            scanStatus: "error", resultingAssetStatus: "failed" },
+            scanStatus: "error", resultingAssetStatus: "failed",
+            previousErrorCode: item.previous_error_code },
         });
       }
       await client.query("COMMIT");
@@ -1150,12 +1152,8 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      // Exhausted leases are finalized through the same ordered recovery path
-      // used by the independently supervised recovery process.
-      await this.recoverExhaustedScanJobs({
-        tenantId: input.tenantId, applicationId: input.applicationId,
-        scannerServiceId: input.scannerServiceId, environment: input.environment, limit,
-      });
+      // Recovery is owned by the independently supervised recovery worker.
+      // Claiming must use only this transaction/client and never check out a second pool client.
       const claimed = await client.query<{
         upload_session_id: string; asset_id: string; correlation_id: string;
         attempt_count: number; lease_expires_at: string | Date; claim_generation: number | string;
@@ -1261,7 +1259,7 @@ export class PostgresCustomerAssetRepository {
   async retryScanJob(input: {
     tenantId: string; applicationId: string; uploadSessionId: string; workerId: string;
     errorCode: string; retryAfterMs: number; claimGeneration: number;
-  }): Promise<"pending" | "dead_letter" | "lease_lost"> {
+  }): Promise<"pending" | "attempts_exhausted" | "lease_lost"> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
     this.validateId(input.uploadSessionId, "uploadSessionId");
@@ -1275,7 +1273,7 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      const result = await client.query<{ state: "pending" | "dead_letter" }>(
+      const result = await client.query<{ state: "pending" | "attempts_exhausted" }>(
         `UPDATE eper_customer_asset_scan_jobs
             SET state = CASE WHEN attempt_count >= max_attempts THEN 'leased' ELSE 'pending' END,
                 available_at = CASE WHEN attempt_count >= max_attempts THEN available_at
@@ -1287,7 +1285,7 @@ export class PostgresCustomerAssetRepository {
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
             AND state = 'leased' AND lease_owner = $4 AND lease_expires_at > now()
             AND claim_generation = $7::bigint
-          RETURNING CASE WHEN attempt_count >= max_attempts THEN 'dead_letter' ELSE state END AS state`,
+          RETURNING CASE WHEN attempt_count >= max_attempts THEN 'attempts_exhausted' ELSE state END AS state`,
         [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId,
           input.retryAfterMs, input.errorCode, input.claimGeneration],
       );

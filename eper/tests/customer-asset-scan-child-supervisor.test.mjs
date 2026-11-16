@@ -31,6 +31,32 @@ test("scanner child supervisor hard-kills a non-cooperative child at its deadlin
   assert.ok(Date.now() - began < 2_000, "hung child must be terminated within a bounded interval");
 });
 
+test("scanner child supervisor permits only the bounded PostgreSQL mTLS connection settings", async () => {
+  const environment = {
+    NODE_ENV: "test",
+    PGHOST: "127.0.0.1",
+    PGPORT: "5432",
+    PGDATABASE: "eper_test",
+    PGUSER: "eper_scan_child_ci",
+    PGSSLMODE: "verify-full",
+    PGSSLROOTCERT: "/tmp/ca.pem",
+    PGSSLCERT: "/tmp/client.pem",
+    PGSSLKEY: "/tmp/client-key.pem",
+  };
+  const script = [
+    "const expected=" + JSON.stringify(environment) + ";",
+    "for (const [key,value] of Object.entries(expected)) if (process.env[key] !== value) process.exit(43);",
+    "let s='';process.stdin.on('data',c=>s+=c);",
+    "process.stdin.on('end',()=>{const m=JSON.parse(s);",
+    "process.stdout.write(JSON.stringify({version:3,type:'result',jobToken:m.jobToken,",
+    "claimGeneration:m.claimGeneration,scannerServiceId:m.scannerServiceId,scanStatus:'clean'}));});",
+  ].join("");
+  const outcome = await runCustomerAssetScanChild({
+    executable: node, args: ["-e", script], start: start(), timeoutMs: 2_000, environment,
+  });
+  assert.equal(outcome.kind, "result");
+});
+
 test("scanner child supervisor rejects malformed output and non-zero exits", async () => {
   await assert.rejects(runCustomerAssetScanChild({
     executable: node, args: ["-e", "process.stdout.write('not-json')"],
@@ -40,6 +66,16 @@ test("scanner child supervisor rejects malformed output and non-zero exits", asy
     executable: node, args: ["-e", "process.exit(9)"],
     start: start(), timeoutMs: 2_000,
   }), /CUSTOMER_ASSET_SCAN_CHILD_EXITED/);
+});
+
+test("scanner child supervisor preserves a token-bound failure envelope from a non-zero child exit", async () => {
+  const outcome = await runCustomerAssetScanChild({
+    executable: node,
+    args: ["-e", "let s='';process.stdin.on('data',c=>s+=c);process.stdin.on('end',()=>{const m=JSON.parse(s);process.stdout.write(JSON.stringify({version:3,type:'failure',jobToken:m.jobToken,claimGeneration:m.claimGeneration,code:'SCANNER_BOOTSTRAP_FAILED'}));process.exitCode=1;});"],
+    start: start(), timeoutMs: 2_000,
+  });
+  assert.equal(outcome.kind, "failure");
+  assert.equal(outcome.value.code, "SCANNER_BOOTSTRAP_FAILED");
 });
 
 test("scanner child supervisor rejects a response for another claim generation", async () => {
@@ -61,6 +97,20 @@ test("scanner child supervisor enforces output and environment bounds", async ()
   }), /CUSTOMER_ASSET_SCAN_CHILD_ENVIRONMENT_INVALID/);
 });
 
+
+test("scanner child environment rejects unapproved provider credentials and control characters", async () => {
+  for (const key of ["AWS_ACCESS_KEY_ID", "AWS_SESSION_TOKEN", "GOOGLE_APPLICATION_CREDENTIALS",
+    "AZURE_CLIENT_SECRET", "PROVIDER_API_TOKEN", "CUSTOM_SECRET_VALUE"]) {
+    await assert.rejects(runCustomerAssetScanChild({
+      executable: node, args: ["-e", "process.exit(0)"], start: start(), timeoutMs: 2_000,
+      environment: { [key]: "must-not-cross-process-boundary" },
+    }), /CUSTOMER_ASSET_SCAN_CHILD_ENVIRONMENT_INVALID/, key + " must not cross the process boundary");
+  }
+  await assert.rejects(runCustomerAssetScanChild({
+    executable: node, args: ["-e", "process.exit(0)"], start: start(), timeoutMs: 2_000,
+    environment: { NODE_ENV: "test\nINJECTED=value" },
+  }), /CUSTOMER_ASSET_SCAN_CHILD_ENVIRONMENT_INVALID/);
+});
 
 test("scanner child receives only its explicit environment allowlist, never inherited parent secrets", async () => {
   const sentinel = "EPER_PARENT_SECRET_SENTINEL";
@@ -85,4 +135,135 @@ test("scanner child receives only its explicit environment allowlist, never inhe
     if (previous === undefined) delete process.env[sentinel];
     else process.env[sentinel] = previous;
   }
+});
+
+
+test("scanner child supervisor hard-kills the child when the parent shuts down", async () => {
+  const controller = new AbortController();
+  const pending = runCustomerAssetScanChild({
+    executable: node, args: ["-e", "process.stdin.resume();setInterval(()=>{},1000)"],
+    start: start(), timeoutMs: 10_000, signal: controller.signal,
+  });
+  setTimeout(() => controller.abort(), 50);
+  await assert.rejects(pending, /CUSTOMER_ASSET_SCAN_CHILD_ABORTED/);
+});
+
+
+test("scanner child supervisor blocks runtime and dynamic-loader environment injection", async () => {
+  for (const key of ["NODE_OPTIONS", "NODE_PATH", "LD_PRELOAD", "LD_LIBRARY_PATH",
+    "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH", "OPENSSL_CONF", "SSLKEYLOGFILE"]) {
+    await assert.rejects(runCustomerAssetScanChild({
+      executable: node, args: ["-e", "process.exit(0)"], start: start(), timeoutMs: 2_000,
+      environment: { [key]: "untrusted-runtime-override" },
+    }), /CUSTOMER_ASSET_SCAN_CHILD_ENVIRONMENT_INVALID/, key + " must not cross the process boundary");
+  }
+});
+
+test("scanner child supervisor safely handles a child that exits before reading its request", async () => {
+  await assert.rejects(runCustomerAssetScanChild({
+    executable: node, args: ["-e", "process.exit(0)"],
+    start: start(), timeoutMs: 2_000,
+  }), /CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_INVALID|CUSTOMER_ASSET_SCAN_CHILD_EXITED/);
+});
+
+test("scanner child supervisor settles spawn errors only after the child close event", async () => {
+  await assert.rejects(runCustomerAssetScanChild({
+    executable: node + ".missing-executable",
+    args: [],
+    start: start(),
+    timeoutMs: 2_000,
+  }), /CUSTOMER_ASSET_SCAN_CHILD_SPAWN_FAILED/);
+});
+
+test("a hung scanner child cannot block a separate clean child from completing", async () => {
+  const hungStart = { ...start(), jobToken: "c".repeat(64), claimGeneration: 11 };
+  const cleanStart = { ...start(), jobToken: "d".repeat(64), claimGeneration: 12 };
+  const began = Date.now();
+  const hung = runCustomerAssetScanChild({
+    executable: node,
+    args: ["-e", "process.stdin.resume();setInterval(()=>{},1000)"],
+    start: hungStart,
+    timeoutMs: 300,
+  });
+  const clean = await runCustomerAssetScanChild({
+    executable: node,
+    args: ["-e", "let s='';process.stdin.on('data',c=>s+=c);process.stdin.on('end',()=>{const m=JSON.parse(s);process.stdout.write(JSON.stringify({version:3,type:'result',jobToken:m.jobToken,claimGeneration:m.claimGeneration,scannerServiceId:m.scannerServiceId,scanStatus:'clean'}));});"],
+    start: cleanStart,
+    timeoutMs: 2_000,
+  });
+  assert.equal(clean.kind, "result");
+  assert.equal(clean.value.jobToken, cleanStart.jobToken);
+  assert.ok(Date.now() - began < 2_000, "clean child must finish without waiting for hung child");
+  await assert.rejects(hung, /CUSTOMER_ASSET_SCAN_CHILD_TIMEOUT/);
+});
+
+
+
+test("scanner child supervisor creates a killable process group on POSIX", async () => {
+  if (process.platform === "win32") return;
+  const script = [
+    "const {spawn}=require('node:child_process');",
+    "spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});",
+    "process.stdin.resume();setInterval(()=>{},1000);",
+  ].join("");
+  await assert.rejects(runCustomerAssetScanChild({
+    executable: node, args: ["-e", script], start: start(), timeoutMs: 150,
+  }), /CUSTOMER_ASSET_SCAN_CHILD_TIMEOUT/);
+});
+
+test("scanner child supervisor rejects malformed executable and argument vectors before spawn", async () => {
+  await assert.rejects(runCustomerAssetScanChild({
+    executable: node, args: ["-e", "process.exit(0)", "bad\u0000argument"],
+    start: start(), timeoutMs: 2_000,
+  }), /CUSTOMER_ASSET_SCAN_CHILD_OPTIONS_INVALID/);
+  await assert.rejects(runCustomerAssetScanChild({
+    executable: "node\u0000--require=untrusted", args: [],
+    start: start(), timeoutMs: 2_000,
+  }), /CUSTOMER_ASSET_SCAN_CHILD_OPTIONS_INVALID/);
+  await assert.rejects(runCustomerAssetScanChild({
+    executable: node, args: Array.from({ length: 257 }, () => "x"),
+    start: start(), timeoutMs: 2_000,
+  }), /CUSTOMER_ASSET_SCAN_CHILD_OPTIONS_INVALID/);
+});
+
+
+test("scanner child supervisor does not launch a process when cancellation predates the attempt", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(runCustomerAssetScanChild({
+    // A nonexistent executable proves the pre-aborted path returns before spawn.
+    executable: node + ".must-not-be-launched",
+    args: [],
+    start: start(),
+    timeoutMs: 2_000,
+    signal: controller.signal,
+  }), /CUSTOMER_ASSET_SCAN_CHILD_ABORTED/);
+});
+
+
+test("scanner child supervisor rejects sparse argument vectors before spawn", async () => {
+  const sparseArgs = new Array(2);
+  sparseArgs[0] = "-e";
+  await assert.rejects(runCustomerAssetScanChild({
+    executable: node,
+    args: sparseArgs,
+    start: start(),
+    timeoutMs: 2_000,
+  }), /CUSTOMER_ASSET_SCAN_CHILD_OPTIONS_INVALID/);
+});
+
+
+test("scanner child supervisor accepts only the parent-provided private temp root override", async () => {
+  const environment = { TMPDIR: "/tmp/eper-parent-owned-scratch" };
+  const script = [
+    "if (process.env.TMPDIR !== '/tmp/eper-parent-owned-scratch') process.exit(44);",
+    "let s='';process.stdin.on('data',c=>s+=c);",
+    "process.stdin.on('end',()=>{const m=JSON.parse(s);",
+    "process.stdout.write(JSON.stringify({version:3,type:'result',jobToken:m.jobToken,",
+    "claimGeneration:m.claimGeneration,scannerServiceId:m.scannerServiceId,scanStatus:'clean'}));});",
+  ].join("");
+  const outcome = await runCustomerAssetScanChild({
+    executable: node, args: ["-e", script], start: start(), timeoutMs: 2_000, environment,
+  });
+  assert.equal(outcome.kind, "result");
 });

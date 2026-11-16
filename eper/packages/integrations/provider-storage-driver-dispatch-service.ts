@@ -1,11 +1,13 @@
 import type {
   ProviderMalwareScanOutcome,
   ProviderMalwareScanRequest,
+  ProviderInternalObjectReadRequest,
   ProviderObjectVerificationOutcome,
   ProviderObjectVerificationRequest,
   ProviderStorageDriver,
 } from "./provider-storage-driver-contract.js";
 import { assertProviderStorageDriver } from "./provider-storage-driver-contract.js";
+import { verifiedProviderInternalObjectChunks } from "./provider-internal-object-read.js";
 import type { ProviderRuntimeCredentialResolutionService } from "./provider-runtime-credential-resolution-service.js";
 import { assertDependencyRuntimeCompatible, type DependencyInventoryReader } from "../dependencies/runtime-gate.js";
 import type { StorageDownloadRequest, StorageDownloadResult } from "../assets/storage-download-adapter.js";
@@ -18,14 +20,16 @@ export type ProviderStorageOperation =
   | { kind: "renew_upload"; request: StorageUploadRequest & { providerUploadReference: string } }
   | { kind: "verify_object"; request: ProviderObjectVerificationRequest }
   | { kind: "create_download"; request: StorageDownloadRequest }
-  | { kind: "scan_object"; request: ProviderMalwareScanRequest };
+  | { kind: "scan_object"; request: ProviderMalwareScanRequest }
+  | { kind: "read_object_internal"; request: ProviderInternalObjectReadRequest };
 
 export type ProviderStorageOperationResult =
   | StorageUploadProviderOutcome
   | StorageUploadLookupOutcome
   | ProviderObjectVerificationOutcome
   | StorageDownloadResult | null
-  | ProviderMalwareScanOutcome;
+  | ProviderMalwareScanOutcome
+  | AsyncIterable<Uint8Array>;
 
 const CAPABILITY_BY_OPERATION: Record<ProviderStorageOperation["kind"], string> = {
   create_upload: "storage.upload.grant",
@@ -34,6 +38,7 @@ const CAPABILITY_BY_OPERATION: Record<ProviderStorageOperation["kind"], string> 
   verify_object: "storage.object.verify",
   create_download: "storage.download.grant",
   scan_object: "storage.object.scan",
+  read_object_internal: "storage.object.read.internal",
 };
 
 function validText(value: unknown, max = 2048): value is string {
@@ -77,6 +82,12 @@ function validOperationRequest(operation: ProviderStorageOperation): boolean {
     case "scan_object":
       return validText(request.assetId, 128) &&
         validText(request.providerObjectReference, 2048) && validSha256(request.expectedSha256);
+    case "read_object_internal":
+      return validText(request.assetId, 128) &&
+        validText(request.providerObjectReference, 2048) &&
+        Number.isSafeInteger(request.expectedSizeBytes) &&
+        (request.expectedSizeBytes as number) > 0 &&
+        validSha256(request.expectedSha256);
   }
 }
 
@@ -86,7 +97,11 @@ export class ProviderStorageDispatchError extends Error {
     | "PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING"
     | "PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID"
     | "PROVIDER_STORAGE_DISPATCH_ABORTED"
-    | "PROVIDER_STORAGE_DISPATCH_DEPENDENCY_BLOCKED") {
+    | "PROVIDER_STORAGE_DISPATCH_DEPENDENCY_BLOCKED"
+    | "PROVIDER_STORAGE_DISPATCH_OBJECT_TOO_LARGE"
+    | "PROVIDER_STORAGE_DISPATCH_RUNTIME_LIMITS_UNAVAILABLE"
+    | "PROVIDER_STORAGE_DISPATCH_CONCURRENCY_LIMIT"
+    | "PROVIDER_STORAGE_DISPATCH_TIMEOUT") {
     super(code);
     this.name = "ProviderStorageDispatchError";
   }
@@ -96,19 +111,154 @@ export class ProviderStorageDispatchError extends Error {
  * Last-mile, fail-closed invocation boundary for storage provider drivers.
  * Runtime selection and connection-version revalidation happen before secret
  * resolution; persisted vendor dependencies are checked before driver entry.
- * Credentials remain local to this call and are
- * never returned, persisted, or logged by this service.
+ * Credentials remain local to this call and are never returned, persisted, or
+ * logged by this service.
+ *
+ * maxConcurrentOperations is deliberately an instance-local ceiling. It is not
+ * a fleet-wide quota: each scanner child process composes its own dispatcher,
+ * while the parent worker's concurrency option bounds child jobs only within
+ * that worker process. A deployment-wide provider quota requires a separately
+ * shared admission mechanism (for example, a tenant/provider-scoped DB lease).
  */
 export class ProviderStorageDriverDispatchService<TCredentials> {
   constructor(
     private readonly runtime: Pick<
       ProviderRuntimeCredentialResolutionService<ProviderStorageDriver<TCredentials>, TCredentials>,
-      "resolve"
+      "resolveRuntime" | "resolveCredentials"
     >,
     private readonly dependencyInventory?: DependencyInventoryReader,
+    private readonly runtimeLimits?: { maxObjectBytes: number; requestTimeoutMs?: number; maxConcurrentOperations?: number },
   ) {}
 
+  private activeOperations = 0;
+
   async dispatch(input: {
+    tenantId: string;
+    applicationId: string;
+    requestId: string;
+    actorId: string;
+    correlationId: string;
+    operation: ProviderStorageOperation;
+    signal?: AbortSignal;
+    expectedConnectionId?: string;
+  }): Promise<ProviderStorageOperationResult> {
+    const limits = this.runtimeLimits;
+    if (!limits || !Number.isSafeInteger(limits.maxConcurrentOperations) ||
+        (limits.maxConcurrentOperations as number) < 1 ||
+        !Number.isSafeInteger(limits.requestTimeoutMs) ||
+        (limits.requestTimeoutMs as number) < 1) {
+      throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_RUNTIME_LIMITS_UNAVAILABLE");
+    }
+    if (this.activeOperations >= (limits.maxConcurrentOperations as number)) {
+      throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_CONCURRENCY_LIMIT");
+    }
+    this.activeOperations += 1;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let finished = false;
+    let streaming = false;
+    const cleanup = () => {
+      if (finished) return;
+      finished = true;
+      if (timer !== undefined) clearTimeout(timer);
+      input.signal?.removeEventListener("abort", abortFromCaller);
+      this.activeOperations = Math.max(0, this.activeOperations - 1);
+    };
+    // A stream may never be consumed. Its deadline/abort must still release
+    // the dispatcher permit and let the verifier close the provider iterator.
+    controller.signal.addEventListener("abort", () => {
+      // Before a stream is handed to the caller, the provider operation still
+      // owns its permit until its promise settles, even if it ignores abort.
+      if (streaming) cleanup();
+    }, { once: true });
+    let rejectCallerAbort: ((error: Error) => void) | undefined;
+    const abortFromCaller = () => {
+      controller.abort();
+      rejectCallerAbort?.(new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED"));
+    };
+    if (input.signal?.aborted) controller.abort();
+    else input.signal?.addEventListener("abort", abortFromCaller, { once: true });
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        if (!streaming) reject(new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_TIMEOUT"));
+      }, limits.requestTimeoutMs as number);
+    });
+    try {
+      const operation = this.dispatchWithSignal({ ...input, signal: controller.signal }).then(async result => {
+        if (controller.signal.aborted) {
+          if (result && typeof result === "object" &&
+              typeof (result as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === "function") {
+            try {
+              await (result as AsyncIterable<Uint8Array>)[Symbol.asyncIterator]().return?.();
+            } catch {
+              // Preserve the cancellation/deadline result; provider cleanup is best effort.
+            }
+          }
+          cleanup();
+          throw new ProviderStorageDispatchError(input.signal?.aborted
+            ? "PROVIDER_STORAGE_DISPATCH_ABORTED"
+            : "PROVIDER_STORAGE_DISPATCH_TIMEOUT");
+        }
+        if (result && typeof result === "object" &&
+            typeof (result as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === "function") {
+          streaming = true;
+        } else {
+          cleanup();
+        }
+        return result;
+      }, error => {
+        cleanup();
+        throw error;
+      });
+      const callerAbort = input.signal ? new Promise<never>((_, reject) => {
+        rejectCallerAbort = reject;
+        if (input.signal?.aborted) abortFromCaller();
+      }) : new Promise<never>(() => {});
+      const result = await Promise.race([operation, timeout, callerAbort]);
+      if (controller.signal.aborted) {
+        throw new ProviderStorageDispatchError(input.signal?.aborted
+          ? "PROVIDER_STORAGE_DISPATCH_ABORTED"
+          : "PROVIDER_STORAGE_DISPATCH_TIMEOUT");
+      }
+      if (result && typeof result === "object" &&
+          typeof (result as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === "function") {
+        const source = result as AsyncIterable<Uint8Array>;
+        streaming = true;
+        return (async function* () {
+          try {
+            for await (const chunk of source) {
+              if (controller.signal.aborted) {
+                throw new ProviderStorageDispatchError(input.signal?.aborted
+                  ? "PROVIDER_STORAGE_DISPATCH_ABORTED"
+                  : "PROVIDER_STORAGE_DISPATCH_TIMEOUT");
+              }
+              yield chunk;
+            }
+          } catch (error) {
+            if (controller.signal.aborted) {
+              throw new ProviderStorageDispatchError(input.signal?.aborted
+                ? "PROVIDER_STORAGE_DISPATCH_ABORTED"
+                : "PROVIDER_STORAGE_DISPATCH_TIMEOUT");
+            }
+            throw error;
+          } finally {
+            controller.abort();
+            cleanup();
+          }
+        })();
+      }
+      return result;
+    } catch (error) {
+      controller.abort();
+      if (!streaming && input.signal?.aborted) {
+        // The in-flight operation owns the permit until it actually settles.
+      }
+      throw error;
+    }
+  }
+
+  private async dispatchWithSignal(input: {
     tenantId: string;
     applicationId: string;
     requestId: string;
@@ -118,6 +268,8 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
     correlationId: string;
     operation: ProviderStorageOperation;
     signal?: AbortSignal;
+    /** Required connection pin for internal scanner reads. */
+    expectedConnectionId?: string;
   }): Promise<ProviderStorageOperationResult> {
     if (!input || !input.operation || typeof input.requestId !== "string" ||
         !input.requestId.trim() || input.requestId.length > 128 ||
@@ -127,23 +279,37 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
     if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
     const capability = CAPABILITY_BY_OPERATION[input.operation.kind];
     if (!capability || !validText(input.tenantId, 128) || !validText(input.applicationId, 128) ||
-        !validOperationRequest(input.operation)) {
+        !validOperationRequest(input.operation) ||
+        (input.operation.kind === "read_object_internal" && !validText(input.expectedConnectionId, 128)) ||
+        (input.expectedConnectionId !== undefined && !validText(input.expectedConnectionId, 128))) {
       throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
     }
 
-    const resolved = await this.runtime.resolve({
+    const runtime = await this.runtime.resolveRuntime({
       tenantId: input.tenantId,
       applicationId: input.applicationId,
       capability,
+      ...(input.expectedConnectionId !== undefined ? { expectedConnectionId: input.expectedConnectionId } : {}),
     });
     if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
-    const selection = resolved.runtime.selection;
+    const selection = runtime.selection;
     if (selection.tenantId !== input.tenantId || selection.applicationId !== input.applicationId ||
-        selection.capabilityKey !== capability || resolved.runtime.capability !== capability) {
+        selection.capabilityKey !== capability || runtime.capability !== capability ||
+        (input.expectedConnectionId !== undefined && selection.connectionId !== input.expectedConnectionId)) {
       throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH");
     }
 
-    const driver = assertProviderStorageDriver(resolved.runtime.adapter);
+    if (input.operation.kind === "read_object_internal") {
+      if (!this.runtimeLimits || !Number.isSafeInteger(this.runtimeLimits.maxObjectBytes) ||
+          this.runtimeLimits.maxObjectBytes < 1) {
+        throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_RUNTIME_LIMITS_UNAVAILABLE");
+      }
+      if (input.operation.request.expectedSizeBytes > this.runtimeLimits.maxObjectBytes) {
+        throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_OBJECT_TOO_LARGE");
+      }
+    }
+
+    const driver = assertProviderStorageDriver(runtime.adapter);
     if (driver.dependencyIds.length > 0) {
       if (!this.dependencyInventory) {
         throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_DEPENDENCY_BLOCKED");
@@ -166,12 +332,21 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
       }
     }
     if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
+    // Resolve credentials only after the dependency gate has admitted the adapter.
+    let credentials: TCredentials;
+    try {
+      credentials = await this.runtime.resolveCredentials(runtime);
+    } catch (error) {
+      if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
+      throw error;
+    }
+    if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
     const context = {
       tenantId: selection.tenantId,
       applicationId: selection.applicationId,
       connectionId: selection.connectionId,
       providerKey: selection.providerKey,
-      credentials: resolved.credentials,
+      credentials,
     };
 
     switch (input.operation.kind) {
@@ -212,6 +387,21 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
       case "scan_object":
         if (!driver.capabilities.malwareScan) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING");
         return driver.scanObject(context, input.operation.request, input.requestId, input.signal);
+      case "read_object_internal": {
+        if (!driver.capabilities.internalObjectRead || typeof driver.readObjectInternal !== "function") {
+          throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING");
+        }
+        const stream = await driver.readObjectInternal(context, input.operation.request, input.requestId, input.signal);
+        if (!stream || typeof stream[Symbol.asyncIterator] !== "function") {
+          throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
+        }
+        return verifiedProviderInternalObjectChunks({
+          source: stream,
+          expectedSizeBytes: input.operation.request.expectedSizeBytes,
+          expectedSha256: input.operation.request.expectedSha256,
+          signal: input.signal,
+        });
+      }
     }
   }
 }

@@ -49,7 +49,7 @@ done
 docker exec "$container_id" pg_isready -U eper -d "$database_name"
 
 mkdir -p "$RUNNER_TEMP/eper-scan-child-certs"
-cp ca.crt child.crt child.key wrong-cn.crt wrong-cn.key untrusted-child.crt untrusted-child.key expired-child.crt expired-child.key "$RUNNER_TEMP/eper-scan-child-certs/"
+cp ca.crt ca.key child.crt child.key wrong-cn.crt wrong-cn.key untrusted-child.crt untrusted-child.key expired-child.crt expired-child.key "$RUNNER_TEMP/eper-scan-child-certs/"
 chmod 600 "$RUNNER_TEMP/eper-scan-child-certs/"*.key
 {
   echo "EPER_SCAN_CHILD_CERT_DIR=$RUNNER_TEMP/eper-scan-child-certs"

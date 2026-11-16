@@ -25,9 +25,23 @@ function driver() {
     async scanObject() { return { kind: "timeout" }; },
   };
 }
+const deploymentPolicy = {
+  enabled: true, environment: "test", scannerIdentity: "scanner-test",
+  allowedHosts: ["storage.example.com"], allowedProviderKeys: ["provider-test"],
+  secretManager: { adapterKey: "secret-port", adapterVersion: "1.0.0" },
+  tlsMode: "verify-full", runtimeLimits: { requestTimeoutMs: 30000, maxObjectBytes: 1048576, maxConcurrentOperations: 4 },
+  adapters: [{ adapterKey: "storage-test", adapterVersion: "1.0.0", capabilities: [
+    "storage.upload.grant", "storage.upload.lookup", "storage.upload.renew",
+    "storage.object.verify", "storage.download.grant", "storage.object.scan",
+  ], synthetic: false }],
+};
+
 function input(overrides = {}) {
   return {
     enabled: true,
+    deploymentPolicy: Object.prototype.hasOwnProperty.call(overrides, "deploymentPolicy")
+      ? overrides.deploymentPolicy
+      : { ...deploymentPolicy, environment: overrides.environment ?? "test" },
     environment: "test",
     registrations: [{
       adapterKey: "storage-test",
@@ -42,7 +56,11 @@ function input(overrides = {}) {
     dispatch: { async resolve() { throw new Error("not invoked in composition test"); } },
     catalogue: { async get() { return null; } },
     connections: { async getRuntimeSecretReference() { throw new Error("not invoked"); }, async assertDispatchAuthorization() { throw new Error("not invoked"); } },
-    secretResolver: { async resolve() { return { token: "test" }; } },
+    secretResolver: {
+      adapterKey: "secret-port",
+      adapterVersion: "1.0.0",
+      async resolve() { return { token: "test" }; },
+    },
     scannerIdentity: "scanner-v1",
     allowedHosts: ["storage.example.com"],
     ...overrides,
@@ -55,7 +73,7 @@ test("disabled composition creates no executable dispatcher and needs no provide
   });
 });
 
-test("enabled composition creates a dispatcher from explicit dependencies", () => {
+test("enabled composition creates a dispatcher from explicit dependencies and a deployment policy", () => {
   const result = createProviderStorageRuntimeComposition(input());
   assert.equal(result.enabled, true);
   assert.equal(typeof result.dispatch?.dispatch, "function");
@@ -119,5 +137,39 @@ test("enabled composition refuses dependency-bearing drivers without durable inv
     () => createProviderStorageRuntimeComposition(configured),
     error => error instanceof ProviderStorageRuntimeCompositionError &&
       error.code === "PROVIDER_STORAGE_RUNTIME_DEPENDENCY_INVENTORY_REQUIRED",
+  );
+});
+
+test("enabled composition refuses a missing or disabled deployment policy", () => {
+  assert.throws(() => createProviderStorageRuntimeComposition(input({ deploymentPolicy: undefined })),
+    error => error instanceof ProviderStorageRuntimeCompositionError &&
+      error.code === "PROVIDER_STORAGE_RUNTIME_DEPLOYMENT_POLICY_REQUIRED");
+  assert.throws(() => createProviderStorageRuntimeComposition(input({ deploymentPolicy: { ...deploymentPolicy, enabled: false } })),
+    error => error instanceof ProviderStorageRuntimeCompositionError &&
+      error.code === "PROVIDER_STORAGE_RUNTIME_DEPLOYMENT_POLICY_REQUIRED");
+});
+
+test("enabled composition binds the exact configured secret-manager adapter and version", () => {
+  assert.throws(
+    () => createProviderStorageRuntimeComposition(input({
+      secretResolver: {
+        adapterKey: "other-secret-port",
+        adapterVersion: "1.0.0",
+        async resolve() { return { token: "test" }; },
+      },
+    })),
+    error => error instanceof ProviderStorageRuntimeCompositionError &&
+      error.code === "PROVIDER_STORAGE_RUNTIME_SECRET_MANAGER_NOT_ALLOWED",
+  );
+  assert.throws(
+    () => createProviderStorageRuntimeComposition(input({
+      secretResolver: {
+        adapterKey: "secret-port",
+        adapterVersion: "2.0.0",
+        async resolve() { return { token: "test" }; },
+      },
+    })),
+    error => error instanceof ProviderStorageRuntimeCompositionError &&
+      error.code === "PROVIDER_STORAGE_RUNTIME_SECRET_MANAGER_NOT_ALLOWED",
   );
 });

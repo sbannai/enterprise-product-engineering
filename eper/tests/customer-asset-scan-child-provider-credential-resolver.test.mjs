@@ -10,7 +10,7 @@ const input = {
   applicationId: "app-a",
   connectionId: "connection-a",
   scannerServiceId: "asset-scanner",
-  capability: "storage.object.scan",
+  capability: "storage.object.read.internal",
 };
 
 function resolved(overrides = {}) {
@@ -20,9 +20,9 @@ function resolved(overrides = {}) {
         tenantId: "tenant-a",
         applicationId: "app-a",
         connectionId: "connection-a",
-        capabilityKey: "storage.object.scan",
+        capabilityKey: "storage.object.read.internal",
       },
-      capability: "storage.object.scan",
+      capability: "storage.object.read.internal",
     },
     credentials: Object.freeze({ synthetic: true, marker: "ephemeral-test-only" }),
     ...overrides,
@@ -43,7 +43,8 @@ test("child provider credential resolver reuses the existing runtime chain for t
   assert.deepEqual(calls, [{
     tenantId: "tenant-a",
     applicationId: "app-a",
-    capability: "storage.object.scan",
+    capability: "storage.object.read.internal",
+    expectedConnectionId: "connection-a",
   }]);
 });
 

@@ -1,0 +1,227 @@
+import { createRequire } from "node:module";
+import { constants } from "node:fs";
+import { open } from "node:fs/promises";
+import { isAbsolute, resolve, relative, sep } from "node:path";
+import { pathToFileURL } from "node:url";
+import { CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE } from "../../packages/assets/customer-asset-scan-child-spiffe-identity.js";
+import { assertTrustedCustomerAssetScanCompositionModule } from "../../packages/assets/customer-asset-scan-child-composition-loader.js";
+import { CustomerAssetScanChildRuntime } from "../../packages/assets/customer-asset-scan-child-runtime.js";
+import { assertCustomerAssetScanChildPostgresDnsHost, provisionCustomerAssetScanChildDatabaseTlsMaterial } from "../../packages/assets/customer-asset-scan-child-database-tls-material.js";
+import { assertCustomerAssetScanChildDatabaseTlsBootstrap, type CustomerAssetScanChildDatabaseTlsBootstrap } from "../../packages/assets/customer-asset-scan-child-database-tls-bootstrap-contract.js";
+import { assertCustomerAssetScanChildRuntimeComposition, type CustomerAssetScanChildRuntimeComposition } from "../../packages/assets/customer-asset-scan-child-composition-contract.js";
+import {
+  isCustomerAssetScanChildStart,
+  type CustomerAssetScanChildFailure,
+} from "../../packages/assets/customer-asset-scan-child-protocol.js";
+
+const MAX_INPUT_BYTES = 16_384;
+const MAX_TIMEOUT_MS = 900_000;
+
+function required(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(name + "_REQUIRED");
+  return value;
+}
+function boundedInteger(name: string, fallback: number, minimum: number, maximum: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  if (!/^[0-9]+$/.test(raw.trim())) throw new Error(name + "_INVALID");
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) throw new Error(name + "_OUT_OF_RANGE");
+  return value;
+}
+function resolveCompositionPath(value: string): string {
+  const root = resolve(process.cwd(), "dist/packages/assets/scanners");
+  const candidate = resolve(process.cwd(), value);
+  const rel = relative(root, candidate);
+  if (!isAbsolute(value) || !rel || rel === ".." || rel.startsWith(".." + sep) || !candidate.endsWith(".js")) {
+    throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_PATH_INVALID");
+  }
+  return candidate;
+}
+async function readStartMessage(): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  for await (const chunk of process.stdin) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    bytes += buffer.length;
+    if (bytes > MAX_INPUT_BYTES) throw new Error("CUSTOMER_ASSET_SCAN_CHILD_INPUT_TOO_LARGE");
+    chunks.push(buffer);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+async function readDeploymentFile(path: string, privateKey = false): Promise<string> {
+  if (!isAbsolute(path) || path.split("/").includes("..")) throw new Error("CUSTOMER_ASSET_SCAN_CHILD_CERTIFICATE_PATH_INVALID");
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    // Open without following the final symlink, then validate and read the
+    // same descriptor. This prevents replacing a checked certificate/key path.
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const metadata = await handle.stat();
+    if (!metadata.isFile() ||
+        (metadata.mode & (privateKey ? 0o077 : 0o022)) !== 0 ||
+        metadata.size < 1 || metadata.size > 1_048_576) {
+      throw new Error("unsafe deployment file");
+    }
+    return await handle.readFile("utf8");
+  } catch {
+    throw new Error("CUSTOMER_ASSET_SCAN_CHILD_CERTIFICATE_FILE_INVALID");
+  } finally {
+    await handle?.close();
+  }
+}
+function emitFailure(start: unknown, code: CustomerAssetScanChildFailure["code"]): void {
+  const candidate = start && typeof start === "object" ? start as Record<string, unknown> : {};
+  const jobToken = typeof candidate.jobToken === "string" ? candidate.jobToken : "invalid";
+  const claimGeneration = Number.isSafeInteger(candidate.claimGeneration) ? candidate.claimGeneration as number : 1;
+  protocolWrite(JSON.stringify({
+    version: 3, type: "failure", jobToken, claimGeneration, code,
+  }));
+}
+
+const protocolWrite = process.stdout.write.bind(process.stdout);
+process.stdout.write = ((chunk: string | Uint8Array) => {
+  process.stderr.write(chunk);
+  return true;
+}) as typeof process.stdout.write;
+console.log = console.error;
+console.info = console.error;
+console.debug = console.error;
+
+let inputFailure = false;
+const start = await readStartMessage().catch(() => {
+  inputFailure = true;
+  return undefined;
+});
+if (inputFailure || !isCustomerAssetScanChildStart(start)) {
+  emitFailure(start, "SCANNER_BOOTSTRAP_FAILED");
+  process.exitCode = 1;
+} else {
+  let pool: { end(): Promise<void> } | undefined;
+  let closeComposition: CustomerAssetScanChildRuntimeComposition["close"];
+  let tlsBootstrap: CustomerAssetScanChildDatabaseTlsBootstrap | undefined;
+  let tlsMaterial: Awaited<ReturnType<typeof provisionCustomerAssetScanChildDatabaseTlsMaterial>> | undefined;
+  const controller = new AbortController();
+  let bootstrapFailureCode: CustomerAssetScanChildFailure["code"] = "SCANNER_BOOTSTRAP_FAILED";
+  for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => controller.abort());
+  try {
+    if (required("EPER_SCANNER_CHILD_SPIFFE_AUDIENCE") !== CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE) {
+      throw new Error("CUSTOMER_ASSET_SCAN_CHILD_AUDIENCE_INVALID");
+    }
+    // Distinguish deployment module resolution/import from TLS credential
+    // bootstrap. Both remain fail-closed and expose only bounded protocol codes.
+    bootstrapFailureCode = "SCANNER_COMPOSITION_PATH_INVALID";
+    const compositionPath = await assertTrustedCustomerAssetScanCompositionModule(
+      resolveCompositionPath(required("EPER_SCANNER_CHILD_COMPOSITION_MODULE")),
+    );
+    bootstrapFailureCode = "SCANNER_COMPOSITION_MODULE_LOAD_FAILED";
+    let module: {
+      createCustomerAssetScanChildDatabaseTlsBootstrap?: (input: {
+        env: NodeJS.ProcessEnv;
+        onStage?: (stage: "sdk" | "identity" | "issuer" | "ca") => void;
+      }) => Promise<CustomerAssetScanChildDatabaseTlsBootstrap> | CustomerAssetScanChildDatabaseTlsBootstrap;
+      createCustomerAssetScanChildRuntimeDependencies?: (input: {
+        pool: { end(): Promise<void>; query<T extends Record<string, unknown>>(text: string, values?: readonly unknown[]): Promise<{ rows: T[] }> };
+        env: NodeJS.ProcessEnv;
+        identity: CustomerAssetScanChildDatabaseTlsBootstrap["identity"];
+      }) => Promise<CustomerAssetScanChildRuntimeComposition> | CustomerAssetScanChildRuntimeComposition;
+    };
+    try {
+      module = await import(pathToFileURL(compositionPath).href) as typeof module;
+    } catch (error) {
+      const candidate = error && typeof error === "object" ? error as { code?: unknown; name?: unknown } : {};
+      bootstrapFailureCode = candidate.code === "ERR_MODULE_NOT_FOUND"
+        ? "SCANNER_COMPOSITION_MODULE_NOT_FOUND"
+        : candidate.name === "SyntaxError"
+          ? "SCANNER_COMPOSITION_MODULE_SYNTAX_INVALID"
+          : "SCANNER_COMPOSITION_MODULE_EVALUATION_FAILED";
+      throw error;
+    }
+    if (typeof module.createCustomerAssetScanChildDatabaseTlsBootstrap !== "function" ||
+        typeof module.createCustomerAssetScanChildRuntimeDependencies !== "function") {
+      bootstrapFailureCode = "SCANNER_COMPOSITION_EXPORTS_INVALID";
+      throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_EXPORTS_INVALID");
+    }
+    bootstrapFailureCode = "SCANNER_TLS_BOOTSTRAP_FAILED";
+    tlsBootstrap = await module.createCustomerAssetScanChildDatabaseTlsBootstrap({
+      env: process.env,
+      onStage(stage) {
+        bootstrapFailureCode = stage === "sdk" ? "SCANNER_TLS_BOOTSTRAP_FAILED" :
+          stage === "identity" ? "SCANNER_IDENTITY_FAILED" :
+          stage === "issuer" ? "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED" :
+          "SCANNER_CERTIFICATE_BOOTSTRAP_FAILED";
+      },
+    });
+    bootstrapFailureCode = "SCANNER_TLS_CONTRACT_INVALID";
+    assertCustomerAssetScanChildDatabaseTlsBootstrap(tlsBootstrap);
+    bootstrapFailureCode = "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED";
+    tlsMaterial = await provisionCustomerAssetScanChildDatabaseTlsMaterial({
+      identity: tlsBootstrap.identity,
+      issuer: tlsBootstrap.issuer,
+      caPem: tlsBootstrap.caPem,
+      signal: controller.signal,
+      onStage(stage) {
+        bootstrapFailureCode = stage === "identity" ? "SCANNER_IDENTITY_FAILED" :
+          stage === "key" ? "SCANNER_KEY_BOOTSTRAP_FAILED" :
+          stage.startsWith("certificate-") ? "SCANNER_CERTIFICATE_BOOTSTRAP_FAILED" :
+          "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED";
+        console.error("EPER scanner child TLS provisioning stage: " + stage);
+      },
+    });
+    if (controller.signal.aborted) throw new Error("CUSTOMER_ASSET_SCAN_CHILD_BOOTSTRAP_ABORTED");
+
+    const require = createRequire(import.meta.url);
+    const pg = require("pg") as { Pool: new (options: Record<string, unknown>) => {
+      end(): Promise<void>;
+      query<T extends Record<string, unknown>>(text: string, values?: readonly unknown[]): Promise<{ rows: T[] }>;
+    }};
+    const databasePort = boundedInteger("PGPORT", 5432, 1, 65535);
+    const ca = await readDeploymentFile(tlsMaterial.caPath);
+    const cert = await readDeploymentFile(tlsMaterial.certificatePath);
+    const key = await readDeploymentFile(tlsMaterial.privateKeyPath, true);
+    bootstrapFailureCode = "SCANNER_DATABASE_CONNECTION_FAILED";
+    const databaseHost = assertCustomerAssetScanChildPostgresDnsHost(required("PGHOST"));
+    const createdPool = new pg.Pool({
+      host: databaseHost, port: databasePort, database: required("PGDATABASE"),
+      user: tlsMaterial.databaseRole, max: 2, connectionTimeoutMillis: 5000,
+      statement_timeout: 15000, query_timeout: 20000, application_name: "eper-asset-scan-child",
+      ssl: { ca, cert, key, rejectUnauthorized: true },
+    });
+    pool = createdPool;
+    await createdPool.query("SELECT 1");
+    // From this point onward the database is connected and TLS bootstrap has
+    // completed. Keep composition failures distinct from earlier bootstrap
+    // failures so process-level diagnostics identify the failing boundary.
+    bootstrapFailureCode = "SCANNER_COMPOSITION_DEPENDENCIES_FAILED";
+    const dependencies = await module.createCustomerAssetScanChildRuntimeDependencies({
+      pool: createdPool, env: process.env, identity: tlsBootstrap.identity,
+    });
+    if (!dependencies || dependencies.identity !== tlsBootstrap.identity) {
+      bootstrapFailureCode = "SCANNER_COMPOSITION_CONTRACT_INVALID";
+      throw new Error("CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_COMPOSITION_MISMATCH");
+    }
+    if (dependencies && typeof dependencies === "object" && typeof dependencies.close === "function") {
+      closeComposition = dependencies.close.bind(dependencies);
+    }
+    bootstrapFailureCode = "SCANNER_COMPOSITION_CONTRACT_INVALID";
+    assertCustomerAssetScanChildRuntimeComposition(dependencies);
+    const runtime = new CustomerAssetScanChildRuntime(dependencies);
+    const timeoutMs = boundedInteger("EPER_SCANNER_CHILD_TIMEOUT_MS", 120_000, 1_000, MAX_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const result = await runtime.execute(start, controller.signal);
+      protocolWrite(JSON.stringify(result));
+      if (result.type === "failure") process.exitCode = 1;
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    emitFailure(start, bootstrapFailureCode);
+    process.exitCode = 1;
+  } finally {
+    await Promise.resolve().then(() => closeComposition?.()).catch(() => undefined);
+    if (pool) await pool.end().catch(() => undefined);
+    await tlsMaterial?.cleanup().catch(() => {});
+    await Promise.resolve().then(() => tlsBootstrap?.close?.()).catch(() => undefined);
+  }
+}
