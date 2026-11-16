@@ -127,6 +127,43 @@ async function createWorkerLogin(pool, prefix, fixture, workerId, scannerService
   return { role, workerId, connectionString: url.toString() };
 }
 
+async function createRecoveryLogin(pool, fixture, workerId, scannerServiceId) {
+  const suffix = randomUUID().replaceAll("-", "").slice(0, 14);
+  const role = "eper_scan_recovery_" + suffix;
+  const password = randomUUID().replaceAll("-", "");
+  await pool.query(
+    `CREATE ROLE "${role}" WITH LOGIN INHERIT PASSWORD '${password}'
+       NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`,
+  );
+  await pool.query(`GRANT eper_customer_asset_scan_supervisor_access TO "${role}"`);
+  await pool.query(
+    `INSERT INTO public.eper_customer_asset_scan_supervisor_identities
+      (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
+     VALUES ($1, $2, $3, $4, $5, true)`,
+    [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
+  );
+  const url = new URL(connectionString);
+  url.username = role;
+  url.password = password;
+  const supervisorPool = new Pool({ connectionString: url.toString(), max: 1 });
+  try {
+    const check = await supervisorPool.query(`
+      SELECT current_user,
+        has_table_privilege(current_user, 'eper_customer_asset_scan_jobs', 'SELECT') AS can_select_jobs,
+        has_table_privilege(current_user, 'eper_customer_asset_scan_jobs', 'UPDATE') AS can_update_jobs,
+        has_table_privilege(current_user, 'eper_customer_assets', 'SELECT') AS can_select_assets,
+        has_table_privilege(current_user, 'eper_customer_assets', 'UPDATE') AS can_update_assets
+    `);
+    assert.equal(check.rows[0].can_select_jobs, false);
+    assert.equal(check.rows[0].can_update_jobs, false);
+    assert.equal(check.rows[0].can_select_assets, false);
+    assert.equal(check.rows[0].can_update_assets, false);
+  } finally {
+    await supervisorPool.end();
+  }
+  return { role, workerId, connectionString: url.toString() };
+}
+
 async function createChildLogin(pool, fixture, workerId, scannerServiceId) {
   const role = "eper_scan_child_ci";
   const spiffeId = "spiffe://eper.example/asset-scanner/ci-child";
@@ -325,7 +362,7 @@ export function createCustomerAssetScanChildRuntimeDependencies({ pool, identity
       child = spawn(process.execPath, ["dist/apps/worker/customer-asset-scan-main.js"], {
         env: {
           ...baseWorkerEnv(fixture),
-          EPER_CUSTOMER_ASSET_SCAN_DATABASE_URL: workerLogin.connectionString,
+          EPER_CUSTOMER_ASSET_SCAN_RECOVERY_DATABASE_URL: workerLogin.connectionString,
           EPER_CUSTOMER_ASSET_SCAN_WORKER_ENABLED: "true",
           EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID: "ci-asset-scanner",
           EPER_CUSTOMER_ASSET_SCAN_WORKER_ID: workerId,
@@ -393,7 +430,7 @@ test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease
     const fixture = await createPendingScanFixture(pool, repository, "recovery-process");
     const workerId = "ci-asset-scan-recovery:expired-worker";
     const scannerServiceId = "ci-asset-scan-recovery";
-    const workerLogin = await createWorkerLogin(pool, "recovery", fixture, workerId, scannerServiceId);
+    const workerLogin = await createRecoveryLogin(pool, fixture, workerId, scannerServiceId);
     let child;
     try {
       const [job] = await repository.claimScanJobs({
