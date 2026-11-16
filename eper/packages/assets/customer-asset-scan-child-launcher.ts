@@ -14,9 +14,6 @@ export interface TrustedCustomerAssetScanChildConfiguration {
   databasePort: number;
   databaseName: string;
   databaseUser: string;
-  databaseCaFile: string;
-  databaseClientCertificateFile: string;
-  databaseClientKeyFile: string;
   compositionModulePath: string;
 }
 
@@ -69,11 +66,6 @@ export function buildTrustedCustomerAssetScanChildLaunch(configuration: TrustedC
   if (!Number.isSafeInteger(configuration.databasePort) || configuration.databasePort < 1 || configuration.databasePort > 65535) {
     throw new Error("CUSTOMER_ASSET_SCAN_CHILD_DATABASE_PORT_INVALID");
   }
-  const absoluteFile = (value: string, code: string) => {
-    const result = required(value, code);
-    if (!isAbsolute(result) || result.split("/").includes("..")) throw new Error(code);
-    return result;
-  };
   const environment = {
     EPER_SCANNER_CHILD_SPIFFE_WORKLOAD_API_SOCKET: socket,
     EPER_SCANNER_CHILD_EXPECTED_SPIFFE_ID: spiffeId,
@@ -94,9 +86,6 @@ export function buildTrustedCustomerAssetScanChildLaunch(configuration: TrustedC
     PGDATABASE: name,
     PGUSER: user,
     PGSSLMODE: "verify-full",
-    PGSSLROOTCERT: absoluteFile(configuration.databaseCaFile, "CUSTOMER_ASSET_SCAN_CHILD_DATABASE_CA_PATH_INVALID"),
-    PGSSLCERT: absoluteFile(configuration.databaseClientCertificateFile, "CUSTOMER_ASSET_SCAN_CHILD_DATABASE_CERT_PATH_INVALID"),
-    PGSSLKEY: absoluteFile(configuration.databaseClientKeyFile, "CUSTOMER_ASSET_SCAN_CHILD_DATABASE_KEY_PATH_INVALID"),
   };
   return {
     executable: process.execPath,
