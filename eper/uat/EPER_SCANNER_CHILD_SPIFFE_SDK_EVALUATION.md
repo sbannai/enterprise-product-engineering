@@ -85,3 +85,20 @@ Verified evidence:
 **Platform runtime context:** Node.js 20 reached EOL on 2026-03-24. Node.js 22 is in Maintenance LTS; Node.js 24 is LTS as of this evaluation. The recommended platform direction is to evaluate Node.js 24 LTS as EPER's supported runtime baseline, rather than pinning an unsupported older transitive dependency merely to preserve Node 20. This is a recommendation, not an approved runtime change.
 
 The generated package manifest and lockfile remain CI artifacts only. No dependency has been committed to EPER's source manifest or lockfile pending the Node runtime decision.
+
+
+## 2026-11-16 Node 24 runtime preflight results
+
+The isolated scanner-child dependency preflight was rerun on Node.js 24 and completed successfully. This validates package installation and provenance checks on Node 24; it does not yet validate live SPIRE socket behavior.
+
+- CI runtime: Node.js `v24.22.2`; npm `11.21.2`.
+- Exact package: `@jeengbe/spiffe@2.1.1`; the downloaded tarball is 37,698 bytes.
+- Independently computed SHA-512 matches both npm registry SRI and the `npm pack` integrity value: `sha512-Sel0giVDmHq74NSkXAf9F5Qu/+x+JrvKmz9jzCLFyF44j/d11xFypFvx3zQp9bmeYHM2yul6BNlkWj7i3Jg68g==`.
+- `npm audit signatures --json --include-attestations`: 4 verified packages, 0 invalid, 0 missing. The SDK and its three verified Connect/Protobuf dependencies have SLSA v1 provenance attestations.
+- Generated dependency tree contains `p-retry@8.0.1` with declared Node engine `>=22`; Node 24 satisfies that declared engine.
+- Exact development-only lockfile generated; `npm ci --ignore-scripts` passed; npm audit reported 0 vulnerabilities; `npm ls --all --json` reported no dependency-tree problems.
+- Evidence artifact: `eper-spiffe-sdk-2.1.1-preflight-evidence`, artifact ID `14249142445`, from workflow run `43914417656` (head commit `142df7d1085ece72b6a2ec765e63756fef186241`).
+
+**Decision:** Node 24 passes the package/dependency preflight and is the working runtime target for the isolated scanner-child evaluation. This is not approval to migrate the EPER parent service or whole platform to Node 24. The previous Node 20 limitation remains: the resolved dependency tree declares Node >=22.
+
+**Still outstanding before SDK integration/merge:** implement and test the actual Node 24 scanner-child process against a local SPIRE Agent Workload API Unix socket; verify exact audience and SPIFFE ID, JWT containment (never returned/logged/persisted), expiry validation, cancellation/deadline propagation, idempotent close, and fail-closed behavior for unavailable/permission-denied socket, missing/expired SVID, wrong identity, malformed response, timeout, cancellation, and unregistered/sibling UIDs. No production activation, cloud provisioning, or Business UAT is authorized by this preflight.
