@@ -45,6 +45,21 @@ This is a community TypeScript SDK, not one of SPIRE's officially maintained Go 
 
 Important API distinction: `getJwtSvid` obtains the current process's own SVID; SPIRE's Workload API attests the caller out-of-band. `validateJwt` is for validating an incoming JWT-SVID and is not required merely to prove the caller's own identity after a successful local fetch. EPER must still compare the returned SPIFFE ID exactly and must not derive tenant/application scope from the token.
 
+## Isolated Node.js runtime decision (2026-11-16)
+
+**Decision for the scanner-child integration path:** retain Node.js 20 for the EPER parent worker and platform. Run only the scanner child under Node.js 24.22.2. The parent must not inherit or select the child executable via an arbitrary job value or request field.
+
+The preferred packaging shape is a dedicated scanner-worker runtime image based on the existing Node 20 Bookworm-slim parent runtime, with the Node 24.22.2 executable copied from the official Node image pinned by immutable multi-platform index digest:
+
+- Source image: `node:24.22.2-bookworm-slim`
+- Index digest observed on Docker Hub on 2026-11-16: `sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9`
+- Expected child executable path in the dedicated worker image: `/opt/eper/node24/bin/node`
+- Expected runtime: `v24.22.2`
+
+This is a packaging candidate, not a production image approval. Before wiring the launcher, CI must build the dual-runtime image and prove: (a) parent `node --version` remains 20.x; (b) the pinned child executable reports exactly v24.22.2; (c) all shared libraries resolve in the Node 20 Bookworm runtime; (d) the exact pinned SPIFFE SDK imports and performs the adapter contract tests under the child runtime; and (e) the real local SPIRE fixture can be exercised by a Node 24 process using the Workload API socket. The launcher must then use only the fixed deployment-owned path `/opt/eper/node24/bin/node`, validate it at startup, and fail closed if it is missing or has the wrong version. The caller must not be able to override the executable.
+
+Keep this runtime packaging out of the general API image. Add it only to the dedicated scanner-worker image, which is not yet present in the repository. Do not add an AWS resource or enable the worker in UAT as part of this decision.
+
 ## Implementation sequence and gates
 
 1. Add the child-local SDK adapter using `getJwtSvid(fixedAudience, { spiffeId })`. The local Workload API performs caller attestation and audience-scoped SVID delivery. Compare the returned SPIFFE ID exactly and enforce a bounded remaining lifetime. Do not call `ValidateJWTSVID` merely to revalidate the same workload's locally fetched SVID; reserve it for incoming SVIDs from other workloads. Do not implement a home-grown JWT parser.
