@@ -15,7 +15,21 @@ const execFile = promisify(execFileCallback);
  * currently implement; reject them rather than silently verifying only CA trust.
  */
 export function assertCustomerAssetScanChildPostgresDnsHost(host: string): string {
-  if (typeof host !== "string" || host.length === 0 || host.trim() !== host || isIP(host) !== 0) {
+  if (typeof host !== "string" || host.length === 0 || host.trim() !== host ||
+      host.length > 253 || isIP(host) !== 0 ||
+      !/^(?=.{1,253}$)(?=.*[A-Za-z])[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\\.?$/.test(host)) {
+    throw new Error("CUSTOMER_ASSET_SCAN_CHILD_DATABASE_HOST_IDENTITY_INVALID");
+  }
+  // WHATWG URL parsing canonicalizes resolver-recognized IPv4 aliases such as
+  // 127.1 and 0x7f000001. Reject these too: they are not DNS identities even
+  // though node:net isIP() does not recognize their original spelling.
+  let canonicalHost: string;
+  try {
+    canonicalHost = new URL(`https://${host}`).hostname;
+  } catch {
+    throw new Error("CUSTOMER_ASSET_SCAN_CHILD_DATABASE_HOST_IDENTITY_INVALID");
+  }
+  if (isIP(canonicalHost) !== 0) {
     throw new Error("CUSTOMER_ASSET_SCAN_CHILD_DATABASE_HOST_IDENTITY_INVALID");
   }
   return host;
