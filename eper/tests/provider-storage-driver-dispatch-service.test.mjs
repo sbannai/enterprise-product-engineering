@@ -10,7 +10,7 @@ const capabilities = {
   idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true,
   renewByProviderReference: true, verifyObject: true, downloadGrant: true, malwareScan: true,
 };
-function fixture({ selection = {}, driver = {}, resolveError = null, dependencyInventory = undefined, runtimeLimits = { maxObjectBytes: 10_000_000 } } = {}) {
+function fixture({ selection = {}, driver = {}, resolveError = null, dependencyInventory = undefined, runtimeLimits = { maxObjectBytes: 10_000_000, requestTimeoutMs: 30_000, maxConcurrentOperations: 10 } } = {}) {
   const calls = [];
   const adapter = {
     dependencyIds: [],
@@ -344,6 +344,53 @@ test("internal object read uses its own optional capability and exact connection
   const read = [];
   for await (const chunk of result) read.push(...chunk);
   assert.deepEqual(read, [1, 2, 3]);
+});
+
+test("rejects provider dispatch above deployment concurrency limit", async () => {
+  let release;
+  const pendingDriver = new Promise(resolve => { release = resolve; });
+  const adapter = {
+    dependencyIds: [], capabilities,
+    async createUploadGrant() { await pendingDriver; return { kind: "unknown", reason: "transport" }; },
+    async lookupUpload() { return { kind: "not_found" }; },
+    async renewUploadGrant() { return { kind: "unknown", reason: "transport" }; },
+    async verifyObject() { return { kind: "unknown" }; },
+    async createDownloadGrant() { return null; },
+    async scanObject() { await pendingDriver; return { kind: "timeout" }; },
+  };
+  const f = fixture({ runtimeLimits: { maxObjectBytes: 10_000, requestTimeoutMs: 5_000, maxConcurrentOperations: 1 }, driver: adapter });
+  const first = f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-concurrency-1",
+    operation: { kind: "scan_object", request: { assetId: "asset-a",
+      providerObjectReference: "opaque-ref", expectedSha256: "a".repeat(64) } },
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  await assert.rejects(() => f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-concurrency-2",
+    operation: { kind: "scan_object", request: { assetId: "asset-a",
+      providerObjectReference: "opaque-ref", expectedSha256: "a".repeat(64) } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_CONCURRENCY_LIMIT");
+  release();
+  await first;
+});
+
+test("aborts provider operation at configured request timeout", async () => {
+  let receivedSignal;
+  const f = fixture({
+    runtimeLimits: { maxObjectBytes: 10_000, requestTimeoutMs: 10, maxConcurrentOperations: 1 },
+    driver: { async scanObject(_context, _request, _requestId, signal) {
+      receivedSignal = signal;
+      return new Promise(resolve => signal.addEventListener("abort", () => resolve({ kind: "timeout" }), { once: true }));
+    } },
+  });
+  await assert.rejects(() => f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-timeout",
+    operation: { kind: "scan_object", request: { assetId: "asset-a",
+      providerObjectReference: "opaque-ref", expectedSha256: "a".repeat(64) } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_TIMEOUT");
+  assert.equal(receivedSignal.aborted, true);
 });
 
 test("internal object read enforces deployment maxObjectBytes before credentials or provider invocation", async () => {

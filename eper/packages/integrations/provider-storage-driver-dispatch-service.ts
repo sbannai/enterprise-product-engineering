@@ -160,7 +160,6 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
     const abortFromCaller = () => controller.abort();
     if (input.signal?.aborted) controller.abort();
     else input.signal?.addEventListener("abort", abortFromCaller, { once: true });
-    timer = setTimeout(() => controller.abort(), limits.requestTimeoutMs as number);
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         controller.abort();
