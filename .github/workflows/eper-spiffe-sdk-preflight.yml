@@ -56,6 +56,7 @@ jobs:
           node --version > "$RUNNER_TEMP/spiffe-sdk-evidence/node-version.txt"
           npm --version > "$RUNNER_TEMP/spiffe-sdk-evidence/npm-version.txt"
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: eper-spiffe-sdk-2.1.1-preflight-evidence
           path: ${{ runner.temp }}/spiffe-sdk-evidence/
