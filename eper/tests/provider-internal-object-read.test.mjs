@@ -80,6 +80,29 @@ test("closes a pending provider iterator when its AbortSignal fires", async () =
   await assert.rejects(pending, error => error.code === "PROVIDER_INTERNAL_OBJECT_READ_ABORTED");
 });
 
+test("does not yield a provider chunk that arrives after cancellation", async () => {
+  let releaseNext;
+  let returnCalls = 0;
+  const source = {
+    [Symbol.asyncIterator]() {
+      return {
+        next() { return new Promise(resolve => { releaseNext = resolve; }); },
+        async return() { returnCalls++; return { done: true, value: undefined }; },
+      };
+    },
+  };
+  const controller = new AbortController();
+  const verified = verifiedProviderInternalObjectChunks({
+    source, expectedSizeBytes: 3, expectedSha256: sha256, signal: controller.signal,
+  });
+  const pending = verified.next();
+  controller.abort();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(returnCalls, 1);
+  releaseNext({ done: false, value: bytes });
+  await assert.rejects(pending, error => error.code === "PROVIDER_INTERNAL_OBJECT_READ_ABORTED");
+});
+
 test("forwards return to a provider iterator even when the consumer never calls next", async () => {
   let returnCalls = 0;
   const source = {
