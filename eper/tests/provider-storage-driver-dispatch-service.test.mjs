@@ -428,6 +428,78 @@ test("closes a provider stream that arrives after the dispatch deadline", async 
   assert.equal(returnCalls, 1);
 });
 
+test("releases the provider stream permit when a timed-out stream is never consumed", async () => {
+  let returnCalls = 0;
+  let scanCalls = 0;
+  const f = fixture({
+    runtimeLimits: { maxObjectBytes: 10_000, requestTimeoutMs: 15, maxConcurrentOperations: 1 },
+    driver: {
+      capabilities: { ...capabilities, internalObjectRead: true },
+      readObjectInternal() {
+        return {
+          [Symbol.asyncIterator]() {
+            return {
+              next() { return new Promise(() => {}); },
+              async return() { returnCalls++; return { done: true, value: undefined }; },
+            };
+          },
+        };
+      },
+      async scanObject() { scanCalls++; return { kind: "timeout" }; },
+    },
+  });
+  const stream = await f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-unused-stream",
+    expectedConnectionId: "connection-a",
+    operation: { kind: "read_object_internal", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref",
+      expectedSizeBytes: 3, expectedSha256: "a".repeat(64),
+    } },
+  });
+  assert.equal(typeof stream[Symbol.asyncIterator], "function");
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(returnCalls, 1);
+  const result = await f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-after-unused-stream",
+    operation: { kind: "scan_object", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref", expectedSha256: "a".repeat(64),
+    } },
+  });
+  assert.deepEqual(result, { kind: "timeout" });
+  assert.equal(scanCalls, 1);
+});
+
+test("maps stream deadline cancellation to the dispatch timeout contract", async () => {
+  const f = fixture({
+    runtimeLimits: { maxObjectBytes: 10_000, requestTimeoutMs: 15, maxConcurrentOperations: 1 },
+    driver: {
+      capabilities: { ...capabilities, internalObjectRead: true },
+      readObjectInternal() {
+        return {
+          [Symbol.asyncIterator]() {
+            return {
+              next() { return new Promise(() => {}); },
+              async return() { return { done: true, value: undefined }; },
+            };
+          },
+        };
+      },
+    },
+  });
+  const stream = await f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-stream-deadline",
+    expectedConnectionId: "connection-a",
+    operation: { kind: "read_object_internal", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref",
+      expectedSizeBytes: 3, expectedSha256: "a".repeat(64),
+    } },
+  });
+  await assert.rejects(async () => {
+    for await (const _chunk of stream) { /* consume until deadline */ }
+  }, error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_TIMEOUT");
+});
+
 test("internal object read enforces deployment maxObjectBytes before credentials or provider invocation", async () => {
   let driverInvoked = false;
   const f = fixture({
