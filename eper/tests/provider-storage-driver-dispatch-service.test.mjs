@@ -409,6 +409,9 @@ test("retains concurrency permit until an abort-ignoring provider operation sett
     error.code === "PROVIDER_STORAGE_DISPATCH_CONCURRENCY_LIMIT");
   assert.equal(calls, 1, "the second provider call must not start while the first is still pending");
   resolveFirst({ kind: "timeout" });
+  // The dispatch promise rejects at its deadline; let the abort-ignoring driver
+  // settle and run its permit-release continuation before asserting reuse.
+  await new Promise(resolve => setImmediate(resolve));
   const firstOutcome = await first;
   assert.equal(firstOutcome.error?.code, "PROVIDER_STORAGE_DISPATCH_TIMEOUT");
   const afterSettlement = await f.service.dispatch({
