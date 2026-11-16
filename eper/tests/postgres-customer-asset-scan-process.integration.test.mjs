@@ -364,6 +364,7 @@ export function createCustomerAssetScanChildRuntimeDependencies({ pool, identity
           ...baseWorkerEnv(fixture),
           EPER_CUSTOMER_ASSET_SCAN_DATABASE_URL: workerLogin.connectionString,
           EPER_CUSTOMER_ASSET_SCAN_RECOVERY_DATABASE_URL: recoveryLogin.connectionString,
+          EPER_CUSTOMER_ASSET_SCAN_RECOVERY_DATABASE_URL: recoveryLogin.connectionString,
           EPER_CUSTOMER_ASSET_SCAN_WORKER_ENABLED: "true",
           EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID: "ci-asset-scanner",
           EPER_CUSTOMER_ASSET_SCAN_WORKER_ID: workerId,
