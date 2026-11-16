@@ -425,6 +425,25 @@ export function createCustomerAssetScanChildRuntimeDependencies({ pool, identity
     }
   });
 
+test("PostgreSQL 16 scan-job claim uses a single-connection pool without nested recovery checkout",
+  { skip: !connectionString }, async () => {
+    const pool = new Pool({ connectionString, max: 1, connectionTimeoutMillis: 1_000 });
+    const repository = new PostgresCustomerAssetRepository(pool);
+    try {
+      const fixture = await createPendingScanFixture(pool, repository, "scan-claim-single-connection");
+      const [job] = await repository.claimScanJobs({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        workerId: "ci-asset-scan-single-connection",
+        scannerServiceId: "ci-asset-scanner", environment: "sandbox",
+        limit: 1, leaseMs: 30_000,
+      });
+      assert.ok(job, "claim should complete and return the pending scan job");
+      assert.equal(job.uploadSessionId, fixture.uploadSessionId);
+    } finally {
+      await pool.end();
+    }
+  });
+
 test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease and exits on SIGTERM",
   { skip: !connectionString }, async () => {
     const pool = new Pool({ connectionString, max: 4 });
