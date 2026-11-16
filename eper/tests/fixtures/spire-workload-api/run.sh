@@ -32,8 +32,8 @@ cp "$SPIRE_FIXTURE_DIR/server/test-upstream-ca.crt" "$SPIRE_FIXTURE_DIR/agent/te
 # Let non-root containers traverse the temporary bind-mount path. The CA key
 # itself is owned by the Server UID and remains unreadable to other users.
 chmod 755 "$SPIRE_FIXTURE_DIR" "$SPIRE_FIXTURE_DIR/server" "$SPIRE_FIXTURE_DIR/agent"
-sudo chown 1000:1000 "$SPIRE_FIXTURE_DIR/server/test-upstream-ca.key"
 chmod 600 "$SPIRE_FIXTURE_DIR/server/test-upstream-ca.key"
+sudo chown 1000:1000 "$SPIRE_FIXTURE_DIR/server/test-upstream-ca.key"
 chmod 644 "$SPIRE_FIXTURE_DIR/server/test-upstream-ca.crt" "$SPIRE_FIXTURE_DIR/agent/test-upstream-ca.crt"
 
 cat > "$SPIRE_FIXTURE_DIR/server/server.conf" <<'EOF'
