@@ -158,13 +158,17 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
       input.signal?.removeEventListener("abort", abortFromCaller);
       this.activeOperations = Math.max(0, this.activeOperations - 1);
     };
-    const abortFromCaller = () => controller.abort();
+    let rejectCallerAbort: ((error: Error) => void) | undefined;
+    const abortFromCaller = () => {
+      controller.abort();
+      rejectCallerAbort?.(new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED"));
+    };
     if (input.signal?.aborted) controller.abort();
     else input.signal?.addEventListener("abort", abortFromCaller, { once: true });
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         controller.abort();
-        reject(new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_TIMEOUT"));
+        if (!streaming) reject(new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_TIMEOUT"));
       }, limits.requestTimeoutMs as number);
     });
     try {
@@ -181,12 +185,8 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
         throw error;
       });
       const callerAbort = input.signal ? new Promise<never>((_, reject) => {
-        if (input.signal?.aborted) {
-          reject(new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED"));
-        } else {
-          input.signal?.addEventListener("abort", () =>
-            reject(new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED")), { once: true });
-        }
+        rejectCallerAbort = reject;
+        if (input.signal?.aborted) abortFromCaller();
       }) : new Promise<never>(() => {});
       const result = await Promise.race([operation, timeout, callerAbort]);
       if (controller.signal.aborted) {
