@@ -654,6 +654,55 @@ test("PostgreSQL scan claim generation fences stale same-worker renew, lookup, r
   });
 
 
+test("PostgreSQL retry reports attempts_exhausted while preserving the live lease for independent recovery",
+  { skip: !connectionString }, async () => {
+    const pool = new Pool({ connectionString, max: 2 });
+    const repository = new PostgresCustomerAssetRepository(pool);
+    const fixture = await createPendingScanFixture(pool, repository, "scan-retry-exhausted");
+    const workerId = "ci-scan-retry-exhausted-worker";
+    try {
+      const [claimed] = await repository.claimScanJobs({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId, workerId,
+        scannerServiceId: "ci-asset-scanner", environment: "sandbox", limit: 1, leaseMs: 30_000,
+      });
+      assert.ok(claimed, "fixture scan job must be claimed");
+
+      await pool.query(
+        `UPDATE eper_customer_asset_scan_jobs
+            SET attempt_count = max_attempts
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
+        [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId],
+      );
+
+      const outcome = await repository.retryScanJob({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        uploadSessionId: fixture.uploadSessionId, workerId,
+        claimGeneration: claimed.claimGeneration,
+        errorCode: "SCANNER_PROVIDER_ERROR", retryAfterMs: 15_000,
+      });
+      assert.equal(outcome, "attempts_exhausted",
+        "repository must report exhaustion distinctly from a scheduled retry or lost lease");
+
+      const state = await pool.query(
+        `SELECT state, lease_owner, lease_expires_at > clock_timestamp() AS lease_is_live,
+                attempt_count >= max_attempts AS attempts_are_exhausted, last_error_code
+           FROM eper_customer_asset_scan_jobs
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
+        [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId],
+      );
+      assert.deepEqual(state.rows[0], {
+        state: "leased",
+        lease_owner: workerId,
+        lease_is_live: true,
+        attempts_are_exhausted: true,
+        last_error_code: "SCANNER_PROVIDER_ERROR",
+      }, "retry must preserve the live lease so the independent recovery worker owns quarantine and audit");
+    } finally {
+      await pool.end();
+    }
+  });
+
+
 test("PostgreSQL timeout expiry permits generation-2 takeover and rejects every late generation-1 mutation",
   { skip: !connectionString }, async () => {
     const pool = new Pool({ connectionString, max: 5 });
