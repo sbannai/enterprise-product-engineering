@@ -139,21 +139,32 @@ probe() {
 
 # Positive assertion. Keep the returned JWT entirely in memory and never print it.
 POSITIVE_OUTPUT=""
+LAST_PROBE_OUTPUT=""
 POSITIVE_OK=0
 for _ in $(seq 1 45); do
   if POSITIVE_OUTPUT="$(probe 20001)"; then
+    LAST_PROBE_OUTPUT="$POSITIVE_OUTPUT"
     if grep -Fq "token($EXPECTED_ID):" <<<"$POSITIVE_OUTPUT"; then
       POSITIVE_OK=1
       break
     fi
+  else
+    LAST_PROBE_OUTPUT="$POSITIVE_OUTPUT"
   fi
   sleep 2
 done
-unset POSITIVE_OUTPUT
 if [[ "$POSITIVE_OK" -ne 1 ]]; then
   echo "FAIL: registered scanner UID did not receive its expected JWT-SVID" >&2
+  echo "Last probe diagnostic (token material redacted):" >&2
+  printf '%s\\n' "$LAST_PROBE_OUTPUT" | sed -E 's/(token\\([^)]*\\):).*/\\1 <redacted>/; s/[A-Za-z0-9_-]{30,}(\\.[A-Za-z0-9_-]{10,}){1,2}/<redacted-jwt>/g' >&2
+  echo "SPIRE Agent logs:" >&2
+  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" logs --no-color spire-agent >&2 || true
+  echo "SPIRE Server logs:" >&2
+  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" logs --no-color spire-server >&2 || true
+  unset POSITIVE_OUTPUT LAST_PROBE_OUTPUT
   exit 1
 fi
+unset POSITIVE_OUTPUT LAST_PROBE_OUTPUT
 echo "PASS: registered UID received the expected SPIFFE identity"
 
 # Both an unregistered UID and a sibling UID must fail to obtain any SVID.
