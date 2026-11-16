@@ -111,8 +111,14 @@ export class ProviderStorageDispatchError extends Error {
  * Last-mile, fail-closed invocation boundary for storage provider drivers.
  * Runtime selection and connection-version revalidation happen before secret
  * resolution; persisted vendor dependencies are checked before driver entry.
- * Credentials remain local to this call and are
- * never returned, persisted, or logged by this service.
+ * Credentials remain local to this call and are never returned, persisted, or
+ * logged by this service.
+ *
+ * maxConcurrentOperations is deliberately an instance-local ceiling. It is not
+ * a fleet-wide quota: each scanner child process composes its own dispatcher,
+ * while the parent worker's concurrency option bounds child jobs only within
+ * that worker process. A deployment-wide provider quota requires a separately
+ * shared admission mechanism (for example, a tenant/provider-scoped DB lease).
  */
 export class ProviderStorageDriverDispatchService<TCredentials> {
   constructor(
