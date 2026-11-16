@@ -25,6 +25,7 @@ const configuration = () => ({
   expectedSpiffeId: "spiffe://example.org/eper/scanner-child",
   audience: "eper:customer-asset-scan-child",
   databaseHost: "127.0.0.1",
+  databaseCaFile: "/run/eper/db/ca.pem",
   databasePort: 5432,
   databaseName: "eper",
   databaseUser: "eper_customer_asset_scan_child",
@@ -48,9 +49,10 @@ test("trusted scanner launcher passes only explicit SPIFFE and certificate-authe
     "EPER_SCANNER_CHILD_EXPECTED_SPIFFE_ID",
     "EPER_SCANNER_CHILD_SPIFFE_AUDIENCE",
     "EPER_SCANNER_CHILD_SPIFFE_WORKLOAD_API_SOCKET",
-    "PGDATABASE", "PGHOST", "PGPORT", "PGSSLMODE", "PGUSER",
+    "PGDATABASE", "PGHOST", "PGPORT", "PGSSLMODE", "PGSSLROOTCERT", "PGUSER",
   ].sort());
   assert.equal(launch.environment.PGSSLMODE, "verify-full");
+  assert.equal(launch.environment.PGSSLROOTCERT, "/run/eper/db/ca.pem");
   assert.equal(launch.environment.EPER_SCANNER_CHILD_COMPOSITION_MODULE.endsWith("/customer-asset-scan-composition.js"), true);
   assert.equal(Object.values(launch.environment).some(value => /password|secret|credential/i.test(value)), false);
 });
@@ -64,10 +66,13 @@ test("trusted scanner launcher rejects non-local SPIFFE endpoint and arbitrary p
   }), /SPIFFE_ID_INVALID/);
 });
 
-test("trusted scanner launcher validates the restricted database login and port", () => {
+test("trusted scanner launcher validates the restricted database login, CA path and port", () => {
   assert.throws(() => buildTrustedCustomerAssetScanChildLaunch({
     ...configuration(), databasePort: 70000,
   }), /DATABASE_PORT_INVALID/);
+  assert.throws(() => buildTrustedCustomerAssetScanChildLaunch({
+    ...configuration(), databaseCaFile: "relative/ca.pem",
+  }), /DATABASE_CA_PATH_INVALID/);
   assert.throws(() => buildTrustedCustomerAssetScanChildLaunch({
     ...configuration(), databaseUser: "",
   }), /DATABASE_USER_INVALID/);
