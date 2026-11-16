@@ -60,13 +60,18 @@ function shutdown(): void {
 }
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, shutdown);
 
+const workerDatabaseUrl = required("EPER_CUSTOMER_ASSET_SCAN_DATABASE_URL");
 const recoveryDatabaseUrl = required("EPER_CUSTOMER_ASSET_SCAN_RECOVERY_DATABASE_URL");
+const pool = createPostgresPaymentPool({
+  ...process.env,
+  EPER_PAYMENT_DATABASE_URL: workerDatabaseUrl,
+}, "eper-customer-asset-scan-recovery-readiness");
 const supervisorPool = createPostgresPaymentPool({
   ...process.env,
   EPER_PAYMENT_DATABASE_URL: recoveryDatabaseUrl,
 }, "eper-customer-asset-scan-recovery-supervisor");
 try {
-  const repository = new PostgresCustomerAssetRepository(supervisorPool, supervisorPool);
+  const repository = new PostgresCustomerAssetRepository(pool, supervisorPool);
   await repository.assertReady();
   await assertAuditStoreReady(supervisorPool, "eper_customer_asset_scan_audit_writer");
   console.log("EPER customer asset scan recovery started");
@@ -84,5 +89,5 @@ try {
     await waitForNextPass(controller.signal, intervalMs);
   }
 } finally {
-  await supervisorPool.end();
+  await Promise.all([pool.end(), supervisorPool.end()]);
 }
