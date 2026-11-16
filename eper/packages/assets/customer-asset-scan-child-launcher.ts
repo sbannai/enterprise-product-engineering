@@ -11,6 +11,7 @@ export interface TrustedCustomerAssetScanChildConfiguration {
   expectedSpiffeId: string;
   audience: string;
   databaseHost: string;
+  databaseCaFile: string;
   databasePort: number;
   databaseName: string;
   databaseUser: string;
@@ -61,6 +62,8 @@ export function buildTrustedCustomerAssetScanChildLaunch(configuration: TrustedC
     throw new Error("CUSTOMER_ASSET_SCAN_CHILD_AUDIENCE_INVALID");
   }
   const host = required(configuration.databaseHost, "CUSTOMER_ASSET_SCAN_CHILD_DATABASE_HOST_INVALID", 255);
+  const caFile = required(configuration.databaseCaFile, "CUSTOMER_ASSET_SCAN_CHILD_DATABASE_CA_PATH_INVALID");
+  if (!isAbsolute(caFile) || caFile.split("/").includes("..")) throw new Error("CUSTOMER_ASSET_SCAN_CHILD_DATABASE_CA_PATH_INVALID");
   const name = required(configuration.databaseName, "CUSTOMER_ASSET_SCAN_CHILD_DATABASE_NAME_INVALID", 128);
   const user = required(configuration.databaseUser, "CUSTOMER_ASSET_SCAN_CHILD_DATABASE_USER_INVALID", 128);
   if (!Number.isSafeInteger(configuration.databasePort) || configuration.databasePort < 1 || configuration.databasePort > 65535) {
@@ -82,6 +85,7 @@ export function buildTrustedCustomerAssetScanChildLaunch(configuration: TrustedC
       return candidate;
     })(),
     PGHOST: host,
+    PGSSLROOTCERT: caFile,
     PGPORT: String(configuration.databasePort),
     PGDATABASE: name,
     PGUSER: user,
