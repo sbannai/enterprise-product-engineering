@@ -97,11 +97,11 @@ docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up -d spire-server
 
 # Wait for the private Server API before creating a short-lived node join token.
 TOKEN_OUTPUT=""
-TOKEN_ERROR=""
+TOKEN_ERROR_FILE="$SPIRE_FIXTURE_DIR/token.stderr"
 for _ in $(seq 1 45); do
   if TOKEN_OUTPUT="$(docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T spire-server \
       /opt/spire/bin/spire-server token generate \
-      -socketPath "$SERVER_SOCKET" -ttl 600 -spiffeID "$AGENT_ID" 2> >(TOKEN_ERROR="$(cat)"; export TOKEN_ERROR))"; then
+      -socketPath "$SERVER_SOCKET" -ttl 600 -spiffeID "$AGENT_ID" 2>"$TOKEN_ERROR_FILE")"; then
     break
   fi
   sleep 2
@@ -109,8 +109,9 @@ done
 TOKEN="$(printf '%s' "$TOKEN_OUTPUT" | sed -n 's/^Token: //p' | head -n 1)"
 if [[ -z "$TOKEN" ]]; then
   echo "FAIL: SPIRE Server did not produce a short-lived join token" >&2
-  if [[ -n "$TOKEN_ERROR" ]]; then
-    printf 'Token command diagnostic: %s\\n' "$TOKEN_ERROR" >&2
+  if [[ -s "$TOKEN_ERROR_FILE" ]]; then
+    echo "Token command diagnostic:" >&2
+    cat "$TOKEN_ERROR_FILE" >&2
   fi
   echo "SPIRE Server container logs:" >&2
   docker compose -p "$PROJECT" -f "$COMPOSE_FILE" logs --no-color spire-server >&2 || true
