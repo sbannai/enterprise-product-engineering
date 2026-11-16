@@ -54,6 +54,25 @@ test("customer asset scan worker persists bounded retry for a scanner error", as
 });
 
 
+test("customer asset scan worker leaves exhausted attempts for independent recovery", async () => {
+  const f = fixture("error");
+  f.repository.retryScanJob = async (input) => {
+    f.calls.push(["retry", input.errorCode, input.retryAfterMs]);
+    return "attempts_exhausted";
+  };
+  const outcomes = [];
+  await runCustomerAssetScanWorker({
+    ...f, tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
+    scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
+    onJob(result) { outcomes.push(result.outcome); },
+  });
+  assert.ok(f.calls.some((call) => call[0] === "retry" && call[1] === "SCANNER_PROVIDER_ERROR"));
+  assert.equal(f.calls.filter((call) => call[0] === "record").length, 0,
+    "the scanner worker must not finalize an exhausted job");
+  assert.equal(outcomes.includes("dead_letter"), false,
+    "only the independent recovery worker may report the final dead-letter outcome");
+});
+
 test("customer asset scan worker relinquishes a timed-out claim even when provider promptly aborts", async () => {
   const f = fixture("clean");
   f.scanner.scan = async (_input, _requestId, signal) => new Promise((_resolve, reject) => {
