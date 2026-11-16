@@ -1152,12 +1152,8 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      // Exhausted leases are finalized through the same ordered recovery path
-      // used by the independently supervised recovery process.
-      await this.recoverExhaustedScanJobs({
-        tenantId: input.tenantId, applicationId: input.applicationId,
-        scannerServiceId: input.scannerServiceId, environment: input.environment, limit,
-      });
+      // Recovery is owned by the independently supervised recovery worker.
+      // Claiming must use only this transaction/client and never check out a second pool client.
       const claimed = await client.query<{
         upload_session_id: string; asset_id: string; correlation_id: string;
         attempt_count: number; lease_expires_at: string | Date; claim_generation: number | string;
