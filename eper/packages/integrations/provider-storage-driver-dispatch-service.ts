@@ -172,7 +172,21 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
       }, limits.requestTimeoutMs as number);
     });
     try {
-      const operation = this.dispatchWithSignal({ ...input, signal: controller.signal }).then(result => {
+      const operation = this.dispatchWithSignal({ ...input, signal: controller.signal }).then(async result => {
+        if (controller.signal.aborted) {
+          if (result && typeof result === "object" &&
+              typeof (result as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === "function") {
+            try {
+              await (result as AsyncIterable<Uint8Array>)[Symbol.asyncIterator]().return?.();
+            } catch {
+              // Preserve the cancellation/deadline result; provider cleanup is best effort.
+            }
+          }
+          cleanup();
+          throw new ProviderStorageDispatchError(input.signal?.aborted
+            ? "PROVIDER_STORAGE_DISPATCH_ABORTED"
+            : "PROVIDER_STORAGE_DISPATCH_TIMEOUT");
+        }
         if (result && typeof result === "object" &&
             typeof (result as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === "function") {
           streaming = true;
