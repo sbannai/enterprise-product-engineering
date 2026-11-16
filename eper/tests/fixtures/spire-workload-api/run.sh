@@ -76,7 +76,6 @@ agent {
   server_address = "spire-server"
   server_port = "8081"
   socket_path = "$SOCKET"
-  socket_mode = "0770"
   trust_bundle_path = "/etc/spire/agent/test-upstream-ca.crt"
   trust_domain = "example.org"
   join_token = "PENDING"
