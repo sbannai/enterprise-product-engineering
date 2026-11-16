@@ -15,11 +15,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          registry-url: "https://registry.npmjs.org"
-          cache: npm
       - name: Initialize isolated evaluation directory
         shell: bash
         run: |
@@ -27,6 +22,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/eper-spiffe-node24" "$RUNNER_TEMP/spiffe-node24-evidence"
           cd "$RUNNER_TEMP/eper-spiffe-node24"
           npm init -y
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
       - name: Enforce dependency engine declarations and install exact SDK
         shell: bash
         run: |
