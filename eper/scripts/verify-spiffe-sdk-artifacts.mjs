@@ -20,6 +20,9 @@ for (const candidate of candidates) {
     sourceCommitMatches: null,
     provenanceEnvelopeKeys: [],
     provenanceFetchStatus: null,
+    provenanceIdentityVerified: false,
+    provenanceSourceRevision: null,
+    provenanceSubjectDigestMatches: false,
     npmAuditSignaturesExitCode: null,
     npmAuditSignaturesOutput: "",
     status: "BLOCKED",
@@ -47,6 +50,14 @@ for (const candidate of candidates) {
           const envelope = await attestationResponse.json();
           result.provenanceEnvelopeKeys = Object.keys(envelope);
           result.provenanceEnvelope = envelope;
+          const slsa = envelope.attestations?.find((item) => item.predicateType === "https://slsa.dev/provenance/v1");
+          if (slsa?.bundle?.dsseEnvelope?.payload) {
+            try {
+              result.slsaStatement = JSON.parse(Buffer.from(slsa.bundle.dsseEnvelope.payload, "base64").toString("utf8"));
+            } catch (error) {
+              result.reasons.push(`SLSA statement decode failed: ${error instanceof Error ? error.message : String(error)}`);
+            }
+          }
         }
       } catch (error) {
         result.reasons.push(`provenance fetch failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -59,11 +70,31 @@ for (const candidate of candidates) {
     const tarball = Buffer.from(await tarballResponse.arrayBuffer());
     const actualIntegrity = `sha512-${createHash("sha512").update(tarball).digest("base64")}`;
     result.tarballIntegrityMatches = actualIntegrity === dist.integrity;
+    const statement = result.slsaStatement;
+    if (statement) {
+      const subject = statement.subject?.find((item) => item.name === `pkg:npm/${candidate.name.replace("/", "%2f")}@${candidate.version}` || item.name === `pkg:npm/${candidate.name}@${candidate.version}`);
+      const predicate = statement.predicate;
+      const build = predicate?.buildDefinition;
+      const source = build?.resolvedDependencies?.find((item) => item.uri?.startsWith("git+https://github.com/jeengbe/ts-packages@"));
+      const revision = source?.digest?.gitCommit ?? null;
+      result.provenanceSourceRevision = revision;
+      result.provenanceSubjectDigestMatches = Boolean(subject?.digest?.sha512 && subject.digest.sha512 === actualIntegrity.replace("sha512-", ""));
+      const identityMatches = statement.predicateType === "https://slsa.dev/provenance/v1"
+        && build?.externalParameters?.workflow?.repository === "https://github.com/jeengbe/ts-packages"
+        && build?.externalParameters?.workflow?.path === ".github/workflows/ci.yml"
+        && build?.externalParameters?.workflow?.ref === "refs/heads/master"
+        && revision === candidate.expectedGitHead;
+      result.provenanceIdentityVerified = Boolean(identityMatches && result.provenanceSubjectDigestMatches);
+      if (!result.provenanceSubjectDigestMatches) result.reasons.push("SLSA provenance subject SHA-512 does not match the downloaded npm tarball");
+      if (!identityMatches) result.reasons.push("SLSA provenance source repository, workflow, ref, or revision does not match the expected immutable source");
+    } else if (result.provenanceMetadataPresent) {
+      result.reasons.push("SLSA provenance statement missing from registry attestation envelope");
+    }
     if (!result.tarballIntegrityMatches) result.reasons.push("downloaded tarball SHA-512 does not match registry dist.integrity");
     if (!result.registrySignatureMetadataPresent) result.reasons.push("registry signature metadata absent");
     if (!result.provenanceMetadataPresent) result.reasons.push("registry provenance attestation metadata absent");
     if (result.sourceCommitMatches === false) result.reasons.push(`registry gitHead mismatch (found ${metadata.gitHead})`);
-    if (result.sourceCommitMatches === null) result.reasons.push("registry gitHead absent; provenance source revision requires explicit verification");
+    if (result.sourceCommitMatches === null && !result.provenanceIdentityVerified) result.reasons.push("registry gitHead absent and SLSA provenance source revision not verified");
 
     temp = await mkdtemp(join(tmpdir(), "eper-spiffe-evidence-"));
     await writeFile(join(temp, "package.json"), JSON.stringify({ name: "eper-spiffe-artifact-evidence", version: "1.0.0", private: true }, null, 2));
@@ -76,7 +107,7 @@ for (const candidate of candidates) {
       result.npmAuditSignaturesOutput = (audit.stdout + audit.stderr).trim().slice(-3000);
       if (audit.status !== 0) result.reasons.push("npm audit signatures did not pass for the isolated candidate dependency closure");
     }
-    if (result.tarballIntegrityMatches && result.registrySignatureMetadataPresent && result.provenanceMetadataPresent && result.sourceCommitMatches === true && result.npmAuditSignaturesExitCode === 0) {
+    if (result.tarballIntegrityMatches && result.registrySignatureMetadataPresent && result.provenanceMetadataPresent && result.provenanceIdentityVerified && result.npmAuditSignaturesExitCode === 0 && (result.sourceCommitMatches === true || result.sourceCommitMatches === null)) {
       result.status = "VERIFIED";
     }
   } catch (error) {
