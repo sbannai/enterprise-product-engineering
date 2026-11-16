@@ -239,23 +239,26 @@ test("routes all six storage operations through their exact capability and synth
 });
 
 
-test("forwards AbortSignal through tenant-scoped scan dispatch to the provider driver", async () => {
+test("forwards caller cancellation through the deadline-composed provider signal", async () => {
   const controller = new AbortController();
   let receivedSignal;
   const f = fixture({ driver: { async scanObject(_context, _request, _requestId, signal) {
     receivedSignal = signal;
-    return { kind: "timeout" };
+    return new Promise(resolve => signal.addEventListener("abort", () => resolve({ kind: "timeout" }), { once: true }));
   } } });
-  await f.service.dispatch({
+  const pending = f.service.dispatch({
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-cancel",
     operation: { kind: "scan_object", request: {
       assetId: "asset-a", providerObjectReference: "object-ref", expectedSha256: "a".repeat(64),
     } }, signal: controller.signal,
   });
+  await new Promise(resolve => setImmediate(resolve));
   assert.ok(receivedSignal instanceof AbortSignal);
   assert.notEqual(receivedSignal, controller.signal, "dispatcher owns a deadline-composed signal");
   controller.abort();
-  assert.equal(receivedSignal.aborted, true, "caller cancellation must propagate to the provider signal");
+  assert.equal(receivedSignal.aborted, true, "caller cancellation must propagate while provider work is active");
+  await assert.rejects(() => pending, error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_ABORTED");
 });
 
 test("rejects an already-aborted provider operation before resolving credentials", async () => {
@@ -395,7 +398,7 @@ test("retains concurrency permit until an abort-ignoring provider operation sett
     operation: { kind: "scan_object", request: {
       assetId: "asset-a", providerObjectReference: "opaque-ref", expectedSha256: "a".repeat(64),
     } },
-  });
+  }).then(value => ({ value }), error => ({ error }));
   await new Promise(resolve => setTimeout(resolve, 25));
   await assert.rejects(() => f.service.dispatch({
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-abort-ignoring-second",
@@ -406,8 +409,8 @@ test("retains concurrency permit until an abort-ignoring provider operation sett
     error.code === "PROVIDER_STORAGE_DISPATCH_CONCURRENCY_LIMIT");
   assert.equal(calls, 1, "the second provider call must not start while the first is still pending");
   resolveFirst({ kind: "timeout" });
-  await assert.rejects(() => first, error => error instanceof ProviderStorageDispatchError &&
-    error.code === "PROVIDER_STORAGE_DISPATCH_TIMEOUT");
+  const firstOutcome = await first;
+  assert.equal(firstOutcome.error?.code, "PROVIDER_STORAGE_DISPATCH_TIMEOUT");
   const afterSettlement = await f.service.dispatch({
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-abort-ignoring-third",
     operation: { kind: "scan_object", request: {
