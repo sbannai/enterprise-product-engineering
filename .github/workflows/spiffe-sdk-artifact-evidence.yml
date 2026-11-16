@@ -1,0 +1,42 @@
+name: SPIFFE SDK npm artifact evidence
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/spiffe-sdk-artifact-evidence.yml"
+      - "eper/scripts/verify-spiffe-sdk-artifacts.mjs"
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/spiffe-sdk-artifact-evidence.yml"
+      - "eper/scripts/verify-spiffe-sdk-artifacts.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-candidate-artifacts:
+    name: SPIFFE SDK candidate artifact evidence (diagnostic)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: eper
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+      - name: Inspect exact npm registry artifacts and signatures
+        run: node scripts/verify-spiffe-sdk-artifacts.mjs
+      - name: Upload evidence report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spiffe-sdk-artifact-evidence
+          path: eper/artifacts/spiffe-sdk-artifact-report.json
+          if-no-files-found: error
