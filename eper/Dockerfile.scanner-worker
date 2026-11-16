@@ -1,0 +1,42 @@
+# Dedicated scanner worker image: Node 20 parent + pinned Node 24 child runtime.
+# The general API image remains unchanged on Node 20.
+FROM node:24.22.2-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS node24
+
+FROM node:20-bookworm-slim AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY tsconfig.json ./
+COPY apps ./apps
+COPY packages ./packages
+COPY contracts ./contracts
+COPY requirements ./requirements
+RUN npm run build
+
+FROM node:20-bookworm-slim AS runtime
+ENV NODE_ENV=production
+WORKDIR /app
+ARG EPER_BUILD_ID
+ENV EPER_BUILD_ID=${EPER_BUILD_ID}
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/packages/payments/migrations ./packages/payments/migrations
+COPY --from=build /app/packages/capabilities/migrations ./packages/capabilities/migrations
+COPY --from=build /app/packages/application-data/migrations ./packages/application-data/migrations
+COPY --from=build /app/packages/workflows/migrations ./packages/workflows/migrations
+COPY scripts ./scripts
+
+# Copy only the Node executable; do not import Node 24 npm/global packages
+# or alter the parent process runtime.
+COPY --from=node24 /usr/local/bin/node /opt/eper/node24/bin/node
+RUN set -eux; \
+    chmod 0555 /opt/eper/node24/bin/node; \
+    test "$(node --version)" = "v20.19.5" || node --version; \
+    test "$(/opt/eper/node24/bin/node --version)" = "v24.22.2"; \
+    ldd /opt/eper/node24/bin/node | tee /tmp/eper-node24-ldd.txt; \
+    ! grep -q "not found" /tmp/eper-node24-ldd.txt; \
+    rm /tmp/eper-node24-ldd.txt
+
+USER node
+CMD ["node", "dist/apps/worker/customer-asset-scan-main.js"]
