@@ -10,7 +10,7 @@ const capabilities = {
   idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true,
   renewByProviderReference: true, verifyObject: true, downloadGrant: true, malwareScan: true,
 };
-function fixture({ selection = {}, driver = {}, resolveError = null, dependencyInventory = undefined } = {}) {
+function fixture({ selection = {}, driver = {}, resolveError = null, dependencyInventory = undefined, runtimeLimits = undefined } = {}) {
   const calls = [];
   const adapter = {
     dependencyIds: [],
@@ -39,7 +39,7 @@ function fixture({ selection = {}, driver = {}, resolveError = null, dependencyI
       calls.push(["credentials", runtime]);
       return credentials;
     },
-  }, dependencyInventory);
+  }, dependencyInventory, runtimeLimits);
   const dispatch = service.dispatch.bind(service);
   service.dispatch = input => dispatch({ actorId: "actor-a", correlationId: "correlation-a", ...input });
   return { service, calls, credentials };
@@ -344,6 +344,31 @@ test("internal object read uses its own optional capability and exact connection
   const read = [];
   for await (const chunk of result) read.push(...chunk);
   assert.deepEqual(read, [1, 2, 3]);
+});
+
+test("internal object read enforces deployment maxObjectBytes before credentials or provider invocation", async () => {
+  let driverInvoked = false;
+  const f = fixture({
+    runtimeLimits: { maxObjectBytes: 2 },
+    driver: {
+      capabilities: { ...capabilities, internalObjectRead: true },
+      async readObjectInternal() {
+        driverInvoked = true;
+        return (async function* () { yield new Uint8Array([1, 2, 3]); })();
+      },
+    },
+  });
+  await assert.rejects(() => f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-object-over-limit",
+    expectedConnectionId: "connection-a",
+    operation: { kind: "read_object_internal", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref",
+      expectedSizeBytes: 3, expectedSha256: "a".repeat(64),
+    } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_OBJECT_TOO_LARGE");
+  assert.equal(f.calls.some(call => call[0] === "credentials"), false);
+  assert.equal(driverInvoked, false);
 });
 
 test("internal object read fails closed when the adapter has not explicitly opted in", async () => {

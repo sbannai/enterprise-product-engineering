@@ -97,7 +97,8 @@ export class ProviderStorageDispatchError extends Error {
     | "PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING"
     | "PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID"
     | "PROVIDER_STORAGE_DISPATCH_ABORTED"
-    | "PROVIDER_STORAGE_DISPATCH_DEPENDENCY_BLOCKED") {
+    | "PROVIDER_STORAGE_DISPATCH_DEPENDENCY_BLOCKED"
+    | "PROVIDER_STORAGE_DISPATCH_OBJECT_TOO_LARGE") {
     super(code);
     this.name = "ProviderStorageDispatchError";
   }
@@ -117,6 +118,7 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
       "resolveRuntime" | "resolveCredentials"
     >,
     private readonly dependencyInventory?: DependencyInventoryReader,
+    private readonly runtimeLimits?: { maxObjectBytes: number },
   ) {}
 
   async dispatch(input: {
@@ -158,6 +160,11 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
         selection.capabilityKey !== capability || runtime.capability !== capability ||
         (input.expectedConnectionId !== undefined && selection.connectionId !== input.expectedConnectionId)) {
       throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH");
+    }
+
+    if (input.operation.kind === "read_object_internal" &&
+        this.runtimeLimits && input.operation.request.expectedSizeBytes > this.runtimeLimits.maxObjectBytes) {
+      throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_OBJECT_TOO_LARGE");
     }
 
     const driver = assertProviderStorageDriver(runtime.adapter);

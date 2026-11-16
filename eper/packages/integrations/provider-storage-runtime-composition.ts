@@ -146,7 +146,7 @@ export function createProviderStorageRuntimeComposition<TCredentials>(
 
   return {
     enabled: true,
-    dispatch: new ProviderStorageDriverDispatchService(runtimeWithCredentials, input.dependencyInventory),
+    dispatch: new ProviderStorageDriverDispatchService(runtimeWithCredentials, input.dependencyInventory, input.deploymentPolicy.runtimeLimits),
     scannerIdentity: input.scannerIdentity,
     allowedHosts: [...input.allowedHosts],
   };
