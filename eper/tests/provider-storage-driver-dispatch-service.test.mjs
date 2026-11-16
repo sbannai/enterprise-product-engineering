@@ -377,6 +377,47 @@ test("rejects provider dispatch above deployment concurrency limit", async () =>
   await first;
 });
 
+test("retains concurrency permit until an abort-ignoring provider operation settles", async () => {
+  let resolveFirst;
+  let calls = 0;
+  const f = fixture({
+    runtimeLimits: { maxObjectBytes: 10_000, requestTimeoutMs: 15, maxConcurrentOperations: 1 },
+    driver: {
+      async scanObject() {
+        calls++;
+        if (calls === 1) return new Promise(resolve => { resolveFirst = resolve; });
+        return { kind: "timeout" };
+      },
+    },
+  });
+  const first = f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-abort-ignoring-first",
+    operation: { kind: "scan_object", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref", expectedSha256: "a".repeat(64),
+    } },
+  });
+  await new Promise(resolve => setTimeout(resolve, 25));
+  await assert.rejects(() => f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-abort-ignoring-second",
+    operation: { kind: "scan_object", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref", expectedSha256: "a".repeat(64),
+    } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_CONCURRENCY_LIMIT");
+  assert.equal(calls, 1, "the second provider call must not start while the first is still pending");
+  resolveFirst({ kind: "timeout" });
+  await assert.rejects(() => first, error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_TIMEOUT");
+  const afterSettlement = await f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-abort-ignoring-third",
+    operation: { kind: "scan_object", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref", expectedSha256: "a".repeat(64),
+    } },
+  });
+  assert.deepEqual(afterSettlement, { kind: "timeout" });
+  assert.equal(calls, 2);
+});
+
 test("aborts provider operation at configured request timeout", async () => {
   let receivedSignal;
   const f = fixture({
