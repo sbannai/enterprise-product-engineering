@@ -10,7 +10,7 @@ const capabilities = {
   idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true,
   renewByProviderReference: true, verifyObject: true, downloadGrant: true, malwareScan: true,
 };
-function fixture({ selection = {}, driver = {}, resolveError = null, dependencyInventory = undefined, runtimeLimits = undefined } = {}) {
+function fixture({ selection = {}, driver = {}, resolveError = null, dependencyInventory = undefined, runtimeLimits = { maxObjectBytes: 10_000_000 } } = {}) {
   const calls = [];
   const adapter = {
     dependencyIds: [],
