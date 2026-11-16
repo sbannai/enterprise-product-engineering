@@ -33,6 +33,24 @@ jobs:
           cd "$RUNNER_TEMP/eper-spiffe-node24"
           npm_config_engine_strict=true npm install --package-lock-only --ignore-scripts --save-dev --save-exact @jeengbe/spiffe@2.1.1
           npm_config_engine_strict=true npm ci --ignore-scripts
+      - name: Smoke-test the real SDK API and owned-client lifecycle
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$RUNNER_TEMP/eper-spiffe-node24"
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { SpiffeClient } from '@jeengbe/spiffe';
+
+          const client = new SpiffeClient({
+            connection: 'unix:///tmp/eper-spiffe-sdk-smoke.sock',
+            retry: { enabled: false },
+          });
+          assert.equal(typeof client.getJwtSvid, 'function');
+          assert.equal(typeof client.close, 'function');
+          await client.close();
+          console.log('SDK import, configured construction, getJwtSvid surface, and owned-client close passed');
+          NODE
       - name: Verify registry signatures and provenance
         shell: bash
         run: |
