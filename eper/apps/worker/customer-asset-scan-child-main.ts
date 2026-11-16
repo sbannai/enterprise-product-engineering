@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE } from "../../packages/assets/customer-asset-scan-child-spiffe-identity.js";
 import { assertTrustedCustomerAssetScanCompositionModule } from "../../packages/assets/customer-asset-scan-child-composition-loader.js";
 import { CustomerAssetScanChildRuntime } from "../../packages/assets/customer-asset-scan-child-runtime.js";
-import { provisionCustomerAssetScanChildDatabaseTlsMaterial } from "../../packages/assets/customer-asset-scan-child-database-tls-material.js";
+import { assertCustomerAssetScanChildPostgresDnsHost, provisionCustomerAssetScanChildDatabaseTlsMaterial } from "../../packages/assets/customer-asset-scan-child-database-tls-material.js";
 import { assertCustomerAssetScanChildDatabaseTlsBootstrap, type CustomerAssetScanChildDatabaseTlsBootstrap } from "../../packages/assets/customer-asset-scan-child-database-tls-bootstrap-contract.js";
 import { assertCustomerAssetScanChildRuntimeComposition, type CustomerAssetScanChildRuntimeComposition } from "../../packages/assets/customer-asset-scan-child-composition-contract.js";
 import {
@@ -180,8 +180,9 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     const cert = await readDeploymentFile(tlsMaterial.certificatePath);
     const key = await readDeploymentFile(tlsMaterial.privateKeyPath, true);
     bootstrapFailureCode = "SCANNER_DATABASE_CONNECTION_FAILED";
+    const databaseHost = assertCustomerAssetScanChildPostgresDnsHost(required("PGHOST"));
     const createdPool = new pg.Pool({
-      host: required("PGHOST"), port: databasePort, database: required("PGDATABASE"),
+      host: databaseHost, port: databasePort, database: required("PGDATABASE"),
       user: tlsMaterial.databaseRole, max: 2, connectionTimeoutMillis: 5000,
       statement_timeout: 15000, query_timeout: 20000, application_name: "eper-asset-scan-child",
       ssl: { ca, cert, key, rejectUnauthorized: true },
