@@ -191,9 +191,18 @@ export async function appendAuditEvent(
  * absent or its append-only triggers are missing/disabled. This validates
  * deployment state; it does not prove hash-chain correctness or full coverage.
  */
-export async function assertAuditStoreReady(pool: AuditSqlPool): Promise<void> {
+export async function assertAuditStoreReady(
+  pool: AuditSqlPool,
+  role?: "eper_customer_asset_scan_audit_writer",
+): Promise<void> {
   const client = await pool.connect();
+  let transactionStarted = false;
   try {
+    if (role) {
+      await client.query("BEGIN");
+      transactionStarted = true;
+      await client.query("SET LOCAL ROLE eper_customer_asset_scan_audit_writer");
+    }
     const result = await client.query<{
       events_table: string | null;
       chain_head_table: string | null;
@@ -228,7 +237,11 @@ export async function assertAuditStoreReady(pool: AuditSqlPool): Promise<void> {
     if (Number(state.chain_head_count) !== 1) {
       throw new Error("EPER_AUDIT_CHAIN_HEAD_NOT_INITIALIZED");
     }
+    if (transactionStarted) await client.query("COMMIT");
   } catch (error) {
+    if (transactionStarted) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve readiness failure */ }
+    }
     if (error instanceof Error && error.message.startsWith("EPER_AUDIT_")) throw error;
     throw new Error("EPER_AUDIT_READINESS_CHECK_FAILED", { cause: error });
   } finally {
