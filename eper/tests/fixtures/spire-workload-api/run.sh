@@ -29,10 +29,12 @@ openssl req -x509 -newkey rsa:2048 -nodes \
   -addext "basicConstraints=critical,CA:TRUE" \
   -addext "keyUsage=critical,keyCertSign,cRLSign" >/dev/null 2>&1
 cp "$SPIRE_FIXTURE_DIR/server/test-upstream-ca.crt" "$SPIRE_FIXTURE_DIR/agent/test-upstream-ca.crt"
-# Match the non-root SPIRE container identity and keep the CA private key private.
-sudo chown -R 1000:1000 "$SPIRE_FIXTURE_DIR"
-chmod 640 "$SPIRE_FIXTURE_DIR/server/test-upstream-ca.key"
-chmod 644 "$SPIRE_FIXTURE_DIR/server/test-upstream-ca.crt" "$SPIRE_FIXTURE_DIR/server/server.conf" "$SPIRE_FIXTURE_DIR/agent/"*
+# Let non-root containers traverse the temporary bind-mount path. The CA key
+# itself is owned by the Server UID and remains unreadable to other users.
+chmod 755 "$SPIRE_FIXTURE_DIR" "$SPIRE_FIXTURE_DIR/server" "$SPIRE_FIXTURE_DIR/agent"
+sudo chown 1000:1000 "$SPIRE_FIXTURE_DIR/server/test-upstream-ca.key"
+chmod 600 "$SPIRE_FIXTURE_DIR/server/test-upstream-ca.key"
+chmod 644 "$SPIRE_FIXTURE_DIR/server/test-upstream-ca.crt" "$SPIRE_FIXTURE_DIR/agent/test-upstream-ca.crt"
 
 cat > "$SPIRE_FIXTURE_DIR/server/server.conf" <<'EOF'
 server {
