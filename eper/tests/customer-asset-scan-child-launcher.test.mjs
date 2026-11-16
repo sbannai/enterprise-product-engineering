@@ -4,6 +4,22 @@ import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { buildTrustedCustomerAssetScanChildLaunch, withCustomerAssetScanChildPrivateTempDirectory } from "../dist/packages/assets/customer-asset-scan-child-launcher.js";
 
+function waitForChildReadiness(child) {
+  return new Promise((resolve, reject) => {
+    let ready = false;
+    child.once("error", reject);
+    child.once("close", (code, signal) => {
+      if (!ready) {
+        reject(new Error(`child closed before readiness (code=${code}, signal=${signal})`));
+      }
+    });
+    child.stdout.once("data", chunk => {
+      ready = true;
+      resolve(chunk);
+    });
+  });
+}
+
 const configuration = () => ({
   workloadApiSocket: "unix:///run/spire/sockets/agent.sock",
   expectedSpiffeId: "spiffe://example.org/eper/scanner-child",
@@ -89,6 +105,13 @@ test("parent-owned scanner temp directory is removed when child execution reject
 });
 
 
+test("scanner child readiness rejects when the child closes before its first output", async () => {
+  const child = (await import("node:child_process")).spawn(process.execPath, ["-e", "process.exit(2)"], {
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  await assert.rejects(waitForChildReadiness(child), /closed before readiness/);
+});
+
 test("parent-owned scanner temp directory is removed after a child is forcibly killed", async () => {
   let directory;
   await withCustomerAssetScanChildPrivateTempDirectory(async root => {
@@ -102,10 +125,7 @@ test("parent-owned scanner temp directory is removed after a child is forcibly k
       env: { ...process.env, TMPDIR: root },
       stdio: ["ignore", "pipe", "ignore"],
     });
-    await new Promise((resolve, reject) => {
-      child.once("error", reject);
-      child.stdout.once("data", resolve);
-    });
+    await waitForChildReadiness(child);
     const credentialPath = join(root, "client-key.pem");
     await access(credentialPath);
     child.kill("SIGKILL");
