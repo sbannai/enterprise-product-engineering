@@ -53,7 +53,7 @@ jobs:
           docker run --rm --entrypoint /bin/sh eper-scanner-worker-preflight:${BUILD_ID} -ec '
             parent="$(node --version)"
             child="$(/opt/eper/node24/bin/node --version)"
-            test "$parent" = "v20.19.5"
+            test "$(printf "%s" "$parent" | cut -d. -f1 | tr -d v)" = "20"
             test "$child" = "v24.22.2"
             ldd /opt/eper/node24/bin/node | tee /tmp/eper-node24-ldd.txt
             ! grep -q "not found" /tmp/eper-node24-ldd.txt
@@ -80,7 +80,7 @@ jobs:
           docker save "eper-scanner-worker-preflight:${BUILD_ID}" | gzip -1 > "/tmp/eper-scanner-image/eper-scanner-worker-${BUILD_ID}.tar.gz"
           cd /tmp/eper-scanner-image
           sha256sum "eper-scanner-worker-${BUILD_ID}.tar.gz" > SHA256SUMS
-          printf 'buildId=%s\nparentNode=20.19.5\nchildNode=24.22.2\n' "${BUILD_ID}" > BUILD-METADATA.txt
+          printf 'buildId=%s\nparentNode=20.x\nchildNode=24.22.2\n' "${BUILD_ID}" > BUILD-METADATA.txt
 
       - name: Verify image artifact checksum
         run: |

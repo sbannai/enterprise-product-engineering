@@ -32,7 +32,7 @@ COPY scripts ./scripts
 COPY --from=node24 /usr/local/bin/node /opt/eper/node24/bin/node
 RUN set -eux; \
     chmod 0555 /opt/eper/node24/bin/node; \
-    test "$(node --version)" = "v20.19.5" || node --version; \
+    test "$(node -p 'process.versions.node.split(".")[0]')" = "20"; \
     test "$(/opt/eper/node24/bin/node --version)" = "v24.22.2"; \
     ldd /opt/eper/node24/bin/node | tee /tmp/eper-node24-ldd.txt; \
     ! grep -q "not found" /tmp/eper-node24-ldd.txt; \
