@@ -150,6 +150,7 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let finished = false;
+    let streaming = false;
     const cleanup = () => {
       if (finished) return;
       finished = true;
@@ -163,6 +164,7 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         controller.abort();
+        if (streaming) cleanup();
         reject(new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_TIMEOUT"));
       }, limits.requestTimeoutMs as number);
     });
@@ -179,6 +181,7 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
       if (result && typeof result === "object" &&
           typeof (result as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === "function") {
         const source = result as AsyncIterable<Uint8Array>;
+        streaming = true;
         return (async function* () {
           try {
             for await (const chunk of source) {
