@@ -47,7 +47,7 @@ for (const candidate of candidates) {
     if (!result.tarballIntegrityMatches) result.reasons.push("downloaded tarball SHA-512 does not match registry dist.integrity");
     if (!result.registrySignatureMetadataPresent) result.reasons.push("registry signature metadata absent");
     if (!result.provenanceMetadataPresent) result.reasons.push("registry provenance attestation metadata absent");
-    if (result.sourceCommitMatches === false) result.reasons.push(`registry gitHead mismatch (found ${metadata.gitHead})`);
+    if (result.sourceCommitMatches === false) result.reasons.push(`registry gitHead mismatch (found ${metadata.gitHead})`);\n    if (result.sourceCommitMatches === null) result.reasons.push("registry gitHead absent; provenance source revision requires explicit verification");
 
     temp = await mkdtemp(join(tmpdir(), "eper-spiffe-evidence-"));
     await writeFile(join(temp, "package.json"), JSON.stringify({ name: "eper-spiffe-artifact-evidence", version: "1.0.0", private: true }, null, 2));
@@ -60,7 +60,7 @@ for (const candidate of candidates) {
       result.npmAuditSignaturesOutput = (audit.stdout + audit.stderr).trim().slice(-3000);
       if (audit.status !== 0) result.reasons.push("npm audit signatures did not pass for the isolated candidate dependency closure");
     }
-    if (result.tarballIntegrityMatches && result.registrySignatureMetadataPresent && result.provenanceMetadataPresent && result.sourceCommitMatches !== false && result.npmAuditSignaturesExitCode === 0) {
+    if (result.tarballIntegrityMatches && result.registrySignatureMetadataPresent && result.provenanceMetadataPresent && result.sourceCommitMatches === true && result.npmAuditSignaturesExitCode === 0) {
       result.status = "VERIFIED";
     }
   } catch (error) {
