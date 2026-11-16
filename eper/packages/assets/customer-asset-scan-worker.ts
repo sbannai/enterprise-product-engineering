@@ -178,6 +178,11 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
               if (retry === "pending") {
                 options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "retry", errorCode: scanErrorCode }); return;
               }
+              if (retry === "attempts_exhausted") {
+                // Keep the active lease for the independent recovery worker to quarantine
+                // and audit; this scanner worker must not finalize the exhausted job.
+                return;
+              }
               if (retry === "lease_lost") {
                 options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "lease_lost" }); return;
               }
