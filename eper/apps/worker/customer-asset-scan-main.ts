@@ -61,6 +61,7 @@ try {
     expectedSpiffeId: required("EPER_SCANNER_CHILD_EXPECTED_SPIFFE_ID"),
     audience: required("EPER_SCANNER_CHILD_SPIFFE_AUDIENCE"),
     databaseHost: required("EPER_SCANNER_CHILD_PGHOST"),
+    databaseCaFile: required("EPER_SCANNER_CHILD_PGSSLROOTCERT"),
     databasePort: boundedInteger("EPER_SCANNER_CHILD_PGPORT", 5432, 1, 65535),
     databaseName: required("EPER_SCANNER_CHILD_PGDATABASE"),
     databaseUser: required("EPER_SCANNER_CHILD_PGUSER"),
