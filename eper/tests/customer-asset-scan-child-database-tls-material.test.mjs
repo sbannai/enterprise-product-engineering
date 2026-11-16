@@ -30,7 +30,7 @@ test("certificate role parser fails closed for missing or malformed subject outp
 
 test("PostgreSQL TLS host identity rejects literal IPv4 and IPv6 addresses", async () => {
   const { assertCustomerAssetScanChildPostgresDnsHost } = await import("../dist/packages/assets/customer-asset-scan-child-database-tls-material.js");
-  for (const host of ["127.0.0.1", "192.0.2.10", "::1", "2001:db8::1"]) {
+  for (const host of ["127.0.0.1", "192.0.2.10", "::1", "2001:db8::1", "127.1", "127.0.0.1", "0x7f000001", "2130706433", "0177.0.0.1"]) {
     assert.throws(() => assertCustomerAssetScanChildPostgresDnsHost(host), /DATABASE_HOST_IDENTITY_INVALID/);
   }
 });
