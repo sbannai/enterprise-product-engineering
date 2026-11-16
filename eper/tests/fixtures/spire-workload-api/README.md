@@ -8,7 +8,7 @@ This fixture is a disposable, CI-only integration test for SPIRE v1.16.0. It use
 - A registered workload process with UID/GID 20001 can obtain the expected JWT-SVID through the Agent's public Workload API socket.
 - Unregistered UID/GID 20002 and sibling UID/GID 20003 do not receive that scanner SPIFFE identity.
 
-The probe receives only the Agent public socket. It does not mount Agent state, the Server private API, host process namespaces, the Docker socket, or host filesystem paths. All SPIRE services run as UID/GID 1000. The probe runs under its tested UID/GID with GID 1000 added only to permit access to the socket.
+The probe runs under its tested UID inside the Agent container so the Unix WorkloadAttestor can resolve its caller PID. The Agent data directory is mode 0700, and the Agent config containing the ephemeral join token is mode 0600 and owned by UID/GID 1000, keeping both inaccessible to the probe. The probe uses GID 1000 only to access the public Workload API socket. No host PID namespace, Docker socket, privileged container, or host filesystem mount is used.
 
 ## Ephemeral material and cleanup
 
