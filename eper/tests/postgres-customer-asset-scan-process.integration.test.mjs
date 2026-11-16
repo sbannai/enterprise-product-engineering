@@ -87,7 +87,8 @@ async function createPendingScanFixture(pool, repository, prefix) {
   });
   return { tenantId, applicationId, actorId, assetId, correlationId,
     uploadSessionId: reservation.uploadSessionId, testObjectBytes,
-    providerObjectReference: "opaque-process-object-" + suffix };
+    providerObjectReference: "opaque-process-object-" + suffix,
+    providerUploadReference: "opaque-process-provider-ref-" + suffix };
 }
 async function createWorkerLogin(pool, prefix, fixture, workerId, scannerServiceId) {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 14);
@@ -229,7 +230,7 @@ import { PostgresCustomerAssetScanChildInputResolver } from "../customer-asset-s
 import { ProviderStorageDriverDispatchService } from "../../integrations/provider-storage-driver-dispatch-service.js";
 const execFile = promisify(execFileCallback);
 const objectPath = ${JSON.stringify(objectPath)};
-const expectedObjectReference = ${JSON.stringify(fixture.providerObjectReference)};
+const expectedObjectReference = ${JSON.stringify(fixture.providerUploadReference)};
 const spiffeId = "spiffe://eper.example/asset-scanner/ci-child";
 function opensslTime(epochSeconds) {
   return new Date(epochSeconds * 1000).toISOString().slice(2).replace(/[-:T]/g, "").replace(/\\.\\d{3}Z$/, "Z");
