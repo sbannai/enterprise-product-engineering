@@ -76,6 +76,7 @@ export function verifiedProviderInternalObjectChunks(input: {
             throw new ProviderInternalObjectReadError("PROVIDER_INTERNAL_OBJECT_READ_CHECKSUM_MISMATCH");
           }
           closed = true;
+          if (abortHandler) input.signal?.removeEventListener("abort", abortHandler);
           return { done: true, value: undefined };
         }
         const chunk = next.value;
