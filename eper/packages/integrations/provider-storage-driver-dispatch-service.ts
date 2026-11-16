@@ -166,7 +166,11 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
     };
     // A stream may never be consumed. Its deadline/abort must still release
     // the dispatcher permit and let the verifier close the provider iterator.
-    controller.signal.addEventListener("abort", cleanup, { once: true });
+    controller.signal.addEventListener("abort", () => {
+      // Before a stream is handed to the caller, the provider operation still
+      // owns its permit until its promise settles, even if it ignores abort.
+      if (streaming) cleanup();
+    }, { once: true });
     let rejectCallerAbort: ((error: Error) => void) | undefined;
     const abortFromCaller = () => {
       controller.abort();
