@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildTrustedCustomerAssetScanChildLaunch } from "../dist/packages/assets/customer-asset-scan-child-launcher.js";
+import { access, mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { buildTrustedCustomerAssetScanChildLaunch, withCustomerAssetScanChildPrivateTempDirectory } from "../dist/packages/assets/customer-asset-scan-child-launcher.js";
 
 const configuration = () => ({
   workloadApiSocket: "unix:///run/spire/sockets/agent.sock",
@@ -61,4 +63,27 @@ test("trusted scanner launcher validates the restricted database login and port"
   assert.throws(() => buildTrustedCustomerAssetScanChildLaunch({
     ...configuration(), databaseUser: "",
   }), /DATABASE_USER_INVALID/);
+});
+
+
+test("parent-owned scanner temp directory is removed after child completion", async () => {
+  let directory;
+  const value = await withCustomerAssetScanChildPrivateTempDirectory(async root => {
+    directory = root;
+    await mkdir(join(root, "eper-scan-child-key-test"));
+    await writeFile(join(root, "eper-scan-child-key-test", "client-key.pem"), "private-key");
+    return "child-closed";
+  });
+  assert.equal(value, "child-closed");
+  await assert.rejects(access(directory));
+});
+
+test("parent-owned scanner temp directory is removed when child execution rejects", async () => {
+  let directory;
+  await assert.rejects(withCustomerAssetScanChildPrivateTempDirectory(async root => {
+    directory = root;
+    await writeFile(join(root, "orphan-key.pem"), "private-key");
+    throw new Error("child failed");
+  }), /child failed/);
+  await assert.rejects(access(directory));
 });
