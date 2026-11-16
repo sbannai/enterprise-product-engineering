@@ -149,12 +149,15 @@ for uid in 20002 20003; do
   # SPIRE may return an empty SVID set with exit code zero; identity absence,
   # not the CLI exit code alone, is the denial assertion.
   NEGATIVE_OUTPUT=""
-  probe "$uid" >/dev/null 2>&1 && NEGATIVE_OUTPUT="$(probe "$uid" 2>/dev/null)" || true
+  set +e
+  NEGATIVE_OUTPUT="$(probe "$uid" 2>/dev/null)"
+  PROBE_STATUS=$?
+  set -e
   if grep -Fq "token($EXPECTED_ID):" <<<"$NEGATIVE_OUTPUT"; then
     unset NEGATIVE_OUTPUT
     echo "FAIL: unregistered UID $uid received the scanner SPIFFE identity" >&2
     exit 1
   fi
   unset NEGATIVE_OUTPUT
-  echo "PASS: unregistered UID $uid received no scanner SVID"
+  echo "PASS: unregistered UID $uid received no scanner SVID (probe exit $PROBE_STATUS)"
 done
