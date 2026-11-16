@@ -16,7 +16,7 @@ async function fixture() {
   return { base, root, modulePath };
 }
 
-test("trusted composition loader accepts a deployment-owned immutable module", async () => {
+test("trusted composition loader accepts a module with no group/world write access", async () => {
   const f = await fixture();
   try { assert.equal(await assertTrustedCustomerAssetScanCompositionModule(f.modulePath), f.modulePath); }
   finally { await rm(f.base, { recursive: true, force: true }); }
