@@ -58,6 +58,10 @@ export function verifiedProviderInternalObjectChunks(input: {
           throw new ProviderInternalObjectReadError("PROVIDER_INTERNAL_OBJECT_READ_ABORTED");
         }
         const next = await source.next();
+        // Abort may race an in-flight provider read; never release bytes returned after close.
+        if (closed || input.signal?.aborted) {
+          throw new ProviderInternalObjectReadError("PROVIDER_INTERNAL_OBJECT_READ_ABORTED");
+        }
         if (next.done) {
           if (input.signal?.aborted) {
             throw new ProviderInternalObjectReadError("PROVIDER_INTERNAL_OBJECT_READ_ABORTED");
