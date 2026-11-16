@@ -18,7 +18,8 @@ for (const candidate of candidates) {
     registrySignatureMetadataPresent: false,
     provenanceMetadataPresent: false,
     sourceCommitMatches: null,
-    provenanceEnvelopeKeys: [],\n    provenanceFetchStatus: null,
+    provenanceEnvelopeKeys: [],
+    provenanceFetchStatus: null,
     npmAuditSignaturesExitCode: null,
     npmAuditSignaturesOutput: "",
     status: "BLOCKED",
@@ -38,7 +39,8 @@ for (const candidate of candidates) {
     result.registrySignatureMetadataPresent = Array.isArray(dist.signatures) && dist.signatures.length > 0;
     result.provenanceMetadataPresent = Boolean(dist.attestations?.url || dist.attestations?.integrity);
     result.sourceCommitMatches = metadata.gitHead ? metadata.gitHead === candidate.expectedGitHead : null;
-    if (dist.attestations?.url) {\n      try {\n        const attestationResponse = await fetch(dist.attestations.url);\n        result.provenanceFetchStatus = attestationResponse.status;\n        if (attestationResponse.ok) {\n          const envelope = await attestationResponse.json();\n          result.provenanceEnvelopeKeys = Object.keys(envelope);\n          result.provenanceEnvelope = envelope;\n        }\n      } catch (error) {\n        result.reasons.push(`provenance fetch failed: ${error instanceof Error ? error.message : String(error)}`);\n      }\n    }
+    if (dist.attestations?.url) {
+      try {\n        const attestationResponse = await fetch(dist.attestations.url);\n        result.provenanceFetchStatus = attestationResponse.status;\n        if (attestationResponse.ok) {\n          const envelope = await attestationResponse.json();\n          result.provenanceEnvelopeKeys = Object.keys(envelope);\n          result.provenanceEnvelope = envelope;\n        }\n      } catch (error) {\n        result.reasons.push(`provenance fetch failed: ${error instanceof Error ? error.message : String(error)}`);\n      }\n    }
     if (!dist.integrity || !dist.tarball) throw new Error("registry metadata lacks dist.integrity or dist.tarball");
 
     const tarballResponse = await fetch(dist.tarball);
