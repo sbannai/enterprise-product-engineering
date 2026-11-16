@@ -26,3 +26,17 @@ test("certificate role parser fails closed for missing or malformed subject outp
   assert.equal(parseCustomerAssetScanChildDatabaseCertificateRole("subject=CN=\n"), undefined);
   assert.equal(parseCustomerAssetScanChildDatabaseCertificateRole("x".repeat(16_385)), undefined);
 });
+
+
+test("PostgreSQL TLS host identity rejects literal IPv4 and IPv6 addresses", async () => {
+  const { assertCustomerAssetScanChildPostgresDnsHost } = await import("../dist/packages/assets/customer-asset-scan-child-database-tls-material.js");
+  for (const host of ["127.0.0.1", "192.0.2.10", "::1", "2001:db8::1"]) {
+    assert.throws(() => assertCustomerAssetScanChildPostgresDnsHost(host), /DATABASE_HOST_IDENTITY_INVALID/);
+  }
+});
+
+test("PostgreSQL TLS host identity accepts DNS names without whitespace", async () => {
+  const { assertCustomerAssetScanChildPostgresDnsHost } = await import("../dist/packages/assets/customer-asset-scan-child-database-tls-material.js");
+  assert.equal(assertCustomerAssetScanChildPostgresDnsHost("postgres.internal.example"), "postgres.internal.example");
+  assert.throws(() => assertCustomerAssetScanChildPostgresDnsHost(" postgres.internal.example"), /DATABASE_HOST_IDENTITY_INVALID/);
+});
