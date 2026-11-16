@@ -48,7 +48,9 @@ for (const candidate of candidates) {
           result.provenanceEnvelopeKeys = Object.keys(envelope);
           result.provenanceEnvelope = envelope;
         }
-      } catch (error) {\n        result.reasons.push(`provenance fetch failed: ${error instanceof Error ? error.message : String(error)}`);\n      }
+      } catch (error) {
+        result.reasons.push(`provenance fetch failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
     if (!dist.integrity || !dist.tarball) throw new Error("registry metadata lacks dist.integrity or dist.tarball");
 
