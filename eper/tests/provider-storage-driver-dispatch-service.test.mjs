@@ -53,9 +53,29 @@ test("resolves tenant-scoped runtime and invokes only the requested operation", 
   });
   assert.deepEqual(result, { kind: "not_found" });
   assert.equal(f.calls[0][1].capability, "storage.upload.lookup");
-  assert.equal(f.calls[1][0], "lookup");
+  assert.equal(f.calls[1][0], "credentials");
+  assert.equal(f.calls[2][0], "lookup");
   assert.equal(f.calls[2][1].credentials, f.credentials);
   assert.equal(JSON.stringify(result).includes("must-not-escape"), false);
+});
+
+test("blocks dependencies before any provider secret lookup or resolution", async () => {
+  const f = fixture({
+    driver: { dependencyIds: ["vendor-sdk"] },
+    dependencyInventory: {
+      async get() { return null; },
+      async listInstallations() { return []; },
+    },
+  });
+  await assert.rejects(() => f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-dependency-blocked",
+    operation: { kind: "lookup_upload", request: {
+      tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "session",
+    } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_DEPENDENCY_BLOCKED");
+  assert.deepEqual(f.calls.map(call => call[0]), ["runtime"]);
+  assert.equal(f.calls.some(call => call[0] === "lookup"), false);
 });
 
 test("rejects a runtime selection that does not match the requested tenant/application", async () => {
