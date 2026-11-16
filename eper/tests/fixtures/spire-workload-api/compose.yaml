@@ -18,6 +18,8 @@ services:
       - "${SPIRE_FIXTURE_DIR:?}/agent:/etc/spire/agent:ro"
       - agent-data:/var/lib/spire/agent
       - agent-public:/run/spire/agent/public
+    tmpfs:
+      - /var/lib/spire/agent/.data:uid=1000,gid=1000,mode=0700
     networks: [spire-isolated]
     depends_on: [spire-server]
     restart: "no"
@@ -26,6 +28,7 @@ services:
     image: ghcr.io/spiffe/spire-agent:1.16.0@sha256:ab3a8ce70435374cc5d84c81eabf0278dc046ddbc0a736d59694ba9e5975b1b6
     entrypoint: ["/opt/spire/bin/spire-agent"]
     network_mode: "none"
+    group_add: ["1000"]
     volumes:
       - agent-public:/run/spire/agent/public:ro
     restart: "no"
