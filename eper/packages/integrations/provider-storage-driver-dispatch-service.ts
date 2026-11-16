@@ -99,7 +99,9 @@ export class ProviderStorageDispatchError extends Error {
     | "PROVIDER_STORAGE_DISPATCH_ABORTED"
     | "PROVIDER_STORAGE_DISPATCH_DEPENDENCY_BLOCKED"
     | "PROVIDER_STORAGE_DISPATCH_OBJECT_TOO_LARGE"
-    | "PROVIDER_STORAGE_DISPATCH_RUNTIME_LIMITS_UNAVAILABLE") {
+    | "PROVIDER_STORAGE_DISPATCH_RUNTIME_LIMITS_UNAVAILABLE"
+    | "PROVIDER_STORAGE_DISPATCH_CONCURRENCY_LIMIT"
+    | "PROVIDER_STORAGE_DISPATCH_TIMEOUT") {
     super(code);
     this.name = "ProviderStorageDispatchError";
   }
@@ -119,10 +121,91 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
       "resolveRuntime" | "resolveCredentials"
     >,
     private readonly dependencyInventory?: DependencyInventoryReader,
-    private readonly runtimeLimits?: { maxObjectBytes: number },
+    private readonly runtimeLimits?: { maxObjectBytes: number; requestTimeoutMs?: number; maxConcurrentOperations?: number },
   ) {}
 
+  private activeOperations = 0;
+
   async dispatch(input: {
+    tenantId: string;
+    applicationId: string;
+    requestId: string;
+    actorId: string;
+    correlationId: string;
+    operation: ProviderStorageOperation;
+    signal?: AbortSignal;
+    expectedConnectionId?: string;
+  }): Promise<ProviderStorageOperationResult> {
+    const limits = this.runtimeLimits;
+    if (!limits || !Number.isSafeInteger(limits.maxConcurrentOperations) ||
+        (limits.maxConcurrentOperations as number) < 1 ||
+        !Number.isSafeInteger(limits.requestTimeoutMs) ||
+        (limits.requestTimeoutMs as number) < 1) {
+      throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_RUNTIME_LIMITS_UNAVAILABLE");
+    }
+    if (this.activeOperations >= (limits.maxConcurrentOperations as number)) {
+      throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_CONCURRENCY_LIMIT");
+    }
+    this.activeOperations += 1;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let finished = false;
+    const cleanup = () => {
+      if (finished) return;
+      finished = true;
+      if (timer !== undefined) clearTimeout(timer);
+      input.signal?.removeEventListener("abort", abortFromCaller);
+      this.activeOperations = Math.max(0, this.activeOperations - 1);
+    };
+    const abortFromCaller = () => controller.abort();
+    if (input.signal?.aborted) controller.abort();
+    else input.signal?.addEventListener("abort", abortFromCaller, { once: true });
+    timer = setTimeout(() => controller.abort(), limits.requestTimeoutMs as number);
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_TIMEOUT"));
+      }, limits.requestTimeoutMs as number);
+    });
+    try {
+      const result = await Promise.race([
+        this.dispatchWithSignal({ ...input, signal: controller.signal }),
+        timeout,
+      ]);
+      if (controller.signal.aborted) {
+        throw new ProviderStorageDispatchError(input.signal?.aborted
+          ? "PROVIDER_STORAGE_DISPATCH_ABORTED"
+          : "PROVIDER_STORAGE_DISPATCH_TIMEOUT");
+      }
+      if (result && typeof result === "object" &&
+          typeof (result as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === "function") {
+        const source = result as AsyncIterable<Uint8Array>;
+        return (async function* () {
+          try {
+            for await (const chunk of source) {
+              if (controller.signal.aborted) {
+                throw new ProviderStorageDispatchError(input.signal?.aborted
+                  ? "PROVIDER_STORAGE_DISPATCH_ABORTED"
+                  : "PROVIDER_STORAGE_DISPATCH_TIMEOUT");
+              }
+              yield chunk;
+            }
+          } finally {
+            controller.abort();
+            cleanup();
+          }
+        })();
+      }
+      cleanup();
+      return result;
+    } catch (error) {
+      controller.abort();
+      cleanup();
+      throw error;
+    }
+  }
+
+  private async dispatchWithSignal(input: {
     tenantId: string;
     applicationId: string;
     requestId: string;
