@@ -66,3 +66,22 @@ EPER currently requires JWT-SVID for the scanner-child identity contract. This S
 - Cloud infrastructure or chargeable resources.
 - Production CA, signer, secret broker, provider credentials, storage drivers, or scanner engine activation.
 - Business UAT authorization.
+
+
+## 2026-11-16 registry preflight results
+
+The Node 20 hosted preflight completed successfully for registry integrity/signature/provenance verification and lockfile generation.
+
+Verified evidence:
+- Exact tarball: `@jeengbe/spiffe@2.1.1`, 37,698 bytes.
+- Registry SRI: `sha512-Sel0giVDmHq74NSkXAf9F5Qu/+x+JrvKmz9jzCLFyF44j/d11xFypFvx3zQp9bmeYHM2yul6BNlkWj7i3Jg68g==`.
+- Independently computed SHA-512 of the downloaded tarball matches the registry SRI and the SLSA provenance subject digest.
+- `npm audit signatures --json --include-attestations`: 3 verified packages, 0 invalid, 0 missing. The SDK entry includes a SLSA v1 provenance attestation.
+- Provenance identifies source repository `https://github.com/jeengbe/ts-packages`, source commit `f97e382f909827aed0ae5f0b8550f70438dc7f86`, workflow `.github/workflows/ci.yml`, and GitHub-hosted builder.
+- Clean `npm ci --ignore-scripts` passed; exact generated lockfile records SDK as `dev: true`.
+
+**Compatibility blocker discovered:** the resolved transitive dependency `p-retry@8.0.1` declares `engines.node >=22`. EPER's existing Node 20 target is therefore outside the declared support range of the resolved SDK dependency tree. The install passed only because npm's default engine-strict setting is false; that is not proof of supported Node 20 runtime behavior. Do not treat the SDK as Node 20-compatible without an explicit compatibility decision and real runtime tests.
+
+**Platform runtime context:** Node.js 20 reached EOL on 2026-03-24. Node.js 22 is in Maintenance LTS; Node.js 24 is LTS as of this evaluation. The recommended platform direction is to evaluate Node.js 24 LTS as EPER's supported runtime baseline, rather than pinning an unsupported older transitive dependency merely to preserve Node 20. This is a recommendation, not an approved runtime change.
+
+The generated package manifest and lockfile remain CI artifacts only. No dependency has been committed to EPER's source manifest or lockfile pending the Node runtime decision.
