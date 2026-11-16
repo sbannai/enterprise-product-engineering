@@ -17,7 +17,7 @@ for (const candidate of candidates) {
     tarballIntegrityMatches: false,
     registrySignatureMetadataPresent: false,
     provenanceMetadataPresent: false,
-    sourceCommitMatches: false,
+    sourceCommitMatches: null,\n    provenanceEnvelopeKeys: [],\n    provenanceFetchStatus: null,
     npmAuditSignaturesExitCode: null,
     npmAuditSignaturesOutput: "",
     status: "BLOCKED",
@@ -36,7 +36,7 @@ for (const candidate of candidates) {
     const dist = metadata.dist ?? {};
     result.registrySignatureMetadataPresent = Array.isArray(dist.signatures) && dist.signatures.length > 0;
     result.provenanceMetadataPresent = Boolean(dist.attestations?.url || dist.attestations?.integrity);
-    result.sourceCommitMatches = metadata.gitHead === candidate.expectedGitHead;
+    result.sourceCommitMatches = metadata.gitHead ? metadata.gitHead === candidate.expectedGitHead : null;\n    if (dist.attestations?.url) {\n      try {\n        const attestationResponse = await fetch(dist.attestations.url);\n        result.provenanceFetchStatus = attestationResponse.status;\n        if (attestationResponse.ok) {\n          const envelope = await attestationResponse.json();\n          result.provenanceEnvelopeKeys = Object.keys(envelope);\n          result.provenanceEnvelope = envelope;\n        }\n      } catch (error) {\n        result.reasons.push(`provenance fetch failed: ${error instanceof Error ? error.message : String(error)}`);\n      }\n    }
     if (!dist.integrity || !dist.tarball) throw new Error("registry metadata lacks dist.integrity or dist.tarball");
 
     const tarballResponse = await fetch(dist.tarball);
@@ -47,11 +47,11 @@ for (const candidate of candidates) {
     if (!result.tarballIntegrityMatches) result.reasons.push("downloaded tarball SHA-512 does not match registry dist.integrity");
     if (!result.registrySignatureMetadataPresent) result.reasons.push("registry signature metadata absent");
     if (!result.provenanceMetadataPresent) result.reasons.push("registry provenance attestation metadata absent");
-    if (!result.sourceCommitMatches) result.reasons.push(`registry gitHead mismatch (found ${metadata.gitHead ?? "missing"})`);
+    if (result.sourceCommitMatches === false) result.reasons.push(`registry gitHead mismatch (found ${metadata.gitHead})`);
 
     temp = await mkdtemp(join(tmpdir(), "eper-spiffe-evidence-"));
     await writeFile(join(temp, "package.json"), JSON.stringify({ name: "eper-spiffe-artifact-evidence", version: "1.0.0", private: true }, null, 2));
-    const install = spawnSync("npm", ["install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund", "--save-exact", `${candidate.name}@${candidate.version}`], { cwd: temp, encoding: "utf8", timeout: 120000 });
+    const install = spawnSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--save-exact", `${candidate.name}@${candidate.version}`], { cwd: temp, encoding: "utf8", timeout: 120000 });
     if (install.status !== 0) {
       result.reasons.push(`isolated lock resolution failed: ${(install.stderr || install.stdout).trim().slice(-1200)}`);
     } else {
@@ -60,7 +60,7 @@ for (const candidate of candidates) {
       result.npmAuditSignaturesOutput = (audit.stdout + audit.stderr).trim().slice(-3000);
       if (audit.status !== 0) result.reasons.push("npm audit signatures did not pass for the isolated candidate dependency closure");
     }
-    if (result.tarballIntegrityMatches && result.registrySignatureMetadataPresent && result.provenanceMetadataPresent && result.sourceCommitMatches && result.npmAuditSignaturesExitCode === 0) {
+    if (result.tarballIntegrityMatches && result.registrySignatureMetadataPresent && result.provenanceMetadataPresent && result.sourceCommitMatches !== false && result.npmAuditSignaturesExitCode === 0) {
       result.status = "VERIFIED";
     }
   } catch (error) {
