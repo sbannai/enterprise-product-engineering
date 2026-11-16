@@ -1259,7 +1259,7 @@ export class PostgresCustomerAssetRepository {
   async retryScanJob(input: {
     tenantId: string; applicationId: string; uploadSessionId: string; workerId: string;
     errorCode: string; retryAfterMs: number; claimGeneration: number;
-  }): Promise<"pending" | "dead_letter" | "lease_lost"> {
+  }): Promise<"pending" | "attempts_exhausted" | "lease_lost"> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
     this.validateId(input.uploadSessionId, "uploadSessionId");
@@ -1273,7 +1273,7 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      const result = await client.query<{ state: "pending" | "dead_letter" }>(
+      const result = await client.query<{ state: "pending" | "attempts_exhausted" }>(
         `UPDATE eper_customer_asset_scan_jobs
             SET state = CASE WHEN attempt_count >= max_attempts THEN 'leased' ELSE 'pending' END,
                 available_at = CASE WHEN attempt_count >= max_attempts THEN available_at
@@ -1285,7 +1285,7 @@ export class PostgresCustomerAssetRepository {
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
             AND state = 'leased' AND lease_owner = $4 AND lease_expires_at > now()
             AND claim_generation = $7::bigint
-          RETURNING CASE WHEN attempt_count >= max_attempts THEN 'dead_letter' ELSE state END AS state`,
+          RETURNING CASE WHEN attempt_count >= max_attempts THEN 'attempts_exhausted' ELSE state END AS state`,
         [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId,
           input.retryAfterMs, input.errorCode, input.claimGeneration],
       );
