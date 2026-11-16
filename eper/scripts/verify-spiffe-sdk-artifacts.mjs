@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const candidates = [
-  { name: "@jeengbe/spiffe", version: "2.1.1", expectedGitHead: "8c7db917ac19ed9339ef3a47a2c180a52a1168d6" },
+  { name: "@jeengbe/spiffe", version: "2.1.1", expectedGitHead: "f97e382f909827aed0ae5f0b8550f70438dc7f86" },
   { name: "spiffe", version: "0.5.1", expectedGitHead: "633547b255fa81e865b87c266459883bac98bbd9" }
 ];
 
@@ -72,7 +72,7 @@ for (const candidate of candidates) {
     result.tarballIntegrityMatches = actualIntegrity === dist.integrity;
     const statement = result.slsaStatement;
     if (statement) {
-      const subject = statement.subject?.find((item) => item.name === `pkg:npm/${candidate.name.replace("/", "%2f")}@${candidate.version}` || item.name === `pkg:npm/${candidate.name}@${candidate.version}`);
+      const subject = statement.subject?.find((item) => item.name === `pkg:npm/${candidate.name.startsWith("@") ? "%40" + candidate.name.slice(1) : candidate.name}@${candidate.version}` || item.name === `pkg:npm/${candidate.name}@${candidate.version}`);
       const predicate = statement.predicate;
       const build = predicate?.buildDefinition;
       const source = build?.resolvedDependencies?.find((item) => item.uri?.startsWith("git+https://github.com/jeengbe/ts-packages@"));
