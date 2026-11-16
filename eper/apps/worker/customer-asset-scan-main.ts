@@ -64,9 +64,6 @@ try {
     databasePort: boundedInteger("EPER_SCANNER_CHILD_PGPORT", 5432, 1, 65535),
     databaseName: required("EPER_SCANNER_CHILD_PGDATABASE"),
     databaseUser: required("EPER_SCANNER_CHILD_PGUSER"),
-    databaseCaFile: required("EPER_SCANNER_CHILD_PGSSLROOTCERT"),
-    databaseClientCertificateFile: required("EPER_SCANNER_CHILD_PGSSLCERT"),
-    databaseClientKeyFile: required("EPER_SCANNER_CHILD_PGSSLKEY"),
     compositionModulePath: required("EPER_CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_MODULE"),
   };
   console.log("EPER customer asset scan worker started");
