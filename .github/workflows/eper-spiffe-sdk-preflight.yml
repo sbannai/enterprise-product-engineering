@@ -1,0 +1,63 @@
+name: EPER SPIFFE SDK package preflight
+
+on:
+  pull_request:
+    paths:
+      - "eper/package.json"
+      - "eper/package-lock.json"
+      - "eper/uat/EPER_SCANNER_CHILD_SPIFFE_SDK_EVALUATION.md"
+      - ".github/workflows/eper-spiffe-sdk-preflight.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: eper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+          cache-dependency-path: eper/package-lock.json
+      - name: Use current npm CLI for provenance verification
+        run: npm install --global npm@latest
+      - name: Record exact registry metadata and package tarball
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$RUNNER_TEMP/spiffe-sdk-evidence"
+          npm view @jeengbe/spiffe@2.1.1 version license dist.tarball dist.integrity dist.signatures repository --json > "$RUNNER_TEMP/spiffe-sdk-evidence/registry-metadata.json"
+          npm pack @jeengbe/spiffe@2.1.1 --json --pack-destination "$RUNNER_TEMP/spiffe-sdk-evidence" > "$RUNNER_TEMP/spiffe-sdk-evidence/npm-pack.json"
+          tar -tzf "$RUNNER_TEMP/spiffe-sdk-evidence/jeengbe-spiffe-2.1.1.tgz" > "$RUNNER_TEMP/spiffe-sdk-evidence/tarball-files.txt"
+      - name: Generate exact development lockfile without lifecycle scripts
+        run: npm install --package-lock-only --ignore-scripts --save-dev --save-exact @jeengbe/spiffe@2.1.1
+      - name: Install locked tree without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Verify registry signatures and provenance attestations
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm audit signatures --json --include-attestations > "$RUNNER_TEMP/spiffe-sdk-evidence/signature-attestation-report.json"
+      - name: Record resolved dependency tree
+        run: npm ls --all --json > "$RUNNER_TEMP/spiffe-sdk-evidence/dependency-tree.json"
+      - name: Preserve generated manifest and lockfile
+        shell: bash
+        run: |
+          cp package.json "$RUNNER_TEMP/spiffe-sdk-evidence/package.json"
+          cp package-lock.json "$RUNNER_TEMP/spiffe-sdk-evidence/package-lock.json"
+          node --version > "$RUNNER_TEMP/spiffe-sdk-evidence/node-version.txt"
+          npm --version > "$RUNNER_TEMP/spiffe-sdk-evidence/npm-version.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eper-spiffe-sdk-2.1.1-preflight-evidence
+          path: ${{ runner.temp }}/spiffe-sdk-evidence/
+          if-no-files-found: error
+          retention-days: 14
