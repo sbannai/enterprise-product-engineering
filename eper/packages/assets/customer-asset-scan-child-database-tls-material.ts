@@ -17,7 +17,7 @@ const execFile = promisify(execFileCallback);
 export function assertCustomerAssetScanChildPostgresDnsHost(host: string): string {
   if (typeof host !== "string" || host.length === 0 || host.trim() !== host ||
       host.length > 253 || isIP(host) !== 0 ||
-      !/^(?=.{1,253}$)(?=.*[A-Za-z])[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\\.?$/.test(host)) {
+      !/^(?=.{1,253}$)(?=.*[A-Za-z])[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\.?$/.test(host)) {
     throw new Error("CUSTOMER_ASSET_SCAN_CHILD_DATABASE_HOST_IDENTITY_INVALID");
   }
   // WHATWG URL parsing canonicalizes resolver-recognized IPv4 aliases such as
