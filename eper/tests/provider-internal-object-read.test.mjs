@@ -120,3 +120,31 @@ test("forwards return to a provider iterator even when the consumer never calls 
   assert.equal(returnCalls, 1);
   assert.deepEqual(await verified.next(), { done: true, value: undefined });
 });
+
+
+test("removes the AbortSignal listener after a verified stream completes", async () => {
+  const controller = new AbortController();
+  const signal = controller.signal;
+  const originalAdd = signal.addEventListener.bind(signal);
+  const originalRemove = signal.removeEventListener.bind(signal);
+  let addCalls = 0;
+  let removeCalls = 0;
+  signal.addEventListener = (type, listener, options) => {
+    if (type === "abort") addCalls++;
+    return originalAdd(type, listener, options);
+  };
+  signal.removeEventListener = (type, listener, options) => {
+    if (type === "abort") removeCalls++;
+    return originalRemove(type, listener, options);
+  };
+
+  const verified = verifiedProviderInternalObjectChunks({
+    source: (async function* () { yield bytes; })(),
+    expectedSizeBytes: 3, expectedSha256: sha256, signal,
+  });
+  assert.deepEqual(await collect(verified), [97, 98, 99]);
+  assert.equal(addCalls, 1);
+  assert.equal(removeCalls, 1);
+  controller.abort();
+  assert.equal(removeCalls, 1, "completed stream must not retain an abort listener");
+});
