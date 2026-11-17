@@ -71,8 +71,9 @@ try {
       spiffeId: expectedSpiffeId,
     }))[0].token;
     // Test rejection before a successful validation can populate an audience cache.
-    await assert.rejects(
-      signerRuntime.validator.validateJwt("eper:wrong-audience", scannerToken),
+    assert.equal(
+      await signerRuntime.validator.validateJwt("eper:wrong-audience", scannerToken),
+      null,
     );
     const independentlyValidated = await signerRuntime.validator.validateJwt(
       CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
@@ -80,11 +81,12 @@ try {
     );
     assert.equal(independentlyValidated.spiffeId, expectedSpiffeId);
     assert.ok(independentlyValidated.claims.exp > Math.floor(Date.now() / 1000));
-    await assert.rejects(
-      signerRuntime.validator.validateJwt(
+    assert.equal(
+      await signerRuntime.validator.validateJwt(
         CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
         "not-a-valid-jwt-svid-token-value",
       ),
+      null,
     );
     console.log("PASS: signer SDK validates SVID signature, audience and expiry; rejects wrong audience and malformed token");
   } finally {
