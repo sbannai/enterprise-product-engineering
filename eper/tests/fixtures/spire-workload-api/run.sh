@@ -187,6 +187,13 @@ docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T spire-server \
   -parentID "$AGENT_ID" -spiffeID "$EXPECTED_ID" \
   -selector unix:uid:20001 -selector unix:gid:20001 >/dev/null
 
+# The signer is a separate unprivileged process with its own SPIFFE identity.
+# It shares only the Agent Workload API socket, not scanner process credentials.
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T spire-server \
+  /opt/spire/bin/spire-server entry create -socketPath "$SERVER_SOCKET" \
+  -parentID "$AGENT_ID" -spiffeID "spiffe://example.org/ns/scanner/sa/customer-asset-scan-signer" \
+  -selector unix:uid:20004 -selector unix:gid:20004 >/dev/null
+
 probe() {
   local uid="$1"
   # Unix WorkloadAttestor resolves the caller PID. Execute as the tested
@@ -232,6 +239,9 @@ echo "PASS: registered UID received the expected SPIFFE identity"
 # registration/selector propagation and treating an empty first SVID set as
 # an invalid identity result.
 docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --build --rm node-sdk-probe
+
+# Run the signer in a distinct container process and verify its own identity.
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --build --rm signer-sdk-probe
 
 # Both an unregistered UID and a sibling UID must fail to obtain any SVID.
 for uid in 20002 20003; do
