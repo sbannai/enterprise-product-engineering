@@ -1,6 +1,12 @@
 name: EPER SPIRE local Workload API attestation
 
 on:
+  push:
+    branches:
+      - test/459-local-scanner-child-composition
+    paths:
+      - "eper/tests/fixtures/spire-workload-api/**"
+      - ".github/workflows/eper-spire-local-workload-api.yml"
   pull_request:
     paths:
       - "eper/tests/fixtures/spire-workload-api/**"
