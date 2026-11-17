@@ -51,7 +51,7 @@ try {
     writeFile(csrPath, request.csrPem, { mode: 0o600 }),
   ]);
   await execFile("openssl", [
-    "verify", "-CAfile", "/signer-ipc/ca.crt", "-purpose", "sslclient", certPath,
+    "verify", "-CAfile", "/fixture/scanner-client-ca.crt", "-purpose", "sslclient", certPath,
   ], { timeout: 10_000, maxBuffer: 16_384 });
   const [details, certKey, csrKey] = await Promise.all([
     execFile("openssl", ["x509", "-in", certPath, "-noout", "-subject", "-enddate", "-ext", "extendedKeyUsage"]),
