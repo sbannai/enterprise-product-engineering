@@ -114,11 +114,10 @@ export async function createCustomerAssetScanChildRuntimeDependencies({
       // for this marker before aborting the actual production child.
       if (requestId === "fixture-cancel-midflight") {
         await writeFile("/control/scanner-entered", "entered", { mode: 0o600 });
-        await new Promise(resolve => {
-          if (scanSignal.aborted) resolve();
-          else scanSignal.addEventListener("abort", resolve, { once: true });
-        });
-        throw new Error("fixture scan aborted");
+        // Intentionally non-cooperative: this proves the parent supervisor
+        // kills a real blocked production child rather than relying on child
+        // code to observe cancellation.
+        await new Promise(() => {});
       }
       let received = 0;
       for await (const chunk of scanInput.source) {
