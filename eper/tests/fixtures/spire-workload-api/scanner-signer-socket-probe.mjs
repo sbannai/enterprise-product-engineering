@@ -80,11 +80,34 @@ try {
     "SELECT concat_ws('|', session_user, current_user, has_function_privilege(current_user, 'public.eper_resolve_customer_asset_scan_child_context(uuid,bigint)', 'EXECUTE'), has_table_privilege(current_user, 'public.eper_customer_assets', 'SELECT')) AS proof",
   );
   assert.equal(identityResult.rows[0]?.proof, "eper_fixture_scanner|eper_fixture_scanner|t|f");
-  const resolver = await pool.query(
-    "SELECT count(*)::int AS count FROM public.eper_resolve_customer_asset_scan_child_context($1::uuid, $2::bigint)",
-    ["00000000-0000-0000-0000-000000000001", 1],
+  const assetId = "00000000-0000-4000-8000-000000000101";
+  const valid = await pool.query(
+    "SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1::uuid, $2::bigint)",
+    [assetId, 7],
   );
-  assert.equal(resolver.rows[0]?.count, 0);
+  assert.equal(valid.rows.length, 1);
+  assert.equal(valid.rows[0].tenant_id, "fixture-tenant");
+  assert.equal(valid.rows[0].application_id, "fixture-application");
+  assert.equal(valid.rows[0].worker_id, "fixture-scanner:worker-01");
+  assert.equal(valid.rows[0].spiffe_id, expectedId);
+  assert.equal(valid.rows[0].provider_connection_id, "fixture-provider-connection");
+  assert.equal(valid.rows[0].asset_id, assetId);
+  assert.equal(valid.rows[0].provider_upload_reference, "fixture-provider-upload://upload-101");
+  assert.equal(Number(valid.rows[0].size_bytes), 11);
+  assert.equal(Number(valid.rows[0].attempt), 1);
+
+  const staleGeneration = await pool.query(
+    "SELECT count(*)::int AS count FROM public.eper_resolve_customer_asset_scan_child_context($1::uuid, $2::bigint)",
+    [assetId, 6],
+  );
+  assert.equal(staleGeneration.rows[0]?.count, 0);
+  const foreignTenant = await pool.query(
+    "SELECT count(*)::int AS count FROM public.eper_resolve_customer_asset_scan_child_context($1::uuid, $2::bigint)",
+    ["00000000-0000-4000-8000-000000000202", 7],
+  );
+  assert.equal(foreignTenant.rows[0]?.count, 0);
+  console.log("PASS: resolver returns only the session_user-bound tenant/application/worker/SPIFFE/provider context for a valid leased asset");
+  console.log("PASS: stale claim generation and another tenant's asset resolve to no rows");
   console.log("PASS: separate scanner process exchanged CSR/JWT-SVID with signer; signer-issued certificate authenticated PostgreSQL mTLS LOGIN");
   console.log("PASS: session_user mapping and EXECUTE-only resolver boundary verified over the dynamic mTLS connection");
 } finally {
