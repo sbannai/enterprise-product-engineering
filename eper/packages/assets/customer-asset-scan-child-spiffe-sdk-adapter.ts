@@ -41,6 +41,7 @@ export class CustomerAssetScanChildSpiffeSdkAdapter implements SpiffeWorkloadApi
     return [{
       spiffeId: svid.spiffeId,
       expiresAtMs: svid.expiresAtMs,
+      jwtSvid: svid.token,
     }];
   }
 }
