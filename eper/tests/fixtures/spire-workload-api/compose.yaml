@@ -79,10 +79,8 @@ services:
   signer-sdk-probe:
     build:
       context: ../../../..
-      dockerfile: eper/tests/fixtures/spire-workload-api/Dockerfile.node-sdk-probe
-    user: "20004:20004"
+      dockerfile: eper/tests/fixtures/spire-workload-api/Dockerfile.signer-sdk-probe
     pid: "service:spire-agent"
-    command: ["node", "/eper/tests/fixtures/spire-workload-api/signer-sdk-probe.mjs"]
     volumes:
       - "${SPIRE_FIXTURE_DIR:?}/agent-public:/run/spire/agent/public:ro"
     depends_on: [spire-agent]
