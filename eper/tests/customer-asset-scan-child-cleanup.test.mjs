@@ -54,3 +54,30 @@ test("child cleanup releases earlier resources when composition factory partiall
   assert.deepEqual(await registry.close(), []);
   assert.deepEqual(closed, ["provider-client", "sdk-client"]);
 });
+
+
+test("child cleanup immediately disposes resources registered while close is draining", async () => {
+  const registry = createCustomerAssetScanChildCleanupRegistry();
+  const closed = [];
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  registry.register(async () => {
+    await gate;
+    closed.push("original");
+  });
+  const closing = registry.close();
+  registry.register(async () => { closed.push("late"); });
+  release();
+  assert.deepEqual(await closing, []);
+  assert.deepEqual(closed, ["original", "late"]);
+});
+
+test("child cleanup contains rejection from a disposer registered after close completed", async () => {
+  const registry = createCustomerAssetScanChildCleanupRegistry();
+  assert.deepEqual(await registry.close(), []);
+  registry.register(async () => { throw new Error("late cleanup failure"); });
+  // Allow the immediately-started disposer to settle; its rejection must be
+  // captured internally rather than becoming an unhandled rejection.
+  await Promise.resolve();
+  await Promise.resolve();
+});
