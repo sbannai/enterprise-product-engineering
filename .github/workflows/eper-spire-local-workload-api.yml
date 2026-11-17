@@ -10,9 +10,11 @@ on:
       - "eper/packages/assets/customer-asset-scan-child-spiffe-sdk-adapter.ts"
       - "eper/packages/assets/customer-asset-scan-child-database-credential-issuer.ts"
       - "eper/packages/assets/customer-asset-scan-child-database-signer-policy.ts"
+      - "eper/packages/assets/customer-asset-scan-child-database-signer-spiffe-adapter.ts"
       - "eper/tests/customer-asset-scan-child-spiffe-*.test.mjs"
       - "eper/tests/customer-asset-scan-child-database-credential-issuer*.test.mjs"
-      - "eper/tests/customer-asset-scan-child-database-signer-policy.test.mjs"
+      - "eper/tests/customer-asset-scan-child-database-signer-policy.test.mjs tests/customer-asset-scan-child-database-signer-spiffe-adapter.test.mjs"
+      - "eper/tests/customer-asset-scan-child-database-signer-spiffe-adapter.test.mjs"
       - ".github/workflows/eper-spire-local-workload-api.yml"
   pull_request:
     paths:
