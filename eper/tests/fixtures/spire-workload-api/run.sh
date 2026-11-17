@@ -133,10 +133,12 @@ EOF
 cat > "$SPIRE_FIXTURE_DIR/postgres/pg_ident.conf" <<'EOF'
 eper_fixture_scanner eper_fixture_scanner eper_fixture_scanner
 EOF
-chmod 755 "$SPIRE_FIXTURE_DIR" "$SPIRE_FIXTURE_DIR/postgres"
+chmod 755 "$SPIRE_FIXTURE_DIR"
 chmod 600 "$SPIRE_FIXTURE_DIR/postgres/server.key" "$SPIRE_FIXTURE_DIR/postgres/client.key"
-sudo chown -R 999:999 "$SPIRE_FIXTURE_DIR/postgres"
 chmod 644 "$SPIRE_FIXTURE_DIR/postgres/ca.crt" "$SPIRE_FIXTURE_DIR/postgres/server.crt" "$SPIRE_FIXTURE_DIR/postgres/client.crt" "$SPIRE_FIXTURE_DIR/postgres/pg_hba.conf" "$SPIRE_FIXTURE_DIR/postgres/pg_ident.conf"
+# Keep the fixture directory owned by the runner so cleanup can always remove it.
+# Only the two private keys need PostgreSQL's UID for its server and psql client.
+sudo chown 999:999 "$SPIRE_FIXTURE_DIR/postgres/server.key" "$SPIRE_FIXTURE_DIR/postgres/client.key"
 
 # First prove the complete mainline audit schema and child SQL privilege boundary
 # in a separate disposable PostgreSQL service. This does not create a LOGIN or
