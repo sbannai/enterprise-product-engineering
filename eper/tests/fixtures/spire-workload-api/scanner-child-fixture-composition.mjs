@@ -24,7 +24,7 @@ import {
 const EXPECTED_SPIFFE_ID = "spiffe://example.org/ns/scanner/sa/customer-asset-scan-child";
 const EXPECTED_ROLE = "eper_fixture_scanner";
 const FIXTURE_BYTES = Buffer.from("hello world", "utf8");
-const FIXTURE_SHA256 = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5388f7ace2efcde9";
+const FIXTURE_SHA256 = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
 
 function createSpiffeRuntime() {
   const require = createRequire("/sdk/package.json");
