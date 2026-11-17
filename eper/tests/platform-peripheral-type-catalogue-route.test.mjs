@@ -12,7 +12,7 @@ function request(method,path,body,auth="Bearer durable-platform-token-0000000000
 function response(){return {statusCode:0,headers:{},body:"",writeHead(s,h){this.statusCode=s;this.headers=h;},end(v){this.body=v;}};}
 function fixture(overrides={}){
  const calls=[];const type={typeKey:"barcode.scanner",displayName:"Barcode scanner",lifecycleStatus:"ACTIVE",schemaVersion:1,adapterKey:"usb-hid",adapterVersion:"1.0.0",configurationSchema:{type:"object"},compatibility:{},schemaStatus:"DRAFT"};
- const repository={async list(limit){calls.push(["list",limit]);return [type];},async get(key){calls.push(["get",key]);return key===type.typeKey?type:null;},async create(input){calls.push(["create",input]);return {...type,...input};},async publish(input){calls.push(["publish",input]);return {...type,schemaStatus:"PUBLISHED"};}};
+ const repository={async list(limit){calls.push(["list",limit]);return [type];},async get(key){calls.push(["get",key]);return key===type.typeKey?type:null;},async create(input){calls.push(["create",input]);return {...type,...input};},async createSchemaVersion(input){calls.push(["createSchemaVersion",input]);return {...type,...input,schemaVersion:2,schemaStatus:"DRAFT"};},async publish(input){calls.push(["publish",input]);return {...type,schemaStatus:"PUBLISHED"};}};
  return {calls,credentialStore:{async resolve(){return overrides.principal===undefined?principal:overrides.principal;}},repository,environment:"sandbox",serviceVersion:"test-build"};
 }
 test("peripheral catalogue list requires dedicated permission and returns versioned no-store response",async()=>{
