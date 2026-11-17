@@ -53,8 +53,8 @@ CREATE TABLE IF NOT EXISTS eper_peripheral_type_schema_lifecycle (
   FOREIGN KEY (type_key, schema_version)
     REFERENCES eper_peripheral_type_schema_versions(type_key, schema_version)
 );
-CREATE INDEX IF NOT EXISTS eper_peripheral_type_schema_published_idx
-  ON eper_peripheral_type_schema_lifecycle(type_key, schema_version DESC)
+CREATE UNIQUE INDEX IF NOT EXISTS eper_peripheral_type_one_published_schema_idx
+  ON eper_peripheral_type_schema_lifecycle(type_key)
   WHERE lifecycle_status = 'PUBLISHED';
 
 CREATE TABLE IF NOT EXISTS eper_peripheral_type_catalogue_events (
