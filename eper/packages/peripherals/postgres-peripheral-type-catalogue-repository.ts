@@ -59,14 +59,15 @@ export class PostgresPeripheralTypeCatalogueRepository {
  constructor(private readonly pool:AuditSqlPool,private readonly serviceVersion?:string){}
  async list(limit=50):Promise<PeripheralTypeDefinition[]>{
   if(!Number.isInteger(limit)||limit<1||limit>100)throw new Error("PERIPHERAL_CATALOGUE_LIMIT_INVALID");
-  const c=await this.pool.connect();try{await c.query("SELECT set_config('eper.platform_admin','true',false)");
-   const r=await c.query<Row>(SELECT+" ORDER BY d.display_name,d.type_key,s.schema_version DESC LIMIT $1",[limit]);return r.rows.map(map);
-  }finally{c.release();}
+  const c=await this.pool.connect();try{await c.query("BEGIN");await c.query("SELECT set_config('eper.platform_admin','true',true)");
+   const r=await c.query<Row>(SELECT+" ORDER BY d.display_name,d.type_key,s.schema_version DESC LIMIT $1",[limit]);await c.query("COMMIT");return r.rows.map(map);
+  }catch(e){await c.query("ROLLBACK").catch(()=>undefined);throw e;}finally{c.release();}
  }
  async get(typeKey:string):Promise<PeripheralTypeDefinition|null>{
   const key=field(typeKey,96);const c=await this.pool.connect();try{await c.query("SELECT set_config('eper.platform_admin','true',false)");
-   const r=await c.query<Row>(SELECT+" WHERE d.type_key=$1 ORDER BY s.schema_version DESC LIMIT 1",[key]);return r.rows[0]?map(r.rows[0]):null;
-  }finally{c.release();}
+   await c.query("BEGIN");await c.query("SELECT set_config('eper.platform_admin','true',true)");
+   const r=await c.query<Row>(SELECT+" WHERE d.type_key=$1 ORDER BY s.schema_version DESC LIMIT 1",[key]);await c.query("COMMIT");return r.rows[0]?map(r.rows[0]):null;
+  }catch(e){await c.query("ROLLBACK").catch(()=>undefined);throw e;}finally{c.release();}
  }
  async create(i:PeripheralCatalogueContext&{typeKey:string;displayName:string;adapterKey:string;adapterVersion:string;configurationSchema:Record<string,unknown>;compatibility?:Record<string,unknown>}):Promise<PeripheralTypeDefinition>{
   field(i.actorId,128);field(i.correlationId,128);const typeKey=field(i.typeKey,96);
