@@ -101,6 +101,59 @@ ON CONFLICT (login_role) DO UPDATE SET
   updated_at = clock_timestamp();
 SQL
 
+echo "Seeding synthetic tenant/application/asset/upload/leased-job rows"
+compose exec -T audit-postgres psql -v ON_ERROR_STOP=1 -U postgres -d eper_scanner_fixture <<'SQL'
+INSERT INTO public.eper_customer_assets
+  (tenant_id, asset_id, repository_scope, owner_application_id, display_name,
+   original_file_name, media_category, mime_type, file_extension, size_bytes,
+   checksum_sha256, storage_adapter_key, storage_object_reference,
+   upload_status, scan_status, lifecycle_status, created_by, updated_by)
+VALUES
+  ('fixture-tenant', '00000000-0000-4000-8000-000000000101',
+   'application_restricted', 'fixture-application', 'Fixture scan input',
+   'fixture.txt', 'document', 'text/plain', 'txt', 11,
+   'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9',
+   'fixture-adapter', 'fixture-object://tenant/application/asset-101',
+   'scanning', 'pending', 'active', 'fixture-seed', 'fixture-seed'),
+  ('other-tenant', '00000000-0000-4000-8000-000000000202',
+   'application_restricted', 'other-application', 'Foreign fixture asset',
+   'foreign.txt', 'document', 'text/plain', 'txt', 11,
+   'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9',
+   'fixture-adapter', 'fixture-object://other/tenant/asset-202',
+   'scanning', 'pending', 'active', 'fixture-seed', 'fixture-seed');
+
+INSERT INTO public.eper_customer_asset_upload_sessions
+  (tenant_id, application_id, upload_session_id, asset_id, actor_id,
+   expected_size_bytes, received_size_bytes, provider_upload_reference,
+   upload_status, idempotency_key, expires_at)
+VALUES
+  ('fixture-tenant', 'fixture-application',
+   '00000000-0000-4000-8000-000000000111',
+   '00000000-0000-4000-8000-000000000101', 'fixture-actor',
+   11, 11, 'fixture-provider-upload://upload-101',
+   'completed', 'fixture-seed-idempotency-101', clock_timestamp() + interval '1 hour'),
+  ('other-tenant', 'other-application',
+   '00000000-0000-4000-8000-000000000222',
+   '00000000-0000-4000-8000-000000000202', 'fixture-actor',
+   11, 11, 'fixture-provider-upload://upload-202',
+   'completed', 'fixture-seed-idempotency-202', clock_timestamp() + interval '1 hour');
+
+INSERT INTO public.eper_customer_asset_scan_jobs
+  (tenant_id, application_id, upload_session_id, asset_id, correlation_id,
+   state, attempt_count, max_attempts, lease_owner, lease_expires_at, claim_generation)
+VALUES
+  ('fixture-tenant', 'fixture-application',
+   '00000000-0000-4000-8000-000000000111',
+   '00000000-0000-4000-8000-000000000101', 'fixture-correlation-101',
+   'leased', 1, 5, 'fixture-scanner:worker-01',
+   clock_timestamp() + interval '5 minutes', 7),
+  ('other-tenant', 'other-application',
+   '00000000-0000-4000-8000-000000000222',
+   '00000000-0000-4000-8000-000000000202', 'fixture-correlation-202',
+   'leased', 1, 5, 'other-scanner:worker-01',
+   clock_timestamp() + interval '5 minutes', 7);
+SQL
+
 echo "Authenticating the dedicated LOGIN with a dynamically issued SVID-bound client certificate"
 compose run --build --rm \
   -e PGHOST=audit-postgres \
