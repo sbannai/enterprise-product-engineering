@@ -34,6 +34,8 @@ services:
       context: ../../../..
       dockerfile: eper/tests/fixtures/spire-workload-api/Dockerfile.node-sdk-probe
     user: "20001:20001"
+    volumes:
+      - "${SPIRE_FIXTURE_DIR:?}/postgres:/fixture:ro"
     networks: [spire-isolated]
     restart: "no"
 
