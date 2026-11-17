@@ -20,6 +20,9 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$SPIRE_FIXTURE_DIR/server" "$SPIRE_FIXTURE_DIR/agent" "$SPIRE_FIXTURE_DIR/agent-public"
+mkdir -p "$SPIRE_FIXTURE_DIR/signer-ipc"
+sudo chown 20001:20001 "$SPIRE_FIXTURE_DIR/signer-ipc"
+chmod 2770 "$SPIRE_FIXTURE_DIR/signer-ipc"
 chmod 0711 "$SPIRE_FIXTURE_DIR/agent-public"
 sudo chown 1000:1000 "$SPIRE_FIXTURE_DIR/agent-public"
 
@@ -238,10 +241,22 @@ echo "PASS: registered UID received the expected SPIFFE identity"
 # registered workload identity is available. This avoids racing Agent
 # registration/selector propagation and treating an empty first SVID set as
 # an invalid identity result.
+# Keep the signer alive as a distinct UID/GID and container process. It has its
+# own SPIRE registration and Workload API access; scanner receives only the
+# shared socket and public CA certificate.
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up -d signer-process
+for _ in $(seq 1 45); do
+  if [[ -S "$SPIRE_FIXTURE_DIR/signer-ipc/signer.sock" ]]; then break; fi
+  sleep 1
+done
+if [[ ! -S "$SPIRE_FIXTURE_DIR/signer-ipc/signer.sock" ]]; then
+  echo "FAIL: isolated signer process did not create its Unix socket" >&2
+  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" logs --no-color signer-process >&2 || true
+  exit 1
+fi
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --build --rm scanner-signer-socket-probe
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" stop signer-process
 docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --build --rm node-sdk-probe
-
-# Run the signer in a distinct container process and verify its own identity.
-docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --build --rm signer-sdk-probe
 
 # Both an unregistered UID and a sibling UID must fail to obtain any SVID.
 for uid in 20002 20003; do
