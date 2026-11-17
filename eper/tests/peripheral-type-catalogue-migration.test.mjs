@@ -11,7 +11,7 @@ test("F-023 migration creates a platform-owned type catalogue and immutable sche
   assert.match(migration, /CREATE TABLE IF NOT EXISTS eper_peripheral_type_schema_versions/);
   assert.match(migration, /PRIMARY KEY \(type_key, schema_version\)/);
   assert.match(migration, /configuration_schema JSONB NOT NULL/);
-  assert.match(migration, /version_status IN \('DRAFT', 'PUBLISHED', 'DEPRECATED'\)/);
+  assert.match(migration, /lifecycle_status IN \('DRAFT', 'PUBLISHED', 'DEPRECATED'\)/);
   assert.match(migration, /EPER_PERIPHERAL_TYPE_SCHEMA_VERSION_IMMUTABLE/);
   assert.match(migration, /BEFORE UPDATE OR DELETE ON eper_peripheral_type_schema_versions/);
 });
