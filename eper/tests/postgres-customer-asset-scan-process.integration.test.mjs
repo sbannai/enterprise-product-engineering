@@ -260,6 +260,9 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env, on
   const issuer = new CustomerAssetScanChildDatabaseCredentialIssuer(
     new Map([[spiffeId, "eper_scan_child_ci"]]),
     { async sign(input) {
+      if (input.workloadJwtSvid !== "test-only-jwt-svid-fixture") {
+        throw new Error("test signer requires the verified workload JWT-SVID");
+      }
       const directory = await mkdtemp(join(tmpdir(), "eper-child-ci-issuer-"));
       try {
         const newCerts = join(directory, "newcerts");
@@ -288,9 +291,7 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env, on
         onStage?.("ca");
       await execFile("openssl", [
           "ca", "-batch", "-notext", "-config", config, "-in", csrPath, "-out", certPath,
-          "-startdate", opensslTime(Math.floor(Date.now() / 1000) - 5),
-          "-enddate", opensslTime(input.notAfterEpochSeconds),
-          "-subj", "/CN=" + input.databaseRole, "-extensions", "client",
+          "-subj", "/CN=eper_scan_child_ci", "-extensions", "client",
         ], { timeout: 10000, maxBuffer: 16384 });
         return await readFile(certPath, "utf8");
       } finally {
