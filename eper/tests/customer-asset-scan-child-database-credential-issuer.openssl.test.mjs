@@ -71,7 +71,7 @@ test("OpenSSL test signer verifies CSR, overrides its subject, enforces notAfter
 
     const workload = await new CustomerAssetScanChildSpiffeIdentityVerifier({
       async fetchJwtSvid() {
-        return [{ spiffeId, expiresAtMs: (now + 120) * 1000 }];
+        return [{ spiffeId, expiresAtMs: (now + 120) * 1000, token: "fixture.jwt.svid-value-with-sufficient-length" }];
       },
     }, spiffeId, () => now * 1000).verifyCurrentProcessIdentity();
 
