@@ -114,3 +114,40 @@ test("Unix socket delegates to signer policy for identity-derived role and SVID-
     notAfterEpochSeconds: now + 75,
   });
 });
+
+test("signer listener processes at most one request per socket while signing is pending", async t => {
+  let calls = 0;
+  let markCalled;
+  let releaseSigner;
+  const called = new Promise(resolve => { markCalled = resolve; });
+  const pending = new Promise(resolve => { releaseSigner = resolve; });
+  const { socketPath } = await fixture(t, {
+    async sign() {
+      calls += 1;
+      markCalled();
+      await pending;
+      return certificatePem;
+    },
+  });
+  const response = new Promise((resolve, reject) => {
+    const socket = createConnection(socketPath);
+    let value = "";
+    socket.once("error", reject);
+    socket.on("data", chunk => { value += chunk.toString(); });
+    socket.on("end", () => resolve(value));
+    socket.once("connect", () => {
+      socket.write(JSON.stringify({ csrPem, workloadJwtSvid: token }) + "\\n");
+    });
+  });
+  await called;
+  // A second frame arriving before the signer returns must be ignored.
+  const extra = createConnection(socketPath);
+  extra.once("connect", () => {
+    extra.write(JSON.stringify({ csrPem, workloadJwtSvid: token }) + "\\n");
+    extra.end();
+  });
+  releaseSigner();
+  const payload = await response;
+  assert.equal(JSON.parse(payload).ok, true);
+  assert.equal(calls, 1);
+});
