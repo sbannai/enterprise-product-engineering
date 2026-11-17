@@ -28,13 +28,24 @@ export interface CustomerAssetScanChildSpiffeIdentity {
   readonly trustDomain: string;
   readonly audience: typeof CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE;
   readonly expiresAt: number;
-  /** Opaque short-lived JWT-SVID; pass only to the independent signer. */
-  readonly jwtSvid: string;
 }
 
 // A WeakSet makes verification provenance unforgeable by constructing a structurally
 // identical object. Only this module's successful Workload API verifier can register it.
 const verifiedCurrentProcessIdentities = new WeakSet<object>();
+const jwtSvidByVerifiedIdentity = new WeakMap<object, string>();
+
+/** Internal issuance accessor: the bearer token is not part of the public identity object. */
+export function getVerifiedCustomerAssetScanChildJwtSvid(
+  value: CustomerAssetScanChildSpiffeIdentity,
+): string {
+  if (!isVerifiedCustomerAssetScanChildSpiffeIdentity(value)) {
+    throw new CustomerAssetScanChildSpiffeIdentityError("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_INVALID");
+  }
+  const token = jwtSvidByVerifiedIdentity.get(value);
+  if (!token) throw new CustomerAssetScanChildSpiffeIdentityError("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_INVALID");
+  return token;
+}
 
 export function isVerifiedCustomerAssetScanChildSpiffeIdentity(
   value: unknown,
@@ -111,9 +122,9 @@ export class CustomerAssetScanChildSpiffeIdentityVerifier {
         trustDomain,
         audience: CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
         expiresAt,
-        jwtSvid: fetched[0].token,
       });
       verifiedCurrentProcessIdentities.add(identity);
+      jwtSvidByVerifiedIdentity.set(identity, fetched[0].token);
       return identity;
     } catch (error) {
       // Cancellation belongs to the supervising child-process lifecycle. Do not
