@@ -12,6 +12,7 @@ import {
 const spiffeId = "spiffe://eper.example/asset-scanner/child";
 const now = 1_794_312_000_000;
 const expiresAtMs = now + 120_000;
+const jwtSvid = "fixture.jwt.svid-value-with-sufficient-length";
 
 function client({ fetched, fetchError } = {}) {
   const calls = [];
@@ -20,7 +21,7 @@ function client({ fetched, fetchError } = {}) {
     async fetchJwtSvid(input) {
       calls.push(input);
       if (fetchError) throw fetchError;
-      return fetched ?? [{ spiffeId, expiresAtMs }];
+      return fetched ?? [{ spiffeId, expiresAtMs, token: jwtSvid }];
     },
   };
 }
@@ -33,6 +34,7 @@ test("SPIFFE verifier obtains the current process SVID for the fixed audience an
   assert.equal(identity.trustDomain, "eper.example");
   assert.equal(identity.audience, CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE);
   assert.equal(identity.expiresAt, Math.floor(expiresAtMs / 1000));
+  assert.equal(identity.jwtSvid, jwtSvid);
   assert.deepEqual(api.calls, [{
     audience: [CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE],
     spiffeId,
@@ -44,7 +46,9 @@ test("SPIFFE verifier rejects an unexpected, missing, or ambiguous fetched ident
     [],
     [{ spiffeId: "spiffe://eper.example/other", expiresAtMs }],
     [{ spiffeId, expiresAtMs }, { spiffeId, expiresAtMs }],
-    [{ spiffeId, expiresAtMs: Number.NaN }],
+    [{ spiffeId, expiresAtMs: Number.NaN, token: jwtSvid }],
+    [{ spiffeId, expiresAtMs, token: "" }],
+    [{ spiffeId, expiresAtMs, token: "bad token with spaces" }],
   ]) {
     const verifier = new CustomerAssetScanChildSpiffeIdentityVerifier(
       client({ fetched }), spiffeId, () => now,
@@ -133,7 +137,7 @@ test("SPIFFE SDK adapter requests the exact child identity and discards the bear
   const adapter = new CustomerAssetScanChildSpiffeSdkAdapter({
     async getJwtSvid(audience, filter) {
       sdkCalls.push({ audience, filter });
-      return { spiffeId, token: "do-not-propagate-this-token", expiresAtMs };
+      return { spiffeId, token: "do-not-log-this-token-value", expiresAtMs };
     },
   });
   const result = await adapter.fetchJwtSvid({
@@ -144,8 +148,8 @@ test("SPIFFE SDK adapter requests the exact child identity and discards the bear
     audience: CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
     filter: { spiffeId },
   }]);
-  assert.deepEqual(result, [{ spiffeId, expiresAtMs }]);
-  assert.equal(JSON.stringify(result).includes("do-not-propagate-this-token"), false);
+  assert.deepEqual(result, [{ spiffeId, expiresAtMs, token: "do-not-log-this-token-value" }]);
+  assert.equal(JSON.stringify(result).includes("do-not-log-this-token-value"), true);
 });
 
 test("SPIFFE SDK adapter returns no identity when the workload has no entitled SVID", async () => {
@@ -160,7 +164,7 @@ test("SPIFFE SDK adapter returns no identity when the workload has no entitled S
 
 test("SPIFFE SDK adapter rejects an SDK result without its opaque token", async () => {
   const adapter = new CustomerAssetScanChildSpiffeSdkAdapter({
-    async getJwtSvid() { return { spiffeId, expiresAtMs }; },
+    async getJwtSvid() { return { spiffeId, expiresAtMs, token: "" }; },
   });
   await assert.rejects(adapter.fetchJwtSvid({
     audience: [CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE],
