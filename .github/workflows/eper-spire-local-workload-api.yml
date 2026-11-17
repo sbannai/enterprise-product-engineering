@@ -6,6 +6,11 @@ on:
       - test/459-local-scanner-child-composition
     paths:
       - "eper/tests/fixtures/spire-workload-api/**"
+      - "eper/packages/assets/customer-asset-scan-child-spiffe-identity.ts"
+      - "eper/packages/assets/customer-asset-scan-child-spiffe-sdk-adapter.ts"
+      - "eper/packages/assets/customer-asset-scan-child-database-credential-issuer.ts"
+      - "eper/tests/customer-asset-scan-child-spiffe-*.test.mjs"
+      - "eper/tests/customer-asset-scan-child-database-credential-issuer*.test.mjs"
       - ".github/workflows/eper-spire-local-workload-api.yml"
   pull_request:
     paths:
