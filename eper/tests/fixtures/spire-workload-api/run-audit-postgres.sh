@@ -163,3 +163,37 @@ compose run --build --rm \
   scanner-signer-socket-probe
 echo "PASS: dynamic signer-issued certificate authenticated the dedicated PostgreSQL LOGIN"
 echo "PASS: mTLS LOGIN invoked the session_user-bound resolver with EXECUTE-only access"
+
+echo "Launching the actual production scanner child entrypoint with fixture-owned composition"
+CHILD_RESULT="$(compose run --build --rm -T --entrypoint node scanner-child-entrypoint-probe \
+  dist/apps/worker/customer-asset-scan-child-main.js <<'JSON'
+{
+  "version": 3,
+  "type": "start",
+  "jobToken": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "claimGeneration": 7,
+  "requestId": "fixture-production-child-entrypoint",
+  "workerId": "fixture-scanner:worker-01",
+  "scannerServiceId": "fixture-scanner",
+  "input": {
+    "tenantId": "fixture-tenant",
+    "applicationId": "fixture-application",
+    "assetId": "00000000-0000-4000-8000-000000000101",
+    "checksumSha256": "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+    "sizeBytes": 11,
+    "mimeType": "text/plain"
+  }
+}
+JSON
+)"
+printf '%s' "$CHILD_RESULT" | node --input-type=module -e '
+  import assert from "node:assert/strict";
+  let input = "";
+  for await (const chunk of process.stdin) input += chunk;
+  const result = JSON.parse(input);
+  assert.equal(result.type, "result");
+  assert.equal(result.scanStatus, "clean");
+  assert.equal(result.scannerServiceId, "fixture-scanner");
+  assert.equal(result.claimGeneration, 7);
+'
+echo "PASS: production customer-asset-scan-child-main completed SPIRE identity, signer-issued PostgreSQL mTLS, DB resolver, provider stream verification and scanner execution"
