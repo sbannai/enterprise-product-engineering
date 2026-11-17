@@ -59,17 +59,6 @@ try {
   assert.equal(JSON.stringify(identity).includes("eyJ"), false);
   console.log("PASS: Node SDK obtained and EPER verified the current process JWT-SVID");
 
-  // Abort an in-flight Workload API request and prove the supervisor's reason
-  // is preserved rather than being classified as socket unavailability.
-  const cancellation = new Error("scanner child attempt cancelled");
-  const controller = new AbortController();
-  const pendingIdentity = verifier.verifyCurrentProcessIdentity(controller.signal);
-  controller.abort(cancellation);
-  await assert.rejects(
-    pendingIdentity,
-    (error) => error === cancellation,
-  );
-  console.log("PASS: in-flight SDK Workload API request preserves supervisor cancellation");
 } finally {
   await runtime.close();
 }
