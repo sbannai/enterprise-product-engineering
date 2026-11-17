@@ -51,6 +51,7 @@ export class CustomerAssetScanChildSignerAuthorizationError extends Error {
 export class CustomerAssetScanChildDatabaseSignerPolicy {
   private readonly roleBySpiffeId: ReadonlyMap<string, string>;
   private readonly maximumLifetimeSeconds: number;
+  private readonly audience: string;
 
   constructor(
     policy: CustomerAssetScanChildSignerPolicy,
@@ -74,6 +75,7 @@ export class CustomerAssetScanChildDatabaseSignerPolicy {
     }
     this.roleBySpiffeId = snapshot;
     this.maximumLifetimeSeconds = lifetime;
+    this.audience = policy.expectedAudience;
   }
 
   async sign(input: {
@@ -128,6 +130,4 @@ export class CustomerAssetScanChildDatabaseSignerPolicy {
   private expectedAudience(): string {
     return this.audience;
   }
-
-  private readonly audience = "";
 }
