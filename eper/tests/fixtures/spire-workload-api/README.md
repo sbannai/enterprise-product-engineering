@@ -39,6 +39,25 @@ bash eper/tests/fixtures/spire-workload-api/run.sh
 
 The Node SDK probe is an integration-test-only install inside its disposable image; it is not added to EPER's production package manifest or lockfile. This fixture does not enable production composition, deploy SPIRE outside the local disposable test, or authorize Business UAT.
 
+## Combined PostgreSQL + SPIRE fixture result — 17 Nov 2026
+
+The combined fixture passed on work-branch head `522f7762904f32880ed7b396aa0f992eb707ce51` (GitHub Actions run `44034225206`, job `133873109926`).
+
+Observed assertions:
+- All 57 checked-in audit migrations applied to a fresh PostgreSQL 16 database.
+- The authenticated `(uuid, bigint)` scanner-child context resolver exists and is executable by the scanner-child access role.
+- The scanner-child access role has no direct SELECT privilege on `eper_customer_assets`.
+- A second migration-runner invocation preserved the 57-row checksum ledger.
+- Registered UID/GID 20001 obtained the expected SPIFFE identity.
+- EPER's Node SDK adapter and verifier obtained and verified the current process JWT-SVID.
+- Missing and permission-restricted Workload API sockets failed closed as unavailable.
+- Unregistered UID 20002 and sibling UID 20003 received no scanner SVID.
+- Compose cleanup completed successfully.
+
+The first combined attempt exposed a race between Agent startup/registration and the SDK probe. The fixture now waits for the registered identity to be confirmed by the Agent CLI before running the Node SDK verifier. The passing run above validates that ordering.
+
+This evidence proves the fresh-schema migration and local SPIRE workload-attestation stages. It still does not prove the scanner child entrypoint, PostgreSQL LOGIN-to-SPIFFE mapping, mTLS database access, production signer, secret broker, live provider driver, or deployment composition.
+
 ## Hosted Node SDK integration result — 17 Nov 2026
 
 The first clean GitHub-hosted run passed on PR #506 head `7d9a668e2d8d0eb64dc55a57fcb7e7b8545daae4` (workflow run `44011071457`).
