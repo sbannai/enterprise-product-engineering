@@ -91,6 +91,7 @@ test("OpenSSL test signer verifies CSR, overrides its subject, enforces notAfter
       },
     }, {
       async sign(input) {
+        try {
         assert.equal(input.databaseRole, "eper_scan_child_ci");
         assert.equal(input.notAfterEpochSeconds, now + 120);
         await writeFile(csrPath, input.csrPem, { mode: 0o600 });
@@ -105,7 +106,11 @@ test("OpenSSL test signer verifies CSR, overrides its subject, enforces notAfter
           "-subj", "/CN=" + input.databaseRole,
           "-extensions", "client",
         ], { timeout: 10_000, maxBuffer: 16_384 });
-        return readFile(certPath, "utf8");
+        return await readFile(certPath, "utf8");
+        } catch (error) {
+          signerFailure = error?.stderr?.toString?.() || error?.message || String(error);
+          throw error;
+        }
       },
     }, () => now);
 
