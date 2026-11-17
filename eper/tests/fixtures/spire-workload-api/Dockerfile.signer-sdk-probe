@@ -1,0 +1,8 @@
+FROM node:24.22.2-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9
+WORKDIR /eper
+COPY eper/package.json eper/package-lock.json ./
+RUN npm ci
+COPY eper/ ./
+RUN npm run build && mkdir -p /sdk && npm install --prefix /sdk --omit=dev --ignore-scripts --save-exact @jeengbe/spiffe@2.1.1
+USER 20004:20004
+ENTRYPOINT ["node", "tests/fixtures/spire-workload-api/signer-sdk-probe.mjs"]
