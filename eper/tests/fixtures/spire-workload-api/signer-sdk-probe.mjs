@@ -15,10 +15,18 @@ const runtime = createCustomerAssetScanChildSignerSpiffeSdkRuntime({
   SpiffeClient,
 });
 try {
-  const svid = await new SpiffeClient({
+  const sdk = new SpiffeClient({
     connection: "unix:///run/spire/agent/public/api.sock",
     retry: { enabled: false },
-  }).getJwtSvid("eper:customer-asset-scan-child", { spiffeId: expectedSignerId });
+  });
+  let svid;
+  try {
+    svid = await sdk.getJwtSvid("eper:customer-asset-scan-child", {
+      spiffeId: expectedSignerId,
+    });
+  } finally {
+    await sdk.close();
+  }
   assert.ok(svid, "signer workload must obtain its own registered identity");
   assert.equal(svid.spiffeId, expectedSignerId);
   const independentlyValidated = await runtime.validator.validateJwt(
