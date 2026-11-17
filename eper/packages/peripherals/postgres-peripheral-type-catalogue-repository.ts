@@ -89,7 +89,9 @@ export class PostgresPeripheralTypeCatalogueRepository {
   const adapterKey=field(i.adapterKey,96),adapterVersion=field(i.adapterVersion,64);validateSchema(i.configurationSchema);
   const compatibility=i.compatibility??{};if(!compatibility||typeof compatibility!=="object"||Array.isArray(compatibility)||JSON.stringify(compatibility).length>8192)throw new Error("PERIPHERAL_CATALOGUE_COMPATIBILITY_INVALID");
   const c=await this.pool.connect();try{await c.query("BEGIN");await c.query("SELECT set_config('eper.platform_admin','true',true)");
-   const current=await c.query<{next_version:number}>(`SELECT COALESCE(MAX(schema_version),0)+1 AS next_version FROM eper_peripheral_type_schema_versions WHERE type_key=$1 FOR UPDATE`,[key]);
+   const definition=await c.query("SELECT type_key FROM eper_peripheral_type_definitions WHERE type_key=$1 AND lifecycle_status='ACTIVE' FOR UPDATE",[key]);
+   if(!definition.rows[0])throw new Error("PERIPHERAL_CATALOGUE_TYPE_NOT_FOUND_OR_DEPRECATED");
+   const current=await c.query<{next_version:number}>(`SELECT COALESCE(MAX(schema_version),0)+1 AS next_version FROM eper_peripheral_type_schema_versions WHERE type_key=$1`,[key]);
    const version=Number(current.rows[0]?.next_version??1);
    await c.query("INSERT INTO eper_peripheral_type_schema_versions(type_key,schema_version,adapter_key,adapter_version,configuration_schema,compatibility,created_by) VALUES($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7)",[key,version,adapterKey,adapterVersion,JSON.stringify(i.configurationSchema),JSON.stringify(compatibility),i.actorId]);
    await c.query("INSERT INTO eper_peripheral_type_schema_lifecycle(type_key,schema_version,lifecycle_status,changed_by) VALUES($1,$2,'DRAFT',$3)",[key,version,i.actorId]);
