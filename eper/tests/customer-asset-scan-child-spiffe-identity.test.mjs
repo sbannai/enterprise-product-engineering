@@ -76,6 +76,21 @@ test("SPIFFE verifier fails closed when the local Workload API is unavailable", 
   });
 });
 
+test("SPIFFE verifier preserves supervisor cancellation instead of mapping it to unavailable", async () => {
+  const controller = new AbortController();
+  const cancellation = new Error("scanner child attempt cancelled");
+  controller.abort(cancellation);
+  const verifier = new CustomerAssetScanChildSpiffeIdentityVerifier(
+    client({ fetchError: new Error("SDK observed aborted request") }),
+    spiffeId,
+    () => now,
+  );
+  await assert.rejects(
+    verifier.verifyCurrentProcessIdentity(controller.signal),
+    (error) => error === cancellation,
+  );
+});
+
 test("SPIFFE verifier rejects malformed configured workload identities", () => {
   for (const invalid of [
     "https://eper.example/asset-scanner",
