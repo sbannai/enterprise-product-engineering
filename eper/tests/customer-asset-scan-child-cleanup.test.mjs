@@ -40,3 +40,17 @@ test("child cleanup rejects a non-callable disposer", () => {
   const registry = createCustomerAssetScanChildCleanupRegistry();
   assert.throws(() => registry.register(null), /CLEANUP_REGISTRATION_INVALID/);
 });
+
+test("child cleanup releases earlier resources when composition factory partially initializes then throws", async () => {
+  const registry = createCustomerAssetScanChildCleanupRegistry();
+  const closed = [];
+  const initializeComposition = async () => {
+    registry.register(async () => { closed.push("sdk-client"); });
+    registry.register(async () => { closed.push("provider-client"); });
+    throw new Error("injected composition initialization failure");
+  };
+
+  await assert.rejects(initializeComposition(), /injected composition initialization failure/);
+  assert.deepEqual(await registry.close(), []);
+  assert.deepEqual(closed, ["provider-client", "sdk-client"]);
+});
