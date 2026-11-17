@@ -127,7 +127,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
   let bootstrapFailureCode: CustomerAssetScanChildFailure["code"] = "SCANNER_BOOTSTRAP_FAILED";
   controller.signal.addEventListener("abort", () => rejectAbort(new Error("CUSTOMER_ASSET_SCAN_CHILD_ABORTED")), { once: true });
   const deadlineTimer = setTimeout(() => {
-    bootstrapFailureCode = "SCANNER_BOOTSTRAP_TIMEOUT";
+    bootstrapFailureCode = "SCANNER_CHILD_TIMEOUT";
     controller.abort();
   }, timeoutMs);
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => controller.abort());
