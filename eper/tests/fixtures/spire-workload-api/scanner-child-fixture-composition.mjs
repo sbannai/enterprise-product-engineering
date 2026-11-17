@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 
 import {
   CustomerAssetScanChildSpiffeIdentityVerifier,
@@ -26,9 +27,9 @@ const EXPECTED_ROLE = "eper_fixture_scanner";
 const FIXTURE_BYTES = Buffer.from("hello world", "utf8");
 const FIXTURE_SHA256 = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
 
-function createSpiffeRuntime() {
+async function createSpiffeRuntime() {
   const require = createRequire("/sdk/package.json");
-  const { SpiffeClient } = require("@jeengbe/spiffe");
+  const { SpiffeClient } = await import(pathToFileURL(require.resolve("@jeengbe/spiffe")).href);
   return createCustomerAssetScanChildSpiffeSdkRuntime({
     endpoint: "unix:///run/spire/agent/public/api.sock",
     SpiffeClient,
@@ -36,7 +37,7 @@ function createSpiffeRuntime() {
 }
 
 export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ signal }) {
-  const spiffeRuntime = createSpiffeRuntime();
+  const spiffeRuntime = await createSpiffeRuntime();
   try {
     const identity = new CustomerAssetScanChildSpiffeIdentityVerifier(
       spiffeRuntime.adapter,
