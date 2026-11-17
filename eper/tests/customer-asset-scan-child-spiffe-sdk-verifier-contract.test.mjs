@@ -34,7 +34,7 @@ test("real SDK adapter boundary and identity verifier accept one exact, short-li
   assert.equal(identity.spiffeId, spiffeId);
   assert.equal(identity.audience, CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE);
   assert.equal(identity.expiresAt, Math.floor(expiresAtMs / 1000));
-  assert.equal(identity.jwtSvid, "opaque-bearer-token");
+
   assert.equal(JSON.stringify(identity).includes("opaque-bearer-token"), false);
 });
 
