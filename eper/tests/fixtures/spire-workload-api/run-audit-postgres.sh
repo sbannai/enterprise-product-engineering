@@ -205,3 +205,7 @@ printf '%s' "$CHILD_RESULT" | node --input-type=module -e '
   assert.equal(result.claimGeneration, 7);
 '
 echo "PASS: production customer-asset-scan-child-main completed SPIRE identity, signer-issued PostgreSQL mTLS, DB resolver, provider stream verification and scanner execution"
+
+echo "Aborting a production scanner child after it enters the live scanner stage"
+compose run --quiet-build --no-deps --build --rm scanner-child-cancellation-probe
+echo "PASS: parent AbortSignal terminated the live scanner child and removed its private TMPDIR after close"
