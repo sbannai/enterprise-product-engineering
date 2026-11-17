@@ -165,7 +165,7 @@ echo "PASS: dynamic signer-issued certificate authenticated the dedicated Postgr
 echo "PASS: mTLS LOGIN invoked the session_user-bound resolver with EXECUTE-only access"
 
 echo "Launching the actual production scanner child entrypoint with fixture-owned composition"
-if CHILD_RESULT="$(compose run --no-deps --build --rm -i -T --entrypoint node scanner-child-entrypoint-probe \
+if CHILD_RESULT="$(compose run --quiet-build --no-deps --build --rm -i -T --entrypoint node scanner-child-entrypoint-probe \
   dist/apps/worker/customer-asset-scan-child-main.js 2>"$SPIRE_FIXTURE_DIR/child-entrypoint.stderr" <<'JSON'
 {
   "version": 3,
