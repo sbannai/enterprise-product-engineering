@@ -45,7 +45,7 @@ export function parseCustomerAssetScanChildDatabaseCertificateRole(subjectOutput
 
 export interface CustomerAssetScanChildDatabaseTlsMaterial {
   readonly databaseRole: string;
-  readonly caPath: string;
+  readonly caPath: string;\n  readonly databaseCaPath: string;
   readonly certificatePath: string;
   readonly privateKeyPath: string;
   cleanup(): Promise<void>;
@@ -96,12 +96,12 @@ export async function provisionCustomerAssetScanChildDatabaseTlsMaterial(input: 
 
     const directory = dirname(keyRequest.privateKeyPath);
     const caPath = join(directory, "database-ca.pem");
-    const certificatePath = join(directory, "database-client.pem");
+    const certificatePath = join(directory, "database-client.pem");\n    const databaseCaPath = join(directory, "postgres-server-ca.pem");
     input.onStage?.("certificate-write");
     await writeFile(caPath, input.caPem, { mode: 0o600, flag: "wx" });
-    await writeFile(certificatePath, credential.clientCertificatePem, { mode: 0o600, flag: "wx" });
+    await writeFile(certificatePath, credential.clientCertificatePem, { mode: 0o600, flag: "wx" });\n    await writeFile(databaseCaPath, input.databaseCaPem, { mode: 0o600, flag: "wx" });
     await chmod(caPath, 0o600);
-    await chmod(certificatePath, 0o600);
+    await chmod(certificatePath, 0o600);\n    await chmod(databaseCaPath, 0o600);
 
     input.onStage?.("certificate-key-binding");
     const [certificatePublicKey, privatePublicKey] = await Promise.all([
