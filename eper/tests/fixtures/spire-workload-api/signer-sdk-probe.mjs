@@ -38,7 +38,7 @@ function opensslTime(epochSeconds) {
 }
 
 await mkdir(newCerts, { recursive: true });
-await chmod(ipc, 0o770);
+await chmod(ipc, 0o2770);
 await writeFile(index, "", { mode: 0o660 });
 await writeFile(serial, "01\n", { mode: 0o660 });
 await writeFile(ext, "basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=clientAuth\n", { mode: 0o660 });
