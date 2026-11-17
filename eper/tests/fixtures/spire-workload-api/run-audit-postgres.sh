@@ -165,8 +165,8 @@ echo "PASS: dynamic signer-issued certificate authenticated the dedicated Postgr
 echo "PASS: mTLS LOGIN invoked the session_user-bound resolver with EXECUTE-only access"
 
 echo "Launching the actual production scanner child entrypoint with fixture-owned composition"
-CHILD_RESULT="$(compose run --build --rm -T --entrypoint node scanner-child-entrypoint-probe \
-  dist/apps/worker/customer-asset-scan-child-main.js <<'JSON'
+if CHILD_RESULT="$(compose run --no-deps --build --rm -i -T --entrypoint node scanner-child-entrypoint-probe \
+  dist/apps/worker/customer-asset-scan-child-main.js 2>"$SPIRE_FIXTURE_DIR/child-entrypoint.stderr" <<'JSON'
 {
   "version": 3,
   "type": "start",
@@ -185,7 +185,15 @@ CHILD_RESULT="$(compose run --build --rm -T --entrypoint node scanner-child-entr
   }
 }
 JSON
-)"
+)"; then
+  :
+else
+  CHILD_STATUS=$?
+  echo "FAIL: production scanner child entrypoint exited with status $CHILD_STATUS" >&2
+  cat "$SPIRE_FIXTURE_DIR/child-entrypoint.stderr" >&2 || true
+  printf '%s\n' "$CHILD_RESULT" >&2
+  exit "$CHILD_STATUS"
+fi
 printf '%s' "$CHILD_RESULT" | node --input-type=module -e '
   import assert from "node:assert/strict";
   let input = "";
