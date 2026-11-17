@@ -4,7 +4,7 @@ import type { CustomerAssetScanChildDatabaseCredentialIssuer } from "./customer-
 export interface CustomerAssetScanChildDatabaseTlsBootstrap {
   readonly identity: Pick<CustomerAssetScanChildSpiffeIdentityVerifier, "verifyCurrentProcessIdentity">;
   readonly issuer: Pick<CustomerAssetScanChildDatabaseCredentialIssuer, "issue">;
-  readonly caPem: string;
+  readonly caPem: string; // CA that issued the scanner's PostgreSQL client certificate.\n  readonly databaseCaPem: string; // CA that authenticates the PostgreSQL server.
   close?: () => void | Promise<void>;
 }
 
@@ -18,7 +18,7 @@ export function assertCustomerAssetScanChildDatabaseTlsBootstrap(value: unknown)
   const issuer = bootstrap.issuer as Record<string, unknown> | null;
   if (!identity || typeof identity.verifyCurrentProcessIdentity !== "function" ||
       !issuer || typeof issuer.issue !== "function" ||
-      typeof bootstrap.caPem !== "string" ||
+      typeof bootstrap.caPem !== "string" ||\n      typeof bootstrap.databaseCaPem !== "string" ||
       (bootstrap.close !== undefined && typeof bootstrap.close !== "function")) {
     throw new Error("CUSTOMER_ASSET_SCAN_CHILD_DATABASE_TLS_BOOTSTRAP_INVALID");
   }
