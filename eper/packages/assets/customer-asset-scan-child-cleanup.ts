@@ -17,7 +17,7 @@ export function createCustomerAssetScanChildCleanupRegistry(): {
   let closing = false;
   let closePromise: Promise<unknown[]> | undefined;
 
-  function run(cleanup: CustomerAssetScanChildCleanup): void {
+  function run(cleanup: CustomerAssetScanChildCleanup): Promise<void> {
     const task = Promise.resolve()
       .then(cleanup)
       .then(() => undefined, (error: unknown) => {
@@ -25,6 +25,7 @@ export function createCustomerAssetScanChildCleanupRegistry(): {
       });
     pending.add(task);
     void task.then(() => pending.delete(task));
+    return task;
   }
 
   return {
@@ -35,7 +36,7 @@ export function createCustomerAssetScanChildCleanupRegistry(): {
       if (closing) {
         // Do not append to a stack that may already have been drained. Execute
         // late disposers immediately and contain rejection in run().
-        run(cleanup);
+        void run(cleanup);
         return;
       }
       cleanups.push(cleanup);
@@ -44,10 +45,10 @@ export function createCustomerAssetScanChildCleanupRegistry(): {
       if (closePromise) return closePromise;
       closing = true;
       closePromise = (async () => {
-        // Drain LIFO acquisitions and any late registrations that arrive while
-        // an earlier disposer is still settling.
+        // Preserve strict LIFO ordering for resources already on the stack.
+        // Late registrations still start immediately and are drained below.
         while (cleanups.length || pending.size) {
-          while (cleanups.length) run(cleanups.pop()!);
+          while (cleanups.length) await run(cleanups.pop()!);
           if (pending.size) await Promise.all([...pending]);
         }
         return errors;
