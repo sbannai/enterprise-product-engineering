@@ -1,4 +1,13 @@
 import type { CustomerAssetScanChildRuntimeDependencies } from "./customer-asset-scan-child-runtime.js";
+import type { CustomerAssetScanChildCleanupRegistrar } from "./customer-asset-scan-child-cleanup.js";
+
+/** Deployment factories must register each acquired resource immediately. */
+export type CustomerAssetScanChildRuntimeDependenciesFactory = (input: {
+  pool: { end(): Promise<void>; query<T extends Record<string, unknown>>(text: string, values?: readonly unknown[]): Promise<{ rows: T[] }> };
+  env: NodeJS.ProcessEnv;
+  identity: CustomerAssetScanChildRuntimeDependencies["identity"];
+  registerCleanup: CustomerAssetScanChildCleanupRegistrar;
+}) => Promise<CustomerAssetScanChildRuntimeComposition> | CustomerAssetScanChildRuntimeComposition;
 
 export type CustomerAssetScanChildRuntimeComposition =
   CustomerAssetScanChildRuntimeDependencies & {
