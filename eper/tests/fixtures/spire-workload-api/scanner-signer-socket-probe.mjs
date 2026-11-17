@@ -42,7 +42,7 @@ try {
   });
   const certificatePem = await signer.sign({
     csrPem: request.csrPem,
-    workloadJwtSvid: svids[0].token,
+    workloadJwtSvid: svids[0].jwtSvid,
   });
   const certPath = "/tmp/issued-scanner-client.crt";
   const csrPath = "/tmp/scanner-client.csr";
