@@ -120,18 +120,20 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
   let tlsBootstrap: CustomerAssetScanChildDatabaseTlsBootstrap | undefined;
   let tlsMaterial: Awaited<ReturnType<typeof provisionCustomerAssetScanChildDatabaseTlsMaterial>> | undefined;
   const controller = new AbortController();
-  const timeoutMs = boundedInteger("EPER_SCANNER_CHILD_TIMEOUT_MS", 120_000, 1_000, MAX_TIMEOUT_MS);
   let rejectAbort!: (reason: Error) => void;
   const abortPromise = new Promise<never>((_resolve, reject) => { rejectAbort = reject; });
   void abortPromise.catch(() => undefined);
   let bootstrapFailureCode: CustomerAssetScanChildFailure["code"] = "SCANNER_BOOTSTRAP_FAILED";
+  let timedOut = false;
+  let deadlineTimer: NodeJS.Timeout | undefined;
   controller.signal.addEventListener("abort", () => rejectAbort(new Error("CUSTOMER_ASSET_SCAN_CHILD_ABORTED")), { once: true });
-  const deadlineTimer = setTimeout(() => {
-    bootstrapFailureCode = "SCANNER_CHILD_TIMEOUT";
-    controller.abort();
-  }, timeoutMs);
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => controller.abort());
   try {
+    const timeoutMs = boundedInteger("EPER_SCANNER_CHILD_TIMEOUT_MS", 120_000, 1_000, MAX_TIMEOUT_MS);
+    deadlineTimer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
     if (required("EPER_SCANNER_CHILD_SPIFFE_AUDIENCE") !== CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE) {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_AUDIENCE_INVALID");
     }
@@ -242,13 +244,13 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
       protocolWrite(JSON.stringify(result));
       if (result.type === "failure") process.exitCode = 1;
     } finally {
-      clearTimeout(deadlineTimer);
+      if (deadlineTimer) clearTimeout(deadlineTimer);
     }
   } catch {
-    emitFailure(start, bootstrapFailureCode);
+    emitFailure(start, timedOut ? "SCANNER_CHILD_TIMEOUT" : bootstrapFailureCode);
     process.exitCode = 1;
   } finally {
-    clearTimeout(deadlineTimer);
+    if (deadlineTimer) clearTimeout(deadlineTimer);
     const cleanupErrors = await cleanupRegistry.close();
     if (cleanupErrors.length) console.error("EPER scanner child cleanup reported " + cleanupErrors.length + " disposer failure(s)");
     if (pool) await pool.end().catch(() => undefined);
