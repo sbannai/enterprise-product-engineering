@@ -72,12 +72,17 @@ test("child cleanup immediately disposes resources registered while close is dra
   assert.deepEqual(closed, ["original", "late"]);
 });
 
-test("child cleanup contains rejection from a disposer registered after close completed", async () => {
+test("child cleanup immediately runs and contains rejection from a disposer registered after close", async () => {
   const registry = createCustomerAssetScanChildCleanupRegistry();
   assert.deepEqual(await registry.close(), []);
-  registry.register(async () => { throw new Error("late cleanup failure"); });
-  // Allow the immediately-started disposer to settle; its rejection must be
-  // captured internally rather than becoming an unhandled rejection.
+  let invoked = false;
+  registry.register(async () => {
+    invoked = true;
+    throw new Error("late cleanup failure");
+  });
+  // The late disposer is started immediately; its rejection is contained by
+  // the registry rather than becoming an unhandled rejection.
   await Promise.resolve();
   await Promise.resolve();
+  assert.equal(invoked, true);
 });
