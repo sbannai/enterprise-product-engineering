@@ -95,6 +95,49 @@ plugins {
 }
 EOF
 
+# Prepare a disposable PostgreSQL TLS authority and server/client certificates.
+# The fixture cert is deliberately static test material for the first mTLS slice;
+# the following slice will issue the client cert only after verifying the process SVID.
+mkdir -p "$SPIRE_FIXTURE_DIR/postgres"
+chmod 700 "$SPIRE_FIXTURE_DIR/postgres"
+openssl req -x509 -newkey rsa:2048 -nodes \
+  -keyout "$SPIRE_FIXTURE_DIR/postgres/ca.key" \
+  -out "$SPIRE_FIXTURE_DIR/postgres/ca.crt" \
+  -days 1 -subj "/CN=eper-fixture-postgres-ca" \
+  -addext "basicConstraints=critical,CA:TRUE" \
+  -addext "keyUsage=critical,keyCertSign,cRLSign" >/dev/null 2>&1
+openssl req -new -newkey rsa:2048 -nodes \
+  -keyout "$SPIRE_FIXTURE_DIR/postgres/server.key" \
+  -out "$SPIRE_FIXTURE_DIR/postgres/server.csr" \
+  -subj "/CN=audit-postgres" >/dev/null 2>&1
+printf 'subjectAltName=DNS:audit-postgres\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n' > "$SPIRE_FIXTURE_DIR/postgres/server.ext"
+openssl x509 -req -in "$SPIRE_FIXTURE_DIR/postgres/server.csr" \
+  -CA "$SPIRE_FIXTURE_DIR/postgres/ca.crt" -CAkey "$SPIRE_FIXTURE_DIR/postgres/ca.key" \
+  -CAcreateserial -out "$SPIRE_FIXTURE_DIR/postgres/server.crt" -days 1 -sha256 \
+  -extfile "$SPIRE_FIXTURE_DIR/postgres/server.ext" >/dev/null 2>&1
+openssl req -new -newkey rsa:2048 -nodes \
+  -keyout "$SPIRE_FIXTURE_DIR/postgres/client.key" \
+  -out "$SPIRE_FIXTURE_DIR/postgres/client.csr" \
+  -subj "/CN=eper_fixture_scanner" >/dev/null 2>&1
+printf 'extendedKeyUsage=clientAuth\nkeyUsage=digitalSignature,keyEncipherment\n' > "$SPIRE_FIXTURE_DIR/postgres/client.ext"
+openssl x509 -req -in "$SPIRE_FIXTURE_DIR/postgres/client.csr" \
+  -CA "$SPIRE_FIXTURE_DIR/postgres/ca.crt" -CAkey "$SPIRE_FIXTURE_DIR/postgres/ca.key" \
+  -CAcreateserial -out "$SPIRE_FIXTURE_DIR/postgres/client.crt" -days 1 -sha256 \
+  -extfile "$SPIRE_FIXTURE_DIR/postgres/client.ext" >/dev/null 2>&1
+cat > "$SPIRE_FIXTURE_DIR/postgres/pg_hba.conf" <<'EOF'
+local all all trust
+hostssl eper_scanner_fixture eper_fixture_scanner 0.0.0.0/0 cert map=eper_fixture_scanner
+hostssl eper_scanner_fixture eper_fixture_scanner ::/0 cert map=eper_fixture_scanner
+host all all all reject
+EOF
+cat > "$SPIRE_FIXTURE_DIR/postgres/pg_ident.conf" <<'EOF'
+eper_fixture_scanner eper_fixture_scanner eper_fixture_scanner
+EOF
+chmod 755 "$SPIRE_FIXTURE_DIR" "$SPIRE_FIXTURE_DIR/postgres"
+chmod 600 "$SPIRE_FIXTURE_DIR/postgres/server.key" "$SPIRE_FIXTURE_DIR/postgres/client.key"
+sudo chown -R 999:999 "$SPIRE_FIXTURE_DIR/postgres"
+chmod 644 "$SPIRE_FIXTURE_DIR/postgres/ca.crt" "$SPIRE_FIXTURE_DIR/postgres/server.crt" "$SPIRE_FIXTURE_DIR/postgres/client.crt" "$SPIRE_FIXTURE_DIR/postgres/pg_hba.conf" "$SPIRE_FIXTURE_DIR/postgres/pg_ident.conf"
+
 # First prove the complete mainline audit schema and child SQL privilege boundary
 # in a separate disposable PostgreSQL service. This does not create a LOGIN or
 # enable any scanner identity; the end-to-end identity fixture remains a later step.
