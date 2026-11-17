@@ -126,6 +126,8 @@ openssl x509 -req -in "$SPIRE_FIXTURE_DIR/postgres/client.csr" \
   -extfile "$SPIRE_FIXTURE_DIR/postgres/client.ext" >/dev/null 2>&1
 cat > "$SPIRE_FIXTURE_DIR/postgres/pg_hba.conf" <<'EOF'
 local all all trust
+hostssl eper_scanner_fixture postgres 0.0.0.0/0 scram-sha-256
+hostssl eper_scanner_fixture postgres ::/0 scram-sha-256
 hostssl eper_scanner_fixture eper_fixture_scanner 0.0.0.0/0 cert map=eper_fixture_scanner
 hostssl eper_scanner_fixture eper_fixture_scanner ::/0 cert map=eper_fixture_scanner
 host all all all reject
