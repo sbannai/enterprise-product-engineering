@@ -170,6 +170,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
       identity: tlsBootstrap.identity,
       issuer: tlsBootstrap.issuer,
       caPem: tlsBootstrap.caPem,
+      databaseCaPem: tlsBootstrap.databaseCaPem,
       signal: controller.signal,
       onStage(stage) {
         bootstrapFailureCode = stage === "identity" ? "SCANNER_IDENTITY_FAILED" :
