@@ -78,6 +78,7 @@ test("OpenSSL test signer verifies CSR, overrides its subject, enforces notAfter
       },
     }, spiffeId, () => now * 1000).verifyCurrentProcessIdentity();
 
+    let signerFailure = "not reached";
     const signer = new CustomerAssetScanChildDatabaseSignerPolicy({
       expectedAudience: "eper:customer-asset-scan-child",
       roleBySpiffeId: new Map([[spiffeId, "eper_scan_child_ci"]]),
@@ -115,7 +116,12 @@ test("OpenSSL test signer verifies CSR, overrides its subject, enforces notAfter
       () => now,
     );
 
-    const credential = await issuer.issue({ workload, csrPem: request.csrPem });
+    let credential;
+    try {
+      credential = await issuer.issue({ workload, csrPem: request.csrPem });
+    } catch (error) {
+      assert.fail(`Signer rejected request; OpenSSL diagnostic: ${signerFailure}; wrapper: ${error.code}`);
+    }
     await execFile("openssl", [
       "verify", "-CAfile", caCert, "-purpose", "sslclient", certPath,
     ], { timeout: 10_000, maxBuffer: 16_384 });
