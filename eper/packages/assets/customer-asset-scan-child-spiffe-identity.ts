@@ -103,7 +103,7 @@ export class CustomerAssetScanChildSpiffeIdentityVerifier {
           !Number.isSafeInteger(fetched[0]?.expiresAtMs) ||
           typeof fetched[0]?.token !== "string" ||
           fetched[0].token.length < 20 || fetched[0].token.length > 16_384 ||
-          /[\\u0000-\\u0020\\u007f]/.test(fetched[0].token)) {
+          /[\u0000-\u0020\u007f]/.test(fetched[0].token)) {
         throw new CustomerAssetScanChildSpiffeIdentityError("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_INVALID");
       }
 
