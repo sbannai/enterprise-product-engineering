@@ -58,7 +58,7 @@ try {
     execFile("openssl", ["x509", "-in", certPath, "-pubkey", "-noout"]),
     execFile("openssl", ["req", "-in", csrPath, "-pubkey", "-noout"]),
   ]);
-  assert.match(details.stdout, /CN\\s*=\\s*eper_fixture_scanner/);
+  assert.match(details.stdout, /CN\s*=\s*eper_fixture_scanner/);
   assert.match(details.stdout, /TLS Web Client Authentication|clientAuth/);
   assert.equal(certKey.stdout.trim(), csrKey.stdout.trim());
 
