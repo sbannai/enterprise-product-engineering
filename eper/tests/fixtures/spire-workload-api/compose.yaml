@@ -105,6 +105,27 @@ services:
     networks: [spire-isolated]
     restart: "no"
 
+  scanner-child-entrypoint-probe:
+    build:
+      context: ../../../..
+      dockerfile: eper/tests/fixtures/spire-workload-api/Dockerfile.node-sdk-probe
+    user: "20001:20001"
+    pid: "service:spire-agent"
+    environment:
+      EPER_SCANNER_CHILD_SPIFFE_AUDIENCE: "eper:customer-asset-scan-child"
+      EPER_SCANNER_CHILD_COMPOSITION_MODULE: "/eper/dist/packages/assets/scanners/fixture-composition.mjs"
+      EPER_SCANNER_CHILD_TIMEOUT_MS: "30000"
+      PGHOST: "audit-postgres"
+      PGPORT: "5432"
+      PGDATABASE: "eper_scanner_fixture"
+    volumes:
+      - "${SPIRE_FIXTURE_DIR:?}/agent-public:/run/spire/agent/public:ro"
+      - "${SPIRE_FIXTURE_DIR:?}/signer-ipc:/signer-ipc:ro"
+      - "${SPIRE_FIXTURE_DIR:?}/postgres:/fixture:ro"
+    depends_on: [spire-agent, signer-process, audit-postgres]
+    networks: [spire-isolated]
+    restart: "no"
+
 networks:
   spire-isolated:
     internal: true
