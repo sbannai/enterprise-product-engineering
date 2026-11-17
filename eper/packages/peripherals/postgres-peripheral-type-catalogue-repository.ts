@@ -84,6 +84,19 @@ export class PostgresPeripheralTypeCatalogueRepository {
    const saved=map(result.rows[0]);await this.audit(c,i,"peripheral.type.create",typeKey,null,saved);await c.query("COMMIT");return saved;
   }catch(e){await c.query("ROLLBACK").catch(()=>undefined);throw e;}finally{c.release();}
  }
+ async createSchemaVersion(i:PeripheralCatalogueContext&{typeKey:string;adapterKey:string;adapterVersion:string;configurationSchema:Record<string,unknown>;compatibility?:Record<string,unknown>}):Promise<PeripheralTypeDefinition>{
+  field(i.actorId,128);field(i.correlationId,128);const key=field(i.typeKey,96);
+  const adapterKey=field(i.adapterKey,96),adapterVersion=field(i.adapterVersion,64);validateSchema(i.configurationSchema);
+  const compatibility=i.compatibility??{};if(!compatibility||typeof compatibility!=="object"||Array.isArray(compatibility)||JSON.stringify(compatibility).length>8192)throw new Error("PERIPHERAL_CATALOGUE_COMPATIBILITY_INVALID");
+  const c=await this.pool.connect();try{await c.query("BEGIN");await c.query("SELECT set_config('eper.platform_admin','true',true)");
+   const current=await c.query<{next_version:number}>(`SELECT COALESCE(MAX(schema_version),0)+1 AS next_version FROM eper_peripheral_type_schema_versions WHERE type_key=$1 FOR UPDATE`,[key]);
+   const version=Number(current.rows[0]?.next_version??1);
+   await c.query("INSERT INTO eper_peripheral_type_schema_versions(type_key,schema_version,adapter_key,adapter_version,configuration_schema,compatibility,created_by) VALUES($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7)",[key,version,adapterKey,adapterVersion,JSON.stringify(i.configurationSchema),JSON.stringify(compatibility),i.actorId]);
+   await c.query("INSERT INTO eper_peripheral_type_schema_lifecycle(type_key,schema_version,lifecycle_status,changed_by) VALUES($1,$2,'DRAFT',$3)",[key,version,i.actorId]);
+   const result=await c.query<Row>(SELECT+" WHERE d.type_key=$1 AND s.schema_version=$2",[key,version]);if(!result.rows[0])throw new Error("PERIPHERAL_CATALOGUE_SCHEMA_CREATE_EMPTY");
+   const saved=map(result.rows[0]);await this.audit(c,i,"peripheral.type.schema.draft",key,null,saved);await c.query("COMMIT");return saved;
+  }catch(e){await c.query("ROLLBACK").catch(()=>undefined);throw e;}finally{c.release();}
+ }
  async publish(i:PeripheralCatalogueContext&{typeKey:string;schemaVersion:number}):Promise<PeripheralTypeDefinition>{
   field(i.actorId,128);field(i.correlationId,128);const key=field(i.typeKey,96);
   if(!Number.isSafeInteger(i.schemaVersion)||i.schemaVersion<1)throw new Error("PERIPHERAL_CATALOGUE_SCHEMA_VERSION_INVALID");
