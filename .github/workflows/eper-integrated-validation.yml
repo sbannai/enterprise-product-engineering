@@ -82,6 +82,8 @@ jobs:
       # npm test already discovers every tests/*.test.mjs file, including
       # payment, PostgreSQL, invoice-authority, and receipt contracts. Avoid
       # rerunning those same test files as separate steps.
+      - name: Provision pinned Node 24 scanner child runtime
+        uses: ./.github/actions/eper-scanner-node24-runtime
       - name: Run full EPER test suite with PostgreSQL enabled
         run: npm test
 

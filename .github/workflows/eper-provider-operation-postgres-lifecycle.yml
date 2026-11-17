@@ -103,5 +103,7 @@ jobs:
         run: node --test tests/postgres-customer-asset-legacy-upgrade.integration.test.mjs
       - name: Exercise customer-asset scan worker and fail-closed storage adapters
         run: node --test tests/customer-asset-scan-worker.test.mjs tests/storage-malware-scan-adapter.test.mjs tests/storage-upload-verification-adapter.test.mjs
+      - name: Provision pinned Node 24 scanner child runtime
+        uses: ./.github/actions/eper-scanner-node24-runtime
       - name: Verify customer-asset scan and recovery worker processes on PostgreSQL 16
         run: node --test tests/postgres-customer-asset-scan-process.integration.test.mjs

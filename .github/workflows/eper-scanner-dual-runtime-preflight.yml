@@ -1,0 +1,98 @@
+name: EPER Scanner Dual-Runtime Image Preflight
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/eper-scanner-dual-runtime-preflight.yml"
+      - "eper/Dockerfile.scanner-worker"
+      - "eper/package.json"
+      - "eper/package-lock.json"
+      - "eper/apps/worker/customer-asset-scan-*.ts"
+      - "eper/packages/assets/**"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/eper-scanner-dual-runtime-preflight.yml"
+      - "eper/Dockerfile.scanner-worker"
+      - "eper/package.json"
+      - "eper/package-lock.json"
+      - "eper/apps/worker/customer-asset-scan-*.ts"
+      - "eper/packages/assets/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eper-scanner-dual-runtime-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  dual-runtime-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build dedicated scanner worker image
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker build --file eper/Dockerfile.scanner-worker \
+            --tag eper-scanner-worker-preflight:${BUILD_ID} \
+            --build-arg EPER_BUILD_ID=${BUILD_ID} eper
+
+      - name: Verify parent and child Node versions and shared libraries
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint /bin/sh eper-scanner-worker-preflight:${BUILD_ID} -ec '
+            parent="$(node --version)"
+            child="$(/opt/eper/node24/bin/node --version)"
+            test "$(printf "%s" "$parent" | cut -d. -f1 | tr -d v)" = "20"
+            test "$child" = "v24.22.2"
+            ldd /opt/eper/node24/bin/node | tee /tmp/eper-node24-ldd.txt
+            ! grep -q "not found" /tmp/eper-node24-ldd.txt
+            printf "parentNode=%s\nchildNode=%s\nsharedLibraries=resolved\n" "$parent" "$child"
+          '
+
+      - name: Verify scanner worker entrypoint is present
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint /bin/sh eper-scanner-worker-preflight:${BUILD_ID} -ec '
+            test -f /app/dist/apps/worker/customer-asset-scan-main.js
+            test -x /opt/eper/node24/bin/node
+            printf "scannerWorkerEntrypoint=present\nchildExecutable=executable\n"
+          '
+
+      - name: Package and checksum preflight image
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/eper-scanner-image
+          docker save "eper-scanner-worker-preflight:${BUILD_ID}" | gzip -1 > "/tmp/eper-scanner-image/eper-scanner-worker-${BUILD_ID}.tar.gz"
+          cd /tmp/eper-scanner-image
+          sha256sum "eper-scanner-worker-${BUILD_ID}.tar.gz" > SHA256SUMS
+          printf 'buildId=%s\nparentNode=20.x\nchildNode=24.22.2\n' "${BUILD_ID}" > BUILD-METADATA.txt
+
+      - name: Verify image artifact checksum
+        run: |
+          set -euo pipefail
+          cd /tmp/eper-scanner-image
+          sha256sum --check SHA256SUMS
+          gzip --test ./*.tar.gz
+
+      - name: Upload scanner image preflight evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: eper-scanner-dual-runtime-image-${{ github.sha }}
+          path: /tmp/eper-scanner-image/
+          if-no-files-found: error
+          retention-days: 7

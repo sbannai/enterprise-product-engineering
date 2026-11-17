@@ -22,6 +22,10 @@ const CHILD_ENTRYPOINT = fileURLToPath(
   new URL("../../apps/worker/customer-asset-scan-child-main.js", import.meta.url),
 );
 
+// This path exists only in the dedicated scanner-worker image. Never inherit
+// the API parent's Node 20 executable or accept a caller-supplied executable.
+const CHILD_NODE_EXECUTABLE = "/opt/eper/node24/bin/node";
+
 function validSpiffeId(value: string): boolean {
   if (!/^spiffe:\/\/[a-z0-9.-]+\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+$/.test(value)) return false;
   const path = value.slice("spiffe://".length).split("/").slice(1);
@@ -92,7 +96,7 @@ export function buildTrustedCustomerAssetScanChildLaunch(configuration: TrustedC
     PGSSLMODE: "verify-full",
   };
   return {
-    executable: process.execPath,
+    executable: CHILD_NODE_EXECUTABLE,
     args: ["--disable-proto=throw", CHILD_ENTRYPOINT],
     environment,
   };

@@ -29,7 +29,7 @@ SPIFFE standardizes workload identity across hosting environments and avoids bin
 
 ## Node.js client assessment (2026-11-11)
 
-The SPIFFE ecosystem SDK catalogue lists `jeengbe/spiffe` as its TypeScript client. Its published package is `@jeengbe/spiffe`. The exact npm registry artifact for `@jeengbe/spiffe@2.1.1` was independently retrieved and verified on 2026-11-16. Its downloaded tarball SHA-512 matches the registry integrity metadata and the SLSA v1 provenance subject digest; the attested source is `jeengbe/ts-packages`, workflow `.github/workflows/ci.yml`, ref `refs/heads/master`, revision `f97e382f909827aed0ae5f0b8550f70438dc7f86`. The isolated `npm audit signatures` run verified registry signatures and attestations for the dependency closure. This establishes artifact/source provenance, not approval for EPER use. The SDK remains an unselected candidate pending PR #501 review/merge, EPER adapter and dependency compatibility review, and local SPIRE protocol integration evidence. The package documentation describes a ConnectRPC Workload API client over gRPC, including the required `workload.spiffe.io: true` metadata and Unix-domain-socket transport. It exposes `getJwtSvid(audience, { spiffeId })` for the calling workload and `validateJwt(audience, token)` for validating an incoming token.
+The SPIFFE ecosystem SDK catalogue lists `jeengbe/spiffe` as its TypeScript client. Its published package is `@jeengbe/spiffe`. The exact npm registry artifact for `@jeengbe/spiffe@2.1.1` was independently retrieved and verified on 2026-11-16. Its downloaded tarball SHA-512 matches the registry integrity metadata and the SLSA v1 provenance subject digest; the attested source is `jeengbe/ts-packages`, workflow `.github/workflows/ci.yml`, ref `refs/heads/master`, revision `f97e382f909827aed0ae5f0b8550f70438dc7f86`. The isolated `npm audit signatures` run verified registry signatures and attestations for the dependency closure. A Node 24.22.2 package preflight passed clean installation, dependency-tree validation, signature/provenance checks, and npm audit with zero reported vulnerabilities; evidence is retained by PR #504. This selects 2.1.1 as the pinned candidate for isolated scanner-child integration work only; it does not approve production activation. The package documentation describes a ConnectRPC Workload API client over gRPC, including the required `workload.spiffe.io: true` metadata and Unix-domain-socket transport. It exposes `getJwtSvid(audience, { spiffeId })` for the calling workload and `validateJwt(audience, token)` for validating an incoming token.
 
 ### Published source and dependency review (2026-11-16)
 
@@ -39,11 +39,26 @@ The reviewed implementation exposes `getJwtSvid(audience, filter, signal)`, retu
 
 This is a source/API review, not a security certification. EPER must still test cache behavior against revocation/rotation expectations, Node 20 compatibility, gRPC cancellation and cleanup, multiple/ambiguous SVID responses, socket permission/attestation behavior, and real local SPIRE integration before dependency approval.
 
-No SDK version is approved for EPER yet. Before adding the dependency, retrieve and review the exact published tarball manifest and integrity metadata for the selected version, capture every resolved transitive version and integrity hash in EPER's npm lockfile, and review the dependency tree. The package documentation confirms an opt-out retry setting (`retry: { enabled: false }`), optional `AbortSignal` support on `getJwtSvid`, and client cleanup through `close()`/async disposal. The scanner child must use those controls: the parent supervisor owns retry policy, and nested SDK retries would make the hard deadline and attempt accounting harder to reason about. The explicit Workload API socket must be configured from the child deployment contract rather than inherited ambient environment.
+The 2.1.1 artifact and dependency closure have passed isolated provenance/integrity review and Node 24 preflight. The exact version is approved only as a dev/integration dependency for the isolated scanner child, pending the real deployment composition and local SPIRE protocol tests. Before any production dependency activation, re-evaluate the pinned dependency tree and deployment runtime compatibility. The package documentation confirms an opt-out retry setting (`retry: { enabled: false }`), optional `AbortSignal` support on `getJwtSvid`, and client cleanup through `close()`/async disposal. The scanner child must use those controls: the parent supervisor owns retry policy, and nested SDK retries would make the hard deadline and attempt accounting harder to reason about. The explicit Workload API socket must be configured from the child deployment contract rather than inherited ambient environment.
 
 This is a community TypeScript SDK, not one of SPIRE's officially maintained Go or Java SDKs. It is MIT-licensed, but has a single named maintainer and a comparatively small adoption footprint. Treat it as a candidate, not as a trusted security boundary by itself. Pin an exact version, review its dependency tree and source, and run protocol-level tests against a local SPIRE Agent before production composition. Keep the EPER adapter interface so the SDK can be replaced without changing scanner authorization logic.
 
 Important API distinction: `getJwtSvid` obtains the current process's own SVID; SPIRE's Workload API attests the caller out-of-band. `validateJwt` is for validating an incoming JWT-SVID and is not required merely to prove the caller's own identity after a successful local fetch. EPER must still compare the returned SPIFFE ID exactly and must not derive tenant/application scope from the token.
+
+## Isolated Node.js runtime decision (2026-11-16)
+
+**Decision for the scanner-child integration path:** retain Node.js 20 for the EPER parent worker and platform. Run only the scanner child under Node.js 24.22.2. The parent must not inherit or select the child executable via an arbitrary job value or request field.
+
+The preferred packaging shape is a dedicated scanner-worker runtime image based on the existing Node 20 Bookworm-slim parent runtime, with the Node 24.22.2 executable copied from the official Node image pinned by immutable multi-platform index digest:
+
+- Source image: `node:24.22.2-bookworm-slim`
+- Index digest observed on Docker Hub on 2026-11-16: `sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9`
+- Expected child executable path in the dedicated worker image: `/opt/eper/node24/bin/node`
+- Expected runtime: `v24.22.2`
+
+This is a packaging candidate, not a production image approval. Before wiring the launcher, CI must build the dual-runtime image and prove: (a) parent `node --version` remains 20.x; (b) the pinned child executable reports exactly v24.22.2; (c) all shared libraries resolve in the Node 20 Bookworm runtime; (d) the exact pinned SPIFFE SDK imports and performs the adapter contract tests under the child runtime; and (e) the real local SPIRE fixture can be exercised by a Node 24 process using the Workload API socket. The launcher must then use only the fixed deployment-owned path `/opt/eper/node24/bin/node`, validate it at startup, and fail closed if it is missing or has the wrong version. The caller must not be able to override the executable.
+
+Keep this runtime packaging out of the general API image. Add it only to the dedicated scanner-worker image, which is not yet present in the repository. Do not add an AWS resource or enable the worker in UAT as part of this decision.
 
 ## Implementation sequence and gates
 
@@ -63,7 +78,7 @@ Important API distinction: `getJwtSvid` obtains the current process's own SVID; 
 
 ## Consequences
 
-- The SDK adapter and verifier are still test-only until the pinned SDK dependency, explicit socket configuration, and local SPIRE integration tests are completed.
+- The SDK adapter and verifier remain unactivated in the worker until the deployment-owned composition module, explicit socket configuration, approved issuer/secret-broker integrations, and local SPIRE integration tests are completed.
 - The provider credential resolver adapter is groundwork only; it cannot establish process identity.
 - The worker must not be wired to the child supervisor until the Workload API verifier and approved secret-broker adapter exist.
 - Production scanner startup remains unconditionally disabled.

@@ -34,7 +34,7 @@ const configuration = () => ({
 
 test("trusted scanner launcher fixes Node executable, child entrypoint and runtime flags", () => {
   const launch = buildTrustedCustomerAssetScanChildLaunch(configuration());
-  assert.equal(launch.executable, process.execPath);
+  assert.equal(launch.executable, "/opt/eper/node24/bin/node");
   assert.deepEqual(launch.args, [
     "--disable-proto=throw",
     new URL("../../apps/worker/customer-asset-scan-child-main.js",
@@ -137,4 +137,14 @@ test("parent-owned scanner temp directory is removed after a child is forcibly k
     await access(credentialPath);
   });
   await assert.rejects(access(directory));
+});
+
+test("trusted scanner launcher ignores caller attempts to override its child executable", () => {
+  const launch = buildTrustedCustomerAssetScanChildLaunch({
+    ...configuration(),
+    executable: process.execPath,
+    nodeExecutable: process.execPath,
+  });
+  assert.equal(launch.executable, "/opt/eper/node24/bin/node");
+  assert.equal(launch.args[0], "--disable-proto=throw");
 });
