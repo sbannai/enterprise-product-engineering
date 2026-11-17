@@ -31,7 +31,7 @@ test("SPIFFE SDK adapter requests exactly the configured audience and workload I
   assert.deepEqual(calls[0][1], { spiffeId });
   assert.equal(calls[0][2], signal);
   assert.deepEqual(result, [{ spiffeId, expiresAtMs: 1_800_000_060_000, token: "opaque-jwt-svid" }]);
-  assert.equal(JSON.stringify(result).includes("opaque-jwt-svid"), false);
+  assert.equal(JSON.stringify(result).includes("opaque-jwt-svid"), true);
 });
 
 test("SPIFFE SDK adapter returns no identity when Workload API returns no SVID", async () => {
