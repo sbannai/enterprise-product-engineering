@@ -196,3 +196,11 @@ for uid in 20002 20003; do
   unset NEGATIVE_OUTPUT
   echo "PASS: unregistered UID $uid received no scanner SVID (probe exit $PROBE_STATUS)"
 done
+
+# Prove the SDK itself cannot connect when the real Unix socket denies access.
+# This runs as the same unprivileged scanner UID, against the same live Agent
+# socket, after the positive and identity-isolation assertions have completed.
+sudo chmod 000 "$SPIRE_FIXTURE_DIR/agent-public/api.sock"
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --build --rm \
+  -e SPIRE_PROBE_EXPECT_DENIED=1 node-sdk-probe
+echo "PASS: non-root Node SDK probe cannot access the permission-restricted socket"
