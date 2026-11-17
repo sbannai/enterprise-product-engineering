@@ -80,3 +80,37 @@ test("signer listener rejects requests with caller-supplied role or expiry", asy
   });
   assert.deepEqual(JSON.parse(response), { ok: false, error: "SIGNER_UNAVAILABLE" });
 });
+
+import {
+  CustomerAssetScanChildDatabaseSignerPolicy,
+} from "../dist/packages/assets/customer-asset-scan-child-database-signer-policy.js";
+
+test("Unix socket delegates to signer policy for identity-derived role and SVID-bounded certificate expiry", async t => {
+  const expectedSpiffeId = "spiffe://example.org/ns/scanner/sa/customer-asset-scan-child";
+  const now = 1_800_000_000;
+  let caInput;
+  const policy = new CustomerAssetScanChildDatabaseSignerPolicy({
+    expectedAudience: "eper:customer-asset-scan-child",
+    roleBySpiffeId: new Map([[expectedSpiffeId, "eper_scan_child_ci"]]),
+    maximumLifetimeSeconds: 120,
+  }, {
+    async validateJwt(audience, presentedToken) {
+      assert.equal(audience, "eper:customer-asset-scan-child");
+      assert.equal(presentedToken, token);
+      return { spiffeId: expectedSpiffeId, claims: { exp: now + 75 } };
+    },
+  }, {
+    async sign(input) {
+      caInput = input;
+      return certificatePem;
+    },
+  }, () => now);
+  const { socketPath } = await fixture(t, policy);
+  const client = new CustomerAssetScanChildUnixSocketCertificateSigner({ socketPath });
+  assert.equal(await client.sign({ csrPem, workloadJwtSvid: token }), certificatePem);
+  assert.deepEqual(caInput, {
+    csrPem,
+    databaseRole: "eper_scan_child_ci",
+    notAfterEpochSeconds: now + 75,
+  });
+});
