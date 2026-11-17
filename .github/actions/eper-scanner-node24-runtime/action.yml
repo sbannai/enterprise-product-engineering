@@ -1,0 +1,20 @@
+name: Provision pinned EPER scanner child runtime
+description: Install the pinned Node 24 child executable at the deployment-owned path and restore the Node 20 parent runtime.
+runs:
+  using: composite
+  steps:
+    - name: Set up pinned Node 24 child runtime
+      uses: actions/setup-node@v7
+      with:
+        node-version: "24.22.2"
+    - name: Install and verify deployment-path child executable
+      shell: bash
+      run: |
+        set -euo pipefail
+        test "$(node --version)" = "v24.22.2"
+        sudo install -D -m 0755 "$(command -v node)" /opt/eper/node24/bin/node
+        test "$(/opt/eper/node24/bin/node --version)" = "v24.22.2"
+    - name: Restore Node 20 parent runtime
+      uses: actions/setup-node@v7
+      with:
+        node-version: "20"
