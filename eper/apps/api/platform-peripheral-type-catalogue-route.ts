@@ -31,9 +31,9 @@ export async function handlePlatformPeripheralTypeCatalogueRoute(req:IncomingMes
  if(!pathname.startsWith(ROOT))return false;
  if(!(req.headers.accept??"").split(",").some(v=>v.split(";")[0].trim().toLowerCase()===VERSIONED_JSON)){respond(req,res,406,{error:"versioned_api_accept_required"});return true;}
  const suffix=pathname.slice(ROOT.length);
- const publish=/^\\/([^/]+)\\/schemas\\/(\\d+)\\/publish$/.exec(suffix);
- const schemaDraft=/^\\/([^/]+)\\/schemas$/.exec(suffix);
- const item=/^\\/([^/]+)$/.exec(suffix);
+ const publish=/^\/([^/]+)\/schemas\/(\\d+)\/publish$/.exec(suffix);
+ const schemaDraft=/^\/([^/]+)\/schemas$/.exec(suffix);
+ const item=/^\/([^/]+)$/.exec(suffix);
  if(suffix&&!publish&&!schemaDraft&&!item){respond(req,res,404,{error:"not_found"});return true;}
  if(process.env.EPER_PERIPHERAL_CATALOGUE_ADMIN_API_ENABLED!=="true"||process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED!=="true"||!deps.credentialStore||!deps.repository||!deps.environment){respond(req,res,404,{error:"not_found"});return true;}
  const method=!suffix?(req.method==="GET"?"GET":"POST"):(publish||schemaDraft)?"POST":req.method==="GET"?"GET":"UNSUPPORTED";
