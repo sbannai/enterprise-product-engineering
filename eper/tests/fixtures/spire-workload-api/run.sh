@@ -22,7 +22,7 @@ trap cleanup EXIT
 mkdir -p "$SPIRE_FIXTURE_DIR/server" "$SPIRE_FIXTURE_DIR/agent" "$SPIRE_FIXTURE_DIR/agent-public"
 mkdir -p "$SPIRE_FIXTURE_DIR/signer-ipc"
 sudo chown 20001:20001 "$SPIRE_FIXTURE_DIR/signer-ipc"
-chmod 2770 "$SPIRE_FIXTURE_DIR/signer-ipc"
+sudo chmod 2770 "$SPIRE_FIXTURE_DIR/signer-ipc"
 chmod 0711 "$SPIRE_FIXTURE_DIR/agent-public"
 sudo chown 1000:1000 "$SPIRE_FIXTURE_DIR/agent-public"
 
