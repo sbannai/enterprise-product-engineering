@@ -80,6 +80,27 @@ test("SPIFFE SDK runtime uses only the explicit Unix socket and disables SDK ret
   assert.equal(closeCalls, 1);
 });
 
+test("SPIFFE SDK runtime attempts close once and propagates cleanup failure", async () => {
+  const cleanupFailure = new Error("SDK transport close failed");
+  let closeCalls = 0;
+  class FailingCloseClient {
+    async getJwtSvid() { return null; }
+    async close() {
+      closeCalls += 1;
+      throw cleanupFailure;
+    }
+  }
+  const runtime = createCustomerAssetScanChildSpiffeSdkRuntime({
+    endpoint: "unix:///run/spire/agent/api.sock",
+    SpiffeClient: FailingCloseClient,
+  });
+  await assert.rejects(runtime.close(), (error) => error === cleanupFailure);
+  // A failed close is not retried implicitly: the caller sees the cleanup
+  // failure and can fail the child attempt without duplicate SDK teardown.
+  await runtime.close();
+  assert.equal(closeCalls, 1);
+});
+
 test("SPIFFE SDK runtime rejects missing, relative, non-Unix and traversal socket endpoints", () => {
   class FakeSpiffeClient {
     constructor() { throw new Error("constructor must not run for invalid endpoints"); }
