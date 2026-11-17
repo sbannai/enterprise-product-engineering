@@ -52,7 +52,7 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ signal 
       signer,
       120,
     );
-    const caPem = await readFile("/fixture/ca.crt", "utf8");
+    const caPem = await readFile("/fixture/scanner-client-ca.crt", "utf8");
     if (signal.aborted) throw new Error("fixture bootstrap aborted");
     return {
       identity,
