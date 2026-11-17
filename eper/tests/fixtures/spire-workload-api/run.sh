@@ -140,10 +140,6 @@ docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T spire-server \
   -parentID "$AGENT_ID" -spiffeID "$EXPECTED_ID" \
   -selector unix:uid:20001 -selector unix:gid:20001 >/dev/null
 
-# Exercise EPER's actual Node 24 SDK adapter and verifier from a separate
-# container sharing only the Agent PID namespace and public socket directory.
-docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --build --rm node-sdk-probe
-
 probe() {
   local uid="$1"
   # Unix WorkloadAttestor resolves the caller PID. Execute as the tested
@@ -183,6 +179,12 @@ if [[ "$POSITIVE_OK" -ne 1 ]]; then
 fi
 unset POSITIVE_OUTPUT LAST_PROBE_OUTPUT
 echo "PASS: registered UID received the expected SPIFFE identity"
+
+# Only invoke the SDK probe after the Agent CLI has demonstrated that the
+# registered workload identity is available. This avoids racing Agent
+# registration/selector propagation and treating an empty first SVID set as
+# an invalid identity result.
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --build --rm node-sdk-probe
 
 # Both an unregistered UID and a sibling UID must fail to obtain any SVID.
 for uid in 20002 20003; do
