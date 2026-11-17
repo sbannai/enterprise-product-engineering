@@ -67,3 +67,60 @@ if [[ "$FINAL_COUNT" != "$EXPECTED_COUNT" ]]; then
   exit 1
 fi
 echo "PASS: second migration run preserved the $FINAL_COUNT-row checksum ledger"
+
+echo "Provisioning one disposable LOGIN bound to the fixture SPIFFE identity"
+compose exec -T audit-postgres psql -v ON_ERROR_STOP=1 -U postgres -d eper_scanner_fixture <<'SQL'
+DO $role$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'eper_fixture_scanner') THEN
+    CREATE ROLE eper_fixture_scanner LOGIN INHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+  END IF;
+END
+$role$;
+GRANT eper_customer_asset_scan_child_access TO eper_fixture_scanner;
+INSERT INTO public.eper_customer_asset_scan_child_identities
+  (login_role, tenant_id, application_id, worker_id, scanner_service_id,
+   enabled, spiffe_id, provider_connection_id)
+VALUES
+  ('eper_fixture_scanner', 'fixture-tenant', 'fixture-application',
+   'fixture-scanner:worker-01', 'fixture-scanner', true,
+   'spiffe://example.org/ns/scanner/sa/customer-asset-scan-child',
+   'fixture-provider-connection')
+ON CONFLICT (login_role) DO UPDATE SET
+  tenant_id = EXCLUDED.tenant_id,
+  application_id = EXCLUDED.application_id,
+  worker_id = EXCLUDED.worker_id,
+  scanner_service_id = EXCLUDED.scanner_service_id,
+  enabled = EXCLUDED.enabled,
+  spiffe_id = EXCLUDED.spiffe_id,
+  provider_connection_id = EXCLUDED.provider_connection_id,
+  updated_at = clock_timestamp();
+SQL
+
+echo "Authenticating the dedicated LOGIN over verified PostgreSQL mTLS"
+TLS_RESULT="$(compose exec -T audit-postgres env \
+  PGSSLMODE=verify-full \
+  PGSSLROOTCERT=/fixture/ca.crt \
+  PGSSLCERT=/fixture/client.crt \
+  PGSSLKEY=/fixture/client.key \
+  psql "host=audit-postgres port=5432 dbname=eper_scanner_fixture user=eper_fixture_scanner" \
+  -v ON_ERROR_STOP=1 -Atc "SELECT concat_ws('|', session_user, current_user, has_function_privilege(current_user, 'public.eper_resolve_customer_asset_scan_child_context(uuid,bigint)', 'EXECUTE'), has_table_privilege(current_user, 'public.eper_customer_assets', 'SELECT'))")"
+if [[ "$TLS_RESULT" != "eper_fixture_scanner|eper_fixture_scanner|t|f" ]]; then
+  echo "FAIL: PostgreSQL mTLS identity/privilege assertion mismatch: $TLS_RESULT" >&2
+  exit 1
+fi
+echo "PASS: certificate-authenticated LOGIN is eper_fixture_scanner"
+echo "PASS: LOGIN inherits resolver EXECUTE and has no direct asset-table SELECT"
+
+RESOLVER_RESULT="$(compose exec -T audit-postgres env \
+  PGSSLMODE=verify-full \
+  PGSSLROOTCERT=/fixture/ca.crt \
+  PGSSLCERT=/fixture/client.crt \
+  PGSSLKEY=/fixture/client.key \
+  psql "host=audit-postgres port=5432 dbname=eper_scanner_fixture user=eper_fixture_scanner" \
+  -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM public.eper_resolve_customer_asset_scan_child_context('00000000-0000-0000-0000-000000000001'::uuid, 1)")"
+if [[ "$RESOLVER_RESULT" != "0" ]]; then
+  echo "FAIL: authenticated context resolver returned unexpected fixture rows: $RESOLVER_RESULT" >&2
+  exit 1
+fi
+echo "PASS: mTLS LOGIN can invoke session_user-bound resolver (empty synthetic fixture result)"
