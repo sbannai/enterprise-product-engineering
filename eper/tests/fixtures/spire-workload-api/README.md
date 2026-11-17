@@ -24,3 +24,17 @@ bash eper/tests/fixtures/spire-workload-api/run.sh
 ```
 
 The Node SDK probe is an integration-test-only install inside its disposable image; it is not added to EPER's production package manifest or lockfile. This fixture does not enable production composition, deploy SPIRE outside the local disposable test, or authorize Business UAT.
+
+## Hosted Node SDK integration result — 17 Nov 2026
+
+The first clean GitHub-hosted run passed on PR #506 head `7d9a668e2d8d0eb64dc55a57fcb7e7b8545daae4` (workflow run `44011071457`).
+
+Observed assertions:
+- Node 24.22.2 image built successfully; EPER TypeScript build completed.
+- Exact `@jeengbe/spiffe@2.1.1` installed inside the disposable probe image.
+- `PASS: Node SDK obtained and EPER verified the current process JWT-SVID`.
+- Registered UID 20001 obtained the expected SPIFFE identity.
+- Unregistered UID 20002 and sibling UID 20003 did not obtain the scanner SVID.
+- The fixture completed and its cleanup ran.
+
+This is live local SPIRE Agent socket integration evidence for the SDK adapter/verifier path. It does not yet cover the full failure/cancellation matrix, deployment-owned composition, production activation, or Business UAT.
