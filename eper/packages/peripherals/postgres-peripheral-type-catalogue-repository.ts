@@ -39,8 +39,9 @@ function validateSchema(value:Record<string,unknown>,depth=0):void {
   }
   if(value.required!==undefined){
     if(!Array.isArray(value.required)||value.required.length>64)invalid();
+    const required=value.required as unknown[];
     const names=new Set(value.properties&&typeof value.properties==="object"?Object.keys(value.properties as object):[]);
-    if(value.required.some(k=>typeof k!=="string"||!names.has(k)))invalid();
+    if(required.some((k:unknown)=>typeof k!=="string"||!names.has(k)))invalid();
   }
   if(value.additionalProperties!==undefined&&typeof value.additionalProperties!=="boolean")invalid();
 }
