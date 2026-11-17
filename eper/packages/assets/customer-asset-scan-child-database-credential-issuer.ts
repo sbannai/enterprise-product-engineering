@@ -2,14 +2,21 @@ import type { CustomerAssetScanChildSpiffeIdentity } from "./customer-asset-scan
 import { isVerifiedCustomerAssetScanChildSpiffeIdentity } from "./customer-asset-scan-child-spiffe-identity.js";
 
 /**
- * Deployment-owned signer. It must cryptographically validate the CSR signature,
- * issue for its public key, ignore the CSR subject, set the certificate CN to
- * databaseRole, add clientAuth EKU, enforce notAfter, and never receive or return
- * a private key. This adapter cannot substitute for that real signer.
+ * Deployment-owned signer. It must independently validate workloadJwtSvid
+ * against the trusted SPIFFE bundle, exact trust domain, SPIFFE ID and audience;
+ * derive the database role from signer-owned policy; cryptographically validate
+ * the CSR signature; ignore the CSR subject; set the certificate CN to the
+ * authorized role; add clientAuth EKU; enforce notAfter; and never receive or
+ * return a private key. This interface is not itself an authenticated transport.
  */
 export interface CustomerAssetScanChildClientCertificateSigner {
   sign(input: {
     readonly csrPem: string;
+    readonly workloadJwtSvid: string;
+    readonly expectedSpiffeId: string;
+    readonly expectedTrustDomain: string;
+    readonly expectedAudience: string;
+    /** Defense-in-depth hint only; signer must derive role independently. */
     readonly databaseRole: string;
     readonly notAfterEpochSeconds: number;
   }): Promise<string>;
@@ -89,6 +96,10 @@ export class CustomerAssetScanChildDatabaseCredentialIssuer {
       }
       const clientCertificatePem = await this.signer.sign({
         csrPem: input.csrPem,
+        workloadJwtSvid: workload.jwtSvid,
+        expectedSpiffeId: workload.spiffeId,
+        expectedTrustDomain: workload.trustDomain,
+        expectedAudience: workload.audience,
         databaseRole,
         notAfterEpochSeconds: expiresAt,
       });
