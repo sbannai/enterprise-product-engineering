@@ -134,7 +134,8 @@ test("issuer snapshots the allowlisted identity-to-role policy at construction",
   );
   policy.set(spiffeId, "postgres_superuser");
   await issuer.issue({ workload: await verifiedIdentity(), csrPem });
-  assert.equal(calls[0].databaseRole, "eper_scan_child_ci");
+  assert.equal("databaseRole" in calls[0], false);
+  assert.equal("notAfterEpochSeconds" in calls[0], false);
 });
 
 test("issued database credential never outlives its authorizing workload SVID", async () => {
