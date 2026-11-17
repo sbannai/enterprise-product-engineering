@@ -72,6 +72,13 @@ export async function provisionCustomerAssetScanChildDatabaseTlsMaterial(input: 
         /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(input.caPem)) {
       throw new Error("CA_MATERIAL_INVALID");
     }
+    if (typeof input.databaseCaPem !== "string" || input.databaseCaPem.length < 80 ||
+        input.databaseCaPem.length > 65_536 ||
+        !input.databaseCaPem.includes("-----BEGIN CERTIFICATE-----") ||
+        !input.databaseCaPem.includes("-----END CERTIFICATE-----") ||
+        /[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]/.test(input.databaseCaPem)) {
+      throw new Error("DATABASE_CA_MATERIAL_INVALID");
+    }
     if (input.signal?.aborted) throw new Error("BOOTSTRAP_ABORTED");
     input.onStage?.("identity");
     const workload = await input.identity.verifyCurrentProcessIdentity(input.signal);
