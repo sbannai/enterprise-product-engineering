@@ -57,6 +57,13 @@ try {
   assert.equal(identity.spiffeId, expectedSpiffeId);
   assert.equal(identity.trustDomain, "example.org");
   assert.equal(identity.audience, CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE);
+  const signerIdentityRequest = await runtime.adapter.fetchJwtSvid({
+    audience: [CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE],
+    spiffeId: "spiffe://example.org/ns/scanner/sa/customer-asset-scan-signer",
+  });
+  assert.equal(signerIdentityRequest.length, 0,
+    "scanner workload must not obtain the separate signer SPIFFE identity");
+  console.log("PASS: scanner workload cannot obtain the signer SPIFFE identity");
   assert.ok(identity.expiresAt > Math.floor(Date.now() / 1000));
   assert.ok(identity.expiresAt <= Math.floor(Date.now() / 1000) + 300);
   assert.equal(JSON.stringify(identity).includes("eyJ"), false);
