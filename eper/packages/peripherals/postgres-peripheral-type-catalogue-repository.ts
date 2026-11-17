@@ -85,7 +85,7 @@ export class PostgresPeripheralTypeCatalogueRepository {
   field(i.actorId,128);field(i.correlationId,128);const typeKey=field(i.typeKey,96);
   if(!keyPattern.test(typeKey))throw new Error("PERIPHERAL_CATALOGUE_TYPE_KEY_INVALID");
   const displayName=field(i.displayName,160),adapterKey=field(i.adapterKey,96),adapterVersion=field(i.adapterVersion,64);
-  validateSchema(i.configurationSchema);const compatibility=i.compatibility??{};
+  validateSchema(i.configurationSchema);if(i.configurationSchema.type!=="object")throw new Error("PERIPHERAL_CATALOGUE_SCHEMA_INVALID");const compatibility=i.compatibility??{};
   if(!compatibility||typeof compatibility!=="object"||Array.isArray(compatibility)||JSON.stringify(compatibility).length>8192)throw new Error("PERIPHERAL_CATALOGUE_COMPATIBILITY_INVALID");
   const c=await this.pool.connect();try{await c.query("BEGIN");await c.query("SELECT set_config('eper.platform_admin','true',true)");
    await c.query("INSERT INTO eper_peripheral_type_definitions(type_key,display_name,created_by,updated_by) VALUES($1,$2,$3,$3)",[typeKey,displayName,i.actorId]);
@@ -97,7 +97,7 @@ export class PostgresPeripheralTypeCatalogueRepository {
  }
  async createSchemaVersion(i:PeripheralCatalogueContext&{typeKey:string;adapterKey:string;adapterVersion:string;configurationSchema:Record<string,unknown>;compatibility?:Record<string,unknown>}):Promise<PeripheralTypeDefinition>{
   field(i.actorId,128);field(i.correlationId,128);const key=field(i.typeKey,96);if(!keyPattern.test(key))throw new Error("PERIPHERAL_CATALOGUE_TYPE_KEY_INVALID");
-  const adapterKey=field(i.adapterKey,96),adapterVersion=field(i.adapterVersion,64);validateSchema(i.configurationSchema);
+  const adapterKey=field(i.adapterKey,96),adapterVersion=field(i.adapterVersion,64);validateSchema(i.configurationSchema);if(i.configurationSchema.type!=="object")throw new Error("PERIPHERAL_CATALOGUE_SCHEMA_INVALID");
   const compatibility=i.compatibility??{};if(!compatibility||typeof compatibility!=="object"||Array.isArray(compatibility)||JSON.stringify(compatibility).length>8192)throw new Error("PERIPHERAL_CATALOGUE_COMPATIBILITY_INVALID");
   const c=await this.pool.connect();try{await c.query("BEGIN");await c.query("SELECT set_config('eper.platform_admin','true',true)");
    const definition=await c.query("SELECT type_key FROM eper_peripheral_type_definitions WHERE type_key=$1 AND lifecycle_status='ACTIVE' FOR UPDATE",[key]);
