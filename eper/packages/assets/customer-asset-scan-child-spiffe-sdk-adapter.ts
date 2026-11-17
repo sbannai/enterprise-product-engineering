@@ -21,7 +21,8 @@ export interface SpiffeSdkJwtClient {
 
 /**
  * Adapts the TypeScript SPIFFE SDK's child-local getJwtSvid() operation to
- * EPER's narrow identity port. The JWT itself is intentionally discarded.
+ * EPER's narrow identity port. The opaque JWT-SVID is retained only so an
+ * independent signer can validate it; callers must never log or persist it.
  */
 export class CustomerAssetScanChildSpiffeSdkAdapter implements SpiffeWorkloadApiClient {
   constructor(private readonly sdk: SpiffeSdkJwtClient) {}
@@ -41,6 +42,7 @@ export class CustomerAssetScanChildSpiffeSdkAdapter implements SpiffeWorkloadApi
     return [{
       spiffeId: svid.spiffeId,
       expiresAtMs: svid.expiresAtMs,
+      token: svid.token,
     }];
   }
 }
