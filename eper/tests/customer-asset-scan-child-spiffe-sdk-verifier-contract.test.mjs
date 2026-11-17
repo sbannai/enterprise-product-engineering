@@ -6,6 +6,7 @@ import {
 import {
   CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
   CustomerAssetScanChildSpiffeIdentityVerifier,
+  getVerifiedCustomerAssetScanChildJwtSvid,
 } from "../dist/packages/assets/customer-asset-scan-child-spiffe-identity.js";
 
 const spiffeId = "spiffe://eper.example/asset-scanner/child";
