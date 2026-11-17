@@ -75,7 +75,20 @@ try {
     );
     assert.equal(independentlyValidated.spiffeId, expectedSpiffeId);
     assert.ok(independentlyValidated.claims.exp > Math.floor(Date.now() / 1000));
-    console.log("PASS: Node SDK independently validated JWT-SVID signature, audience and expiry");
+    const scannerToken = (await runtime.adapter.fetchJwtSvid({
+      audience: [CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE],
+      spiffeId: expectedSpiffeId,
+    }))[0].token;
+    await assert.rejects(
+      signerRuntime.validator.validateJwt("eper:wrong-audience", scannerToken),
+    );
+    await assert.rejects(
+      signerRuntime.validator.validateJwt(
+        CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
+        "not-a-valid-jwt-svid-token-value",
+      ),
+    );
+    console.log("PASS: signer SDK validates SVID signature, audience and expiry; rejects wrong audience and malformed token");
   } finally {
     await signerRuntime.close();
   }
