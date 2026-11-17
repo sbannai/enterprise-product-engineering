@@ -125,18 +125,18 @@ VALUES
 INSERT INTO public.eper_customer_asset_upload_sessions
   (tenant_id, application_id, upload_session_id, asset_id, actor_id,
    expected_size_bytes, received_size_bytes, provider_upload_reference,
-   upload_status, idempotency_key, expires_at)
+   upload_status, idempotency_key, expires_at, attempt_generation)
 VALUES
   ('fixture-tenant', 'fixture-application',
    '00000000-0000-4000-8000-000000000111',
    '00000000-0000-4000-8000-000000000101', 'fixture-actor',
    11, 11, 'fixture-provider-upload://upload-101',
-   'completed', 'fixture-seed-idempotency-101', clock_timestamp() + interval '1 hour'),
+   'completed', 'fixture-seed-idempotency-101', clock_timestamp() + interval '1 hour', 1),
   ('other-tenant', 'other-application',
    '00000000-0000-4000-8000-000000000222',
    '00000000-0000-4000-8000-000000000202', 'fixture-actor',
    11, 11, 'fixture-provider-upload://upload-202',
-   'completed', 'fixture-seed-idempotency-202', clock_timestamp() + interval '1 hour');
+   'completed', 'fixture-seed-idempotency-202', clock_timestamp() + interval '1 hour', 1);
 
 INSERT INTO public.eper_customer_asset_scan_jobs
   (tenant_id, application_id, upload_session_id, asset_id, correlation_id,
