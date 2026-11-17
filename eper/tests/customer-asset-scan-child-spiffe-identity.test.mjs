@@ -7,6 +7,7 @@ import {
   CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
   CustomerAssetScanChildSpiffeIdentityError,
   CustomerAssetScanChildSpiffeIdentityVerifier,
+  getVerifiedCustomerAssetScanChildJwtSvid,
 } from "../dist/packages/assets/customer-asset-scan-child-spiffe-identity.js";
 
 const spiffeId = "spiffe://eper.example/asset-scanner/child";
@@ -34,7 +35,8 @@ test("SPIFFE verifier obtains the current process SVID for the fixed audience an
   assert.equal(identity.trustDomain, "eper.example");
   assert.equal(identity.audience, CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE);
   assert.equal(identity.expiresAt, Math.floor(expiresAtMs / 1000));
-  assert.equal(identity.jwtSvid, jwtSvid);
+  assert.equal(JSON.stringify(identity).includes(jwtSvid), false);
+  assert.equal(getVerifiedCustomerAssetScanChildJwtSvid(identity), jwtSvid);
   assert.deepEqual(api.calls, [{
     audience: [CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE],
     spiffeId,
@@ -62,7 +64,7 @@ test("SPIFFE verifier rejects an unexpected, missing, or ambiguous fetched ident
 test("SPIFFE verifier rejects expired and overlong SVID lifetimes", async () => {
   for (const expiry of [now - 1, now + 301_000]) {
     const verifier = new CustomerAssetScanChildSpiffeIdentityVerifier(
-      client({ fetched: [{ spiffeId, expiresAtMs: expiry }] }), spiffeId, () => now,
+      client({ fetched: [{ spiffeId, expiresAtMs: expiry, token: jwtSvid }] }), spiffeId, () => now,
     );
     await assert.rejects(verifier.verifyCurrentProcessIdentity(), {
       code: "CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_INVALID",
