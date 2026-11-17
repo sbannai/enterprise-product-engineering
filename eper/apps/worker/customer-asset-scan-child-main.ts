@@ -170,6 +170,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
       identity: tlsBootstrap.identity,
       issuer: tlsBootstrap.issuer,
       caPem: tlsBootstrap.caPem,
+      databaseCaPem: tlsBootstrap.databaseCaPem,
       signal: controller.signal,
       onStage(stage) {
         bootstrapFailureCode = stage === "identity" ? "SCANNER_IDENTITY_FAILED" :
@@ -187,7 +188,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
       query<T extends Record<string, unknown>>(text: string, values?: readonly unknown[]): Promise<{ rows: T[] }>;
     }};
     const databasePort = boundedInteger("PGPORT", 5432, 1, 65535);
-    const ca = await readDeploymentFile(tlsMaterial.caPath);
+    const ca = await readDeploymentFile(tlsMaterial.databaseCaPath);
     const cert = await readDeploymentFile(tlsMaterial.certificatePath);
     const key = await readDeploymentFile(tlsMaterial.privateKeyPath, true);
     bootstrapFailureCode = "SCANNER_DATABASE_CONNECTION_FAILED";
