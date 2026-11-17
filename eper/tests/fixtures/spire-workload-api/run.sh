@@ -11,7 +11,7 @@ EXPECTED_ID="spiffe://example.org/ns/scanner/sa/customer-asset-scan-child"
 AGENT_ID="spiffe://example.org/host/local-node"
 SOCKET="/run/spire/agent/public/api.sock"
 SERVER_SOCKET="/run/spire/server/private/api.sock"
-AUDIENCE="eper-local-attestation-test"
+AUDIENCE="eper:customer-asset-scan-child"
 
 cleanup() {
   docker compose -p "$PROJECT" -f "$COMPOSE_FILE" down --volumes --remove-orphans >/dev/null 2>&1 || true
@@ -134,6 +134,10 @@ docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T spire-server \
   /opt/spire/bin/spire-server entry create -socketPath "$SERVER_SOCKET" \
   -parentID "$AGENT_ID" -spiffeID "$EXPECTED_ID" \
   -selector unix:uid:20001 -selector unix:gid:20001 >/dev/null
+
+# Exercise EPER's actual Node 24 SDK adapter and verifier from a separate
+# container sharing only the Agent PID namespace and public socket directory.
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --build --rm node-sdk-probe
 
 probe() {
   local uid="$1"
