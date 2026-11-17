@@ -34,14 +34,14 @@ const config = join(ipc, "ca.cnf");
 const ext = join(ipc, "client.ext");
 
 function opensslTime(epochSeconds) {
-  return new Date(epochSeconds * 1000).toISOString().slice(2).replace(/[-:T]/g, "").replace(/\\.\\d{3}Z$/, "Z");
+  return new Date(epochSeconds * 1000).toISOString().slice(2).replace(/[-:T]/g, "").replace(/\.\d{3}Z$/, "Z");
 }
 
 await mkdir(newCerts, { recursive: true });
 await chmod(ipc, 0o770);
 await writeFile(index, "", { mode: 0o660 });
-await writeFile(serial, "01\\n", { mode: 0o660 });
-await writeFile(ext, "basicConstraints=critical,CA:FALSE\\nkeyUsage=critical,digitalSignature\\nextendedKeyUsage=clientAuth\\n", { mode: 0o660 });
+await writeFile(serial, "01\n", { mode: 0o660 });
+await writeFile(ext, "basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=clientAuth\n", { mode: 0o660 });
 await writeFile(config, [
   "[ ca ]", "default_ca = CA_default", "[ CA_default ]",
   "dir = " + ipc, "database = " + index, "new_certs_dir = " + newCerts,
@@ -51,7 +51,7 @@ await writeFile(config, [
   "[ policy_any ]", "commonName = supplied", "[ client ]",
   "basicConstraints = critical,CA:FALSE", "keyUsage = critical,digitalSignature",
   "extendedKeyUsage = clientAuth", "",
-].join("\\n"), { mode: 0o660 });
+].join("\n"), { mode: 0o660 });
 await execFile("openssl", [
   "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256",
   "-keyout", caKey, "-out", caCert, "-days", "1",
