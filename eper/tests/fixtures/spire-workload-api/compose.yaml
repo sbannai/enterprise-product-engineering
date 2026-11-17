@@ -76,13 +76,30 @@ services:
     networks: [spire-isolated]
     restart: "no"
 
-  signer-sdk-probe:
+  signer-process:
     build:
       context: ../../../..
       dockerfile: eper/tests/fixtures/spire-workload-api/Dockerfile.signer-sdk-probe
+    user: "20004:20004"
+    group_add: ["20001"]
     pid: "service:spire-agent"
     volumes:
       - "${SPIRE_FIXTURE_DIR:?}/agent-public:/run/spire/agent/public:ro"
+      - "${SPIRE_FIXTURE_DIR:?}/signer-ipc:/signer-ipc"
+    depends_on: [spire-agent]
+    networks: [spire-isolated]
+    restart: "no"
+
+  scanner-signer-socket-probe:
+    build:
+      context: ../../../..
+      dockerfile: eper/tests/fixtures/spire-workload-api/Dockerfile.node-sdk-probe
+    user: "20001:20001"
+    pid: "service:spire-agent"
+    volumes:
+      - "${SPIRE_FIXTURE_DIR:?}/agent-public:/run/spire/agent/public:ro"
+      - "${SPIRE_FIXTURE_DIR:?}/signer-ipc:/signer-ipc:ro"
+    entrypoint: ["node", "tests/fixtures/spire-workload-api/scanner-signer-socket-probe.mjs"]
     depends_on: [spire-agent]
     networks: [spire-isolated]
     restart: "no"
