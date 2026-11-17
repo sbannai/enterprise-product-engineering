@@ -15,6 +15,30 @@ const {
 } = await import("/eper/dist/packages/assets/customer-asset-scan-child-spiffe-identity.js");
 
 const expectedSpiffeId = "spiffe://example.org/ns/scanner/sa/customer-asset-scan-child";
+
+// The fixture can rerun this probe after the socket mode is changed to 000.
+// This proves a real OS-level permission denial through the production adapter.
+if (process.env.SPIRE_PROBE_EXPECT_DENIED === "1") {
+  const deniedRuntime = createCustomerAssetScanChildSpiffeSdkRuntime({
+    endpoint: "unix:///run/spire/agent/public/api.sock",
+    SpiffeClient,
+  });
+  try {
+    const deniedVerifier = new CustomerAssetScanChildSpiffeIdentityVerifier(
+      deniedRuntime.adapter,
+      expectedSpiffeId,
+    );
+    await assert.rejects(
+      deniedVerifier.verifyCurrentProcessIdentity(AbortSignal.timeout(3_000)),
+      (error) => error instanceof CustomerAssetScanChildSpiffeIdentityError &&
+        error.code === "CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_UNAVAILABLE",
+    );
+    console.log("PASS: permission-denied Workload API socket fails closed as unavailable");
+  } finally {
+    await deniedRuntime.close();
+  }
+  process.exit(0);
+}
 const runtime = createCustomerAssetScanChildSpiffeSdkRuntime({
   endpoint: "unix:///run/spire/agent/public/api.sock",
   SpiffeClient,
