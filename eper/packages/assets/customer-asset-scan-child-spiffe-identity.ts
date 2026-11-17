@@ -109,6 +109,11 @@ export class CustomerAssetScanChildSpiffeIdentityVerifier {
       verifiedCurrentProcessIdentities.add(identity);
       return identity;
     } catch (error) {
+      // Cancellation belongs to the supervising child-process lifecycle. Do not
+      // relabel an intentional abort as an unavailable Workload API dependency.
+      if (signal?.aborted) {
+        throw signal.reason instanceof Error ? signal.reason : error;
+      }
       if (error instanceof CustomerAssetScanChildSpiffeIdentityError) throw error;
       if (error instanceof Error &&
           error.message === "CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_SVID_INVALID") {

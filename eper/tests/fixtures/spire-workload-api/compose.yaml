@@ -24,6 +24,17 @@ services:
     depends_on: [spire-server]
     restart: "no"
 
+  node-sdk-probe:
+    build:
+      context: ../../../..
+      dockerfile: eper/tests/fixtures/spire-workload-api/Dockerfile.node-sdk-probe
+    user: "20001:20001"
+    pid: "service:spire-agent"
+    volumes:
+      - "${SPIRE_FIXTURE_DIR:?}/agent-public:/run/spire/agent/public:ro"
+    depends_on: [spire-agent]
+    networks: [spire-isolated]
+    restart: "no"
 
 networks:
   spire-isolated:

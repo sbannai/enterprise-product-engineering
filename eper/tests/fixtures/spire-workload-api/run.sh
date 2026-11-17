@@ -11,7 +11,7 @@ EXPECTED_ID="spiffe://example.org/ns/scanner/sa/customer-asset-scan-child"
 AGENT_ID="spiffe://example.org/host/local-node"
 SOCKET="/run/spire/agent/public/api.sock"
 SERVER_SOCKET="/run/spire/server/private/api.sock"
-AUDIENCE="eper-local-attestation-test"
+AUDIENCE="eper:customer-asset-scan-child"
 
 cleanup() {
   docker compose -p "$PROJECT" -f "$COMPOSE_FILE" down --volumes --remove-orphans >/dev/null 2>&1 || true
@@ -135,6 +135,10 @@ docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T spire-server \
   -parentID "$AGENT_ID" -spiffeID "$EXPECTED_ID" \
   -selector unix:uid:20001 -selector unix:gid:20001 >/dev/null
 
+# Exercise EPER's actual Node 24 SDK adapter and verifier from a separate
+# container sharing only the Agent PID namespace and public socket directory.
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --build --rm node-sdk-probe
+
 probe() {
   local uid="$1"
   # Unix WorkloadAttestor resolves the caller PID. Execute as the tested
@@ -192,3 +196,11 @@ for uid in 20002 20003; do
   unset NEGATIVE_OUTPUT
   echo "PASS: unregistered UID $uid received no scanner SVID (probe exit $PROBE_STATUS)"
 done
+
+# Prove the SDK itself cannot connect when the real Unix socket denies access.
+# This runs as the same unprivileged scanner UID, against the same live Agent
+# socket, after the positive and identity-isolation assertions have completed.
+sudo chmod 000 "$SPIRE_FIXTURE_DIR/agent-public/api.sock"
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --build --rm \
+  -e SPIRE_PROBE_EXPECT_DENIED=1 node-sdk-probe
+echo "PASS: non-root Node SDK probe cannot access the permission-restricted socket"
