@@ -22,5 +22,5 @@ test("F-023 migration makes catalogue events append-only and restricts private r
   assert.match(migration, /ENABLE ROW LEVEL SECURITY/);
   assert.match(migration, /FORCE ROW LEVEL SECURITY/);
   assert.match(migration, /current_setting\('eper\.platform_admin', true\) = 'true'/);
-  assert.match(migration, /version_status = 'PUBLISHED'/);
+  assert.match(migration, /lifecycle_status = 'PUBLISHED'/);
 });
