@@ -11,6 +11,7 @@ export const CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE =
 export interface SpiffeWorkloadApiJwtSvid {
   spiffeId: string;
   expiresAtMs: number;
+  token: string;
 }
 
 /** Narrow port implemented by the SPIFFE SDK adapter. */
@@ -27,6 +28,8 @@ export interface CustomerAssetScanChildSpiffeIdentity {
   readonly trustDomain: string;
   readonly audience: typeof CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE;
   readonly expiresAt: number;
+  /** Opaque short-lived JWT-SVID; pass only to the independent signer. */
+  readonly jwtSvid: string;
 }
 
 // A WeakSet makes verification provenance unforgeable by constructing a structurally
@@ -86,7 +89,10 @@ export class CustomerAssetScanChildSpiffeIdentityVerifier {
       });
       if (!Array.isArray(fetched) || fetched.length !== 1 ||
           fetched[0]?.spiffeId !== this.expectedSpiffeId ||
-          !Number.isSafeInteger(fetched[0]?.expiresAtMs)) {
+          !Number.isSafeInteger(fetched[0]?.expiresAtMs) ||
+          typeof fetched[0]?.token !== "string" ||
+          fetched[0].token.length < 20 || fetched[0].token.length > 16_384 ||
+          /[\\u0000-\\u0020\\u007f]/.test(fetched[0].token)) {
         throw new CustomerAssetScanChildSpiffeIdentityError("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_INVALID");
       }
 
@@ -105,6 +111,7 @@ export class CustomerAssetScanChildSpiffeIdentityVerifier {
         trustDomain,
         audience: CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
         expiresAt,
+        jwtSvid: fetched[0].token,
       });
       verifiedCurrentProcessIdentities.add(identity);
       return identity;
