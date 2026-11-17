@@ -75,6 +75,8 @@ jobs:
         run: npm ci
       - name: Configure ephemeral PostgreSQL scanner-child client certificate authentication
         run: bash scripts/configure-scan-child-client-cert-ci.sh
+      - name: Provision pinned Node 24 scanner child runtime
+        uses: ./.github/actions/eper-scanner-node24-runtime
       - name: Run the same one-command developer verification documented for a fresh clone
         run: npm run dev:verify
       - name: Prove PostgreSQL backup and restore with server-matched PostgreSQL 16 utilities
