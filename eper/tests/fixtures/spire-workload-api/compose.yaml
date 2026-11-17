@@ -14,13 +14,14 @@ services:
       - -c
       - ssl_key_file=/fixture/server.key
       - -c
-      - ssl_ca_file=/fixture/ca.crt
+      - ssl_ca_file=/signer-ipc/ca.crt
       - -c
       - hba_file=/fixture/pg_hba.conf
       - -c
       - ident_file=/fixture/pg_ident.conf
     volumes:
       - "${SPIRE_FIXTURE_DIR:?}/postgres:/fixture:ro"
+      - "${SPIRE_FIXTURE_DIR:?}/signer-ipc:/signer-ipc:ro"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d eper_scanner_fixture"]
       interval: 2s
@@ -99,6 +100,7 @@ services:
     volumes:
       - "${SPIRE_FIXTURE_DIR:?}/agent-public:/run/spire/agent/public:ro"
       - "${SPIRE_FIXTURE_DIR:?}/signer-ipc:/signer-ipc:ro"
+      - "${SPIRE_FIXTURE_DIR:?}/postgres:/fixture:ro"
     entrypoint: ["node", "tests/fixtures/spire-workload-api/scanner-signer-socket-probe.mjs"]
     depends_on: [spire-agent]
     networks: [spire-isolated]
