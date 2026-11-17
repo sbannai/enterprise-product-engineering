@@ -129,23 +129,20 @@ test("signer listener processes at most one request per socket while signing is 
       return certificatePem;
     },
   });
+  let clientSocket;
   const response = new Promise((resolve, reject) => {
-    const socket = createConnection(socketPath);
+    clientSocket = createConnection(socketPath);
     let value = "";
-    socket.once("error", reject);
-    socket.on("data", chunk => { value += chunk.toString(); });
-    socket.on("end", () => resolve(value));
-    socket.once("connect", () => {
-      socket.write(JSON.stringify({ csrPem, workloadJwtSvid: token }) + "\\n");
+    clientSocket.once("error", reject);
+    clientSocket.on("data", chunk => { value += chunk.toString(); });
+    clientSocket.on("end", () => resolve(value));
+    clientSocket.once("connect", () => {
+      clientSocket.write(JSON.stringify({ csrPem, workloadJwtSvid: token }) + "\\n");
     });
   });
   await called;
-  // A second frame arriving before the signer returns must be ignored.
-  const extra = createConnection(socketPath);
-  extra.once("connect", () => {
-    extra.write(JSON.stringify({ csrPem, workloadJwtSvid: token }) + "\\n");
-    extra.end();
-  });
+  // A second frame on the same connection, before signing completes, is ignored.
+  clientSocket.write(JSON.stringify({ csrPem, workloadJwtSvid: token }) + "\\n");
   releaseSigner();
   const payload = await response;
   assert.equal(JSON.parse(payload).ok, true);
