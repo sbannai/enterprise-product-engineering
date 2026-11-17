@@ -113,7 +113,7 @@ services:
     pid: "service:spire-agent"
     environment:
       EPER_SCANNER_CHILD_SPIFFE_AUDIENCE: "eper:customer-asset-scan-child"
-      EPER_SCANNER_CHILD_COMPOSITION_MODULE: "/eper/dist/packages/assets/scanners/fixture-composition.mjs"
+      EPER_SCANNER_CHILD_COMPOSITION_MODULE: "/eper/dist/packages/assets/scanners/fixture-composition.js"
       EPER_SCANNER_CHILD_TIMEOUT_MS: "30000"
       PGHOST: "audit-postgres"
       PGPORT: "5432"
