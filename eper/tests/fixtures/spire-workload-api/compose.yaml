@@ -1,4 +1,26 @@
 services:
+  audit-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: eper_fixture_only_password
+      POSTGRES_DB: eper_scanner_fixture
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d eper_scanner_fixture"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [spire-isolated]
+    restart: "no"
+
+  audit-migrations:
+    build:
+      context: ../../../..
+      dockerfile: eper/tests/fixtures/spire-workload-api/Dockerfile.node-sdk-probe
+    user: "20001:20001"
+    networks: [spire-isolated]
+    restart: "no"
+
   spire-server:
     image: ghcr.io/spiffe/spire-server:1.16.0@sha256:ff546f4c62dafc479a0cd79eae9a7b6df2975754d75efd31706098e0d7548837
     user: "1000:1000"
