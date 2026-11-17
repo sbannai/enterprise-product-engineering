@@ -89,3 +89,26 @@ test("child cleanup immediately runs and contains rejection from a disposer regi
   await Promise.resolve();
   assert.equal(invoked, true);
 });
+
+test("child cleanup awaits each asynchronous disposer before starting the next LIFO disposer", async () => {
+  const registry = createCustomerAssetScanChildCleanupRegistry();
+  const closed = [];
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+
+  registry.register(async () => { closed.push("sdk"); });
+  registry.register(async () => {
+    closed.push("provider-start");
+    await gate;
+    closed.push("provider-end");
+  });
+
+  const closing = registry.close();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(closed, ["provider-start"]);
+
+  release();
+  assert.deepEqual(await closing, []);
+  assert.deepEqual(closed, ["provider-start", "provider-end", "sdk"]);
+});
