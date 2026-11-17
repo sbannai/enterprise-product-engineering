@@ -245,12 +245,20 @@ echo "PASS: registered UID received the expected SPIFFE identity"
 # own SPIRE registration and Workload API access; scanner receives only the
 # shared socket and public CA certificate.
 docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up -d signer-process
+# Inspect the socket from inside the signer container. Docker's bind-mount
+# backing path is not guaranteed to be visible to the runner namespace.
+SOCKET_READY=0
 for _ in $(seq 1 45); do
-  if [[ -S "$SPIRE_FIXTURE_DIR/signer-ipc/signer.sock" ]]; then break; fi
+  if docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T signer-process \
+      node -e 'const fs=require("node:fs"); process.exit(fs.existsSync("/signer-ipc/signer.sock") && fs.statSync("/signer-ipc/signer.sock").isSocket() ? 0 : 1)' 2>/dev/null; then
+    SOCKET_READY=1
+    break
+  fi
   sleep 1
 done
-if [[ ! -S "$SPIRE_FIXTURE_DIR/signer-ipc/signer.sock" ]]; then
-  echo "FAIL: isolated signer process did not create its Unix socket" >&2
+if [[ "$SOCKET_READY" -ne 1 ]]; then
+  echo "FAIL: isolated signer process did not create its Unix socket in the shared IPC mount" >&2
+  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T signer-process ls -la /signer-ipc >&2 || true
   docker compose -p "$PROJECT" -f "$COMPOSE_FILE" logs --no-color signer-process >&2 || true
   exit 1
 fi
