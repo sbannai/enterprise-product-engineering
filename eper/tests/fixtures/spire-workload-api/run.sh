@@ -133,7 +133,7 @@ chmod 600 "$SPIRE_FIXTURE_DIR/postgres/server.key"
 chmod 644 "$SPIRE_FIXTURE_DIR/postgres/ca.crt" "$SPIRE_FIXTURE_DIR/postgres/server.crt" "$SPIRE_FIXTURE_DIR/postgres/pg_hba.conf" "$SPIRE_FIXTURE_DIR/postgres/pg_ident.conf"
 # Keep the fixture directory owned by the runner so cleanup can always remove it.
 # Only the two private keys need PostgreSQL's UID for its server and psql client.
-sudo chown 999:999 "$SPIRE_FIXTURE_DIR/postgres/server.key" "$SPIRE_FIXTURE_DIR/postgres/client.key"
+sudo chown 999:999 "$SPIRE_FIXTURE_DIR/postgres/server.key"
 
 docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up -d spire-server
 
