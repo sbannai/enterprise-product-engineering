@@ -4,7 +4,7 @@ WORKDIR /eper
 COPY eper/package.json eper/package-lock.json ./
 RUN npm ci
 COPY eper/ ./
-RUN npm run build && mkdir -p dist/packages/assets/scanners /sdk && npm install --prefix /sdk --omit=dev --ignore-scripts --save-exact @jeengbe/spiffe@2.1.1
+RUN npm run build && mkdir -p dist/packages/assets/scanners /sdk /opt/eper/node24/bin && ln -s /usr/local/bin/node /opt/eper/node24/bin/node && npm install --prefix /sdk --omit=dev --ignore-scripts --save-exact @jeengbe/spiffe@2.1.1
 COPY eper/tests/fixtures/spire-workload-api/scanner-child-fixture-composition.mjs ./dist/packages/assets/scanners/fixture-composition.js
 USER 20001:20001
 ENTRYPOINT ["node", "tests/fixtures/spire-workload-api/node-sdk-probe.mjs"]
