@@ -8,7 +8,8 @@ import { assertTrustedCustomerAssetScanCompositionModule } from "../../packages/
 import { CustomerAssetScanChildRuntime } from "../../packages/assets/customer-asset-scan-child-runtime.js";
 import { assertCustomerAssetScanChildPostgresDnsHost, provisionCustomerAssetScanChildDatabaseTlsMaterial } from "../../packages/assets/customer-asset-scan-child-database-tls-material.js";
 import { assertCustomerAssetScanChildDatabaseTlsBootstrap, type CustomerAssetScanChildDatabaseTlsBootstrap } from "../../packages/assets/customer-asset-scan-child-database-tls-bootstrap-contract.js";
-import { assertCustomerAssetScanChildRuntimeComposition, type CustomerAssetScanChildRuntimeComposition } from "../../packages/assets/customer-asset-scan-child-composition-contract.js";
+import { assertCustomerAssetScanChildRuntimeComposition, type CustomerAssetScanChildRuntimeComposition, type CustomerAssetScanChildRuntimeDependenciesFactory } from "../../packages/assets/customer-asset-scan-child-composition-contract.js";
+import { createCustomerAssetScanChildCleanupRegistry } from "../../packages/assets/customer-asset-scan-child-cleanup.js";
 import {
   isCustomerAssetScanChildStart,
   type CustomerAssetScanChildFailure,
@@ -98,7 +99,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
   process.exitCode = 1;
 } else {
   let pool: { end(): Promise<void> } | undefined;
-  let closeComposition: CustomerAssetScanChildRuntimeComposition["close"];
+  const cleanupRegistry = createCustomerAssetScanChildCleanupRegistry();
   let tlsBootstrap: CustomerAssetScanChildDatabaseTlsBootstrap | undefined;
   let tlsMaterial: Awaited<ReturnType<typeof provisionCustomerAssetScanChildDatabaseTlsMaterial>> | undefined;
   const controller = new AbortController();
@@ -120,11 +121,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
         env: NodeJS.ProcessEnv;
         onStage?: (stage: "sdk" | "identity" | "issuer" | "ca") => void;
       }) => Promise<CustomerAssetScanChildDatabaseTlsBootstrap> | CustomerAssetScanChildDatabaseTlsBootstrap;
-      createCustomerAssetScanChildRuntimeDependencies?: (input: {
-        pool: { end(): Promise<void>; query<T extends Record<string, unknown>>(text: string, values?: readonly unknown[]): Promise<{ rows: T[] }> };
-        env: NodeJS.ProcessEnv;
-        identity: CustomerAssetScanChildDatabaseTlsBootstrap["identity"];
-      }) => Promise<CustomerAssetScanChildRuntimeComposition> | CustomerAssetScanChildRuntimeComposition;
+      createCustomerAssetScanChildRuntimeDependencies?: CustomerAssetScanChildRuntimeDependenciesFactory;
     };
     try {
       module = await import(pathToFileURL(compositionPath).href) as typeof module;
@@ -195,13 +192,14 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     bootstrapFailureCode = "SCANNER_COMPOSITION_DEPENDENCIES_FAILED";
     const dependencies = await module.createCustomerAssetScanChildRuntimeDependencies({
       pool: createdPool, env: process.env, identity: tlsBootstrap.identity,
+      registerCleanup: cleanupRegistry.register,
     });
     if (!dependencies || dependencies.identity !== tlsBootstrap.identity) {
       bootstrapFailureCode = "SCANNER_COMPOSITION_CONTRACT_INVALID";
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_COMPOSITION_MISMATCH");
     }
     if (dependencies && typeof dependencies === "object" && typeof dependencies.close === "function") {
-      closeComposition = dependencies.close.bind(dependencies);
+      cleanupRegistry.register(dependencies.close.bind(dependencies));
     }
     bootstrapFailureCode = "SCANNER_COMPOSITION_CONTRACT_INVALID";
     assertCustomerAssetScanChildRuntimeComposition(dependencies);
@@ -219,7 +217,8 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     emitFailure(start, bootstrapFailureCode);
     process.exitCode = 1;
   } finally {
-    await Promise.resolve().then(() => closeComposition?.()).catch(() => undefined);
+    const cleanupErrors = await cleanupRegistry.close();
+    if (cleanupErrors.length) console.error("EPER scanner child cleanup reported " + cleanupErrors.length + " disposer failure(s)");
     if (pool) await pool.end().catch(() => undefined);
     await tlsMaterial?.cleanup().catch(() => {});
     await Promise.resolve().then(() => tlsBootstrap?.close?.()).catch(() => undefined);
