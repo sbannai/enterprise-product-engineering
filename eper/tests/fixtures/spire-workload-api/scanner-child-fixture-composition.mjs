@@ -4,22 +4,22 @@ import { createRequire } from "node:module";
 
 import {
   CustomerAssetScanChildSpiffeIdentityVerifier,
-} from "../../../dist/packages/assets/customer-asset-scan-child-spiffe-identity.js";
+} from "../customer-asset-scan-child-spiffe-identity.js";
 import {
   createCustomerAssetScanChildSpiffeSdkRuntime,
-} from "../../../dist/packages/assets/customer-asset-scan-child-spiffe-sdk-adapter.js";
+} from "../customer-asset-scan-child-spiffe-sdk-adapter.js";
 import {
   CustomerAssetScanChildUnixSocketCertificateSigner,
-} from "../../../dist/packages/assets/customer-asset-scan-child-database-signer-unix-socket.js";
+} from "../customer-asset-scan-child-database-signer-unix-socket.js";
 import {
   CustomerAssetScanChildDatabaseCredentialIssuer,
-} from "../../../dist/packages/assets/customer-asset-scan-child-database-credential-issuer.js";
+} from "../customer-asset-scan-child-database-credential-issuer.js";
 import {
   PostgresCustomerAssetScanChildInputResolver,
-} from "../../../dist/packages/assets/customer-asset-scan-child-input-resolver.js";
+} from "../customer-asset-scan-child-input-resolver.js";
 import {
   verifiedProviderInternalObjectChunks,
-} from "../../../dist/packages/integrations/provider-internal-object-read.js";
+} from "../../integrations/provider-internal-object-read.js";
 
 const EXPECTED_SPIFFE_ID = "spiffe://example.org/ns/scanner/sa/customer-asset-scan-child";
 const EXPECTED_ROLE = "eper_fixture_scanner";
