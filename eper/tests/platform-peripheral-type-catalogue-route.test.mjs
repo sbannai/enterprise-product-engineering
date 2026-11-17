@@ -31,6 +31,13 @@ test("catalogue creation derives actor and correlation from trusted credential a
  const deps=fixture(),res=response();await handlePlatformPeripheralTypeCatalogueRoute(request("POST","/platform/admin/peripheral-types",{typeKey:"barcode.scanner",displayName:"Barcode scanner",adapterKey:"usb-hid",adapterVersion:"1.0.0",configurationSchema:{type:"object"}}),res,"/platform/admin/peripheral-types",deps);
  assert.equal(res.statusCode,201);const input=deps.calls[0][1];assert.equal(input.actorId,"peripheral-admin");assert.equal(input.correlationId,"peripheral-catalogue-test");assert.equal(input.typeKey,"barcode.scanner");
 });
+
+test("new immutable schema version is created as a draft",async()=>{
+ process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED="true";process.env.EPER_PERIPHERAL_CATALOGUE_ADMIN_API_ENABLED="true";
+ const deps=fixture(),res=response();await handlePlatformPeripheralTypeCatalogueRoute(request("POST","/platform/admin/peripheral-types/barcode.scanner/schemas",{adapterKey:"usb-hid",adapterVersion:"2.0.0",configurationSchema:{type:"object"}}),res,"/platform/admin/peripheral-types/barcode.scanner/schemas",deps);
+ assert.equal(res.statusCode,201);assert.deepEqual(deps.calls[0],["createSchemaVersion",{actorId:"peripheral-admin",correlationId:"peripheral-catalogue-test",environment:"sandbox",typeKey:"barcode.scanner",adapterKey:"usb-hid",adapterVersion:"2.0.0",configurationSchema:{type:"object"}}]);
+});
+
 test("schema publication uses exact type and version",async()=>{
  process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED="true";process.env.EPER_PERIPHERAL_CATALOGUE_ADMIN_API_ENABLED="true";
  const deps=fixture(),res=response();await handlePlatformPeripheralTypeCatalogueRoute(request("POST","/platform/admin/peripheral-types/barcode.scanner/schemas/3/publish",{}),res,"/platform/admin/peripheral-types/barcode.scanner/schemas/3/publish",deps);
