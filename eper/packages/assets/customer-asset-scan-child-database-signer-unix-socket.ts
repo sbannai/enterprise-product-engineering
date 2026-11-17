@@ -121,6 +121,7 @@ export async function listenCustomerAssetScanChildSignerUnixSocket(input: {
   const server: Server = createServer((socket: Socket) => {
     socket.setTimeout(timeoutMs);
     let request = "";
+    let processing = false;
     let handled = false;
     const respond = (payload: string) => {
       if (handled) return;
@@ -130,7 +131,7 @@ export async function listenCustomerAssetScanChildSignerUnixSocket(input: {
     socket.on("timeout", () => socket.destroy());
     socket.on("error", () => socket.destroy());
     socket.on("data", async chunk => {
-      if (handled) return;
+      if (handled || processing) return;
       request += chunk.toString("utf8");
       if (Buffer.byteLength(request, "utf8") > MAX_REQUEST_BYTES) {
         respond(safeErrorResponse());
@@ -142,6 +143,9 @@ export async function listenCustomerAssetScanChildSignerUnixSocket(input: {
         respond(safeErrorResponse());
         return;
       }
+      // Lock this connection before the asynchronous signer call. Additional
+      // chunks must never trigger a second certificate issuance.
+      processing = true;
       try {
         const parsed = JSON.parse(request.slice(0, newline)) as {
           csrPem?: unknown; workloadJwtSvid?: unknown;
