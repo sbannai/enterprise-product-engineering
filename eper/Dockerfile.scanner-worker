@@ -1,8 +1,8 @@
-# Dedicated scanner worker image: Node 20 parent + pinned Node 24 child runtime.
+# Dedicated scanner worker image: immutable Node 20 parent + pinned Node 24 child runtime.
 # The general API image remains unchanged on Node 20.
 FROM node:24.22.2-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS node24
 
-FROM node:20-bookworm-slim AS build
+FROM node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -13,7 +13,7 @@ COPY contracts ./contracts
 COPY requirements ./requirements
 RUN npm run build
 
-FROM node:20-bookworm-slim AS runtime
+FROM node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 ARG EPER_BUILD_ID
