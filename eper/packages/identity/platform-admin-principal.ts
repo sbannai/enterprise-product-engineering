@@ -6,6 +6,7 @@ export const PLATFORM_ADMIN_PERMISSIONS = [
   "customer_admin:recover",
   "application:remediate",
   "provider_catalogue:manage",
+  "peripheral_catalogue:manage",
   "platform_admin:credentials:manage",
 ] as const;
 
