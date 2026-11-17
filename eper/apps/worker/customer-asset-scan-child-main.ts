@@ -10,6 +10,7 @@ import { assertCustomerAssetScanChildPostgresDnsHost, provisionCustomerAssetScan
 import { assertCustomerAssetScanChildDatabaseTlsBootstrap, type CustomerAssetScanChildDatabaseTlsBootstrap } from "../../packages/assets/customer-asset-scan-child-database-tls-bootstrap-contract.js";
 import { assertCustomerAssetScanChildRuntimeComposition, type CustomerAssetScanChildRuntimeComposition, type CustomerAssetScanChildRuntimeDependenciesFactory } from "../../packages/assets/customer-asset-scan-child-composition-contract.js";
 import { createCustomerAssetScanChildCleanupRegistry } from "../../packages/assets/customer-asset-scan-child-cleanup.js";
+import { awaitCustomerAssetScanChildDeadline } from "../../packages/assets/customer-asset-scan-child-deadline.js";
 import {
   isCustomerAssetScanChildStart,
   type CustomerAssetScanChildFailure,
@@ -103,28 +104,40 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
   let tlsBootstrap: CustomerAssetScanChildDatabaseTlsBootstrap | undefined;
   let tlsMaterial: Awaited<ReturnType<typeof provisionCustomerAssetScanChildDatabaseTlsMaterial>> | undefined;
   const controller = new AbortController();
+  let rejectAbort!: (reason: Error) => void;
+  const abortPromise = new Promise<never>((_resolve, reject) => { rejectAbort = reject; });
+  void abortPromise.catch(() => undefined);
   let bootstrapFailureCode: CustomerAssetScanChildFailure["code"] = "SCANNER_BOOTSTRAP_FAILED";
+  let timedOut = false;
+  let deadlineTimer: NodeJS.Timeout | undefined;
+  controller.signal.addEventListener("abort", () => rejectAbort(new Error("CUSTOMER_ASSET_SCAN_CHILD_ABORTED")), { once: true });
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => controller.abort());
   try {
+    const timeoutMs = boundedInteger("EPER_SCANNER_CHILD_TIMEOUT_MS", 120_000, 1_000, MAX_TIMEOUT_MS);
+    deadlineTimer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
     if (required("EPER_SCANNER_CHILD_SPIFFE_AUDIENCE") !== CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE) {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_AUDIENCE_INVALID");
     }
     // Distinguish deployment module resolution/import from TLS credential
     // bootstrap. Both remain fail-closed and expose only bounded protocol codes.
     bootstrapFailureCode = "SCANNER_COMPOSITION_PATH_INVALID";
-    const compositionPath = await assertTrustedCustomerAssetScanCompositionModule(
+    const compositionPath = await awaitCustomerAssetScanChildDeadline(assertTrustedCustomerAssetScanCompositionModule(
       resolveCompositionPath(required("EPER_SCANNER_CHILD_COMPOSITION_MODULE")),
-    );
+    ), abortPromise, controller.signal);
     bootstrapFailureCode = "SCANNER_COMPOSITION_MODULE_LOAD_FAILED";
     let module: {
       createCustomerAssetScanChildDatabaseTlsBootstrap?: (input: {
         env: NodeJS.ProcessEnv;
         onStage?: (stage: "sdk" | "identity" | "issuer" | "ca") => void;
+        signal: AbortSignal;
       }) => Promise<CustomerAssetScanChildDatabaseTlsBootstrap> | CustomerAssetScanChildDatabaseTlsBootstrap;
       createCustomerAssetScanChildRuntimeDependencies?: CustomerAssetScanChildRuntimeDependenciesFactory;
     };
     try {
-      module = await import(pathToFileURL(compositionPath).href) as typeof module;
+      module = await awaitCustomerAssetScanChildDeadline(import(pathToFileURL(compositionPath).href) as Promise<typeof module>, abortPromise, controller.signal);
     } catch (error) {
       const candidate = error && typeof error === "object" ? error as { code?: unknown; name?: unknown } : {};
       bootstrapFailureCode = candidate.code === "ERR_MODULE_NOT_FOUND"
@@ -140,19 +153,20 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_EXPORTS_INVALID");
     }
     bootstrapFailureCode = "SCANNER_TLS_BOOTSTRAP_FAILED";
-    tlsBootstrap = await module.createCustomerAssetScanChildDatabaseTlsBootstrap({
+    tlsBootstrap = await awaitCustomerAssetScanChildDeadline(module.createCustomerAssetScanChildDatabaseTlsBootstrap({
       env: process.env,
+      signal: controller.signal,
       onStage(stage) {
         bootstrapFailureCode = stage === "sdk" ? "SCANNER_TLS_BOOTSTRAP_FAILED" :
           stage === "identity" ? "SCANNER_IDENTITY_FAILED" :
           stage === "issuer" ? "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED" :
           "SCANNER_CERTIFICATE_BOOTSTRAP_FAILED";
       },
-    });
+    }), abortPromise, controller.signal, (late) => cleanupRegistry.register(() => late.close?.()));
     bootstrapFailureCode = "SCANNER_TLS_CONTRACT_INVALID";
     assertCustomerAssetScanChildDatabaseTlsBootstrap(tlsBootstrap);
     bootstrapFailureCode = "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED";
-    tlsMaterial = await provisionCustomerAssetScanChildDatabaseTlsMaterial({
+    tlsMaterial = await awaitCustomerAssetScanChildDeadline(provisionCustomerAssetScanChildDatabaseTlsMaterial({
       identity: tlsBootstrap.identity,
       issuer: tlsBootstrap.issuer,
       caPem: tlsBootstrap.caPem,
@@ -164,7 +178,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
           "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED";
         console.error("EPER scanner child TLS provisioning stage: " + stage);
       },
-    });
+    }), abortPromise, controller.signal, (late) => cleanupRegistry.register(() => late.cleanup()));
     if (controller.signal.aborted) throw new Error("CUSTOMER_ASSET_SCAN_CHILD_BOOTSTRAP_ABORTED");
 
     const require = createRequire(import.meta.url);
@@ -185,14 +199,19 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
       ssl: { ca, cert, key, rejectUnauthorized: true },
     });
     pool = createdPool;
-    await createdPool.query("SELECT 1");
+    await awaitCustomerAssetScanChildDeadline(createdPool.query("SELECT 1"), abortPromise, controller.signal);
     // From this point onward the database is connected and TLS bootstrap has
     // completed. Keep composition failures distinct from earlier bootstrap
     // failures so process-level diagnostics identify the failing boundary.
     bootstrapFailureCode = "SCANNER_COMPOSITION_DEPENDENCIES_FAILED";
-    const dependencies = await module.createCustomerAssetScanChildRuntimeDependencies({
+    const dependencies = await awaitCustomerAssetScanChildDeadline(module.createCustomerAssetScanChildRuntimeDependencies({
       pool: createdPool, env: process.env, identity: tlsBootstrap.identity,
+      signal: controller.signal,
       registerCleanup: cleanupRegistry.register,
+    }), abortPromise, controller.signal, (late) => {
+      if (late && typeof late === "object" && typeof late.close === "function") {
+        cleanupRegistry.register(late.close.bind(late));
+      }
     });
     if (!dependencies || dependencies.identity !== tlsBootstrap.identity) {
       bootstrapFailureCode = "SCANNER_COMPOSITION_CONTRACT_INVALID";
@@ -204,19 +223,18 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     bootstrapFailureCode = "SCANNER_COMPOSITION_CONTRACT_INVALID";
     assertCustomerAssetScanChildRuntimeComposition(dependencies);
     const runtime = new CustomerAssetScanChildRuntime(dependencies);
-    const timeoutMs = boundedInteger("EPER_SCANNER_CHILD_TIMEOUT_MS", 120_000, 1_000, MAX_TIMEOUT_MS);
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const result = await runtime.execute(start, controller.signal);
+      const result = await awaitCustomerAssetScanChildDeadline(runtime.execute(start, controller.signal), abortPromise, controller.signal);
       protocolWrite(JSON.stringify(result));
       if (result.type === "failure") process.exitCode = 1;
     } finally {
-      clearTimeout(timer);
+      if (deadlineTimer) clearTimeout(deadlineTimer);
     }
   } catch {
-    emitFailure(start, bootstrapFailureCode);
+    emitFailure(start, timedOut ? "SCANNER_CHILD_TIMEOUT" : bootstrapFailureCode);
     process.exitCode = 1;
   } finally {
+    if (deadlineTimer) clearTimeout(deadlineTimer);
     const cleanupErrors = await cleanupRegistry.close();
     if (cleanupErrors.length) console.error("EPER scanner child cleanup reported " + cleanupErrors.length + " disposer failure(s)");
     if (pool) await pool.end().catch(() => undefined);

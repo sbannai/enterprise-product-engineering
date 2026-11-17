@@ -6,6 +6,7 @@ export type CustomerAssetScanChildRuntimeDependenciesFactory = (input: {
   pool: { end(): Promise<void>; query<T extends Record<string, unknown>>(text: string, values?: readonly unknown[]): Promise<{ rows: T[] }> };
   env: NodeJS.ProcessEnv;
   identity: CustomerAssetScanChildRuntimeDependencies["identity"];
+  signal: AbortSignal;
   registerCleanup: CustomerAssetScanChildCleanupRegistrar;
 }) => Promise<CustomerAssetScanChildRuntimeComposition> | CustomerAssetScanChildRuntimeComposition;
 
