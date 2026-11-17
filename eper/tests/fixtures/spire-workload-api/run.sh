@@ -135,10 +135,6 @@ docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T spire-server \
   -parentID "$AGENT_ID" -spiffeID "$EXPECTED_ID" \
   -selector unix:uid:20001 -selector unix:gid:20001 >/dev/null
 
-# Exercise EPER's actual Node 24 SDK adapter and verifier from a separate
-# container sharing only the Agent PID namespace and public socket directory.
-docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --build --rm node-sdk-probe
-
 probe() {
   local uid="$1"
   # Unix WorkloadAttestor resolves the caller PID. Execute as the tested
@@ -148,6 +144,38 @@ probe() {
     /opt/spire/bin/spire-agent api fetch jwt \
     -socketPath "$SOCKET" -audience "$AUDIENCE" -spiffeID "$EXPECTED_ID" 2>&1
 }
+
+# Compose depends_on guarantees that the Agent container has started, not that
+# its Workload API socket is ready. Wait for a real SVID from the registered
+# workload before the SDK's one-shot request, avoiding a startup race.
+READINESS_OUTPUT=""
+READINESS_OK=0
+for _ in $(seq 1 45); do
+  if READINESS_OUTPUT="$(probe 20001)"; then
+    if grep -Fq "token($EXPECTED_ID):" <<<"$READINESS_OUTPUT"; then
+      READINESS_OK=1
+      break
+    fi
+  fi
+  sleep 2
+done
+if [[ "$READINESS_OK" -ne 1 ]]; then
+  echo "FAIL: SPIRE Agent Workload API did not become ready for the registered scanner UID" >&2
+  echo "Last readiness diagnostic (token material redacted):" >&2
+  printf '%s\\n' "$READINESS_OUTPUT" | sed -E 's/(token\\([^)]*\\):).*/\\1 <redacted>/; s/[A-Za-z0-9_-]{30,}(\\.[A-Za-z0-9_-]{10,}){1,2}/<redacted-jwt>/g' >&2
+  echo "SPIRE Agent logs:" >&2
+  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" logs --no-color spire-agent >&2 || true
+  echo "SPIRE Server logs:" >&2
+  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" logs --no-color spire-server >&2 || true
+  unset READINESS_OUTPUT
+  exit 1
+fi
+unset READINESS_OUTPUT
+echo "PASS: SPIRE Agent Workload API is ready for the registered scanner UID"
+
+# Exercise EPER's actual Node 24 SDK adapter and verifier from a separate
+# container sharing only the Agent PID namespace and public socket directory.
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --build --rm node-sdk-probe
 
 # Positive assertion. Keep the returned JWT entirely in memory and never print it.
 POSITIVE_OUTPUT=""
