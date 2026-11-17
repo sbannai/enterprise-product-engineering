@@ -138,9 +138,9 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     // Distinguish deployment module resolution/import from TLS credential
     // bootstrap. Both remain fail-closed and expose only bounded protocol codes.
     bootstrapFailureCode = "SCANNER_COMPOSITION_PATH_INVALID";
-    const compositionPath = await assertTrustedCustomerAssetScanCompositionModule(
+    const compositionPath = await awaitChildDeadline(assertTrustedCustomerAssetScanCompositionModule(
       resolveCompositionPath(required("EPER_SCANNER_CHILD_COMPOSITION_MODULE")),
-    );
+    ), abortPromise, controller.signal);
     bootstrapFailureCode = "SCANNER_COMPOSITION_MODULE_LOAD_FAILED";
     let module: {
       createCustomerAssetScanChildDatabaseTlsBootstrap?: (input: {
