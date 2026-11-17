@@ -145,11 +145,6 @@ chmod 644 "$SPIRE_FIXTURE_DIR/postgres/ca.crt" "$SPIRE_FIXTURE_DIR/postgres/serv
 # Only the two private keys need PostgreSQL's UID for its server and psql client.
 sudo chown 999:999 "$SPIRE_FIXTURE_DIR/postgres/server.key" "$SPIRE_FIXTURE_DIR/postgres/client.key"
 
-# First prove the complete mainline audit schema and child SQL privilege boundary
-# in a separate disposable PostgreSQL service. This does not create a LOGIN or
-# enable any scanner identity; the end-to-end identity fixture remains a later step.
-bash "$ROOT/run-audit-postgres.sh"
-
 docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up -d spire-server
 
 # Wait for the private Server API before creating a short-lived node join token.
@@ -262,7 +257,10 @@ if [[ "$SOCKET_READY" -ne 1 ]]; then
   docker compose -p "$PROJECT" -f "$COMPOSE_FILE" logs --no-color signer-process >&2 || true
   exit 1
 fi
-docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --build --rm scanner-signer-socket-probe
+
+# The signer CA is now available. Start disposable PostgreSQL with that CA as
+# its client-certificate trust root, then prove dynamic SVID-bound mTLS LOGIN.
+bash "$ROOT/run-audit-postgres.sh"
 docker compose -p "$PROJECT" -f "$COMPOSE_FILE" stop signer-process
 docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --build --rm node-sdk-probe
 
