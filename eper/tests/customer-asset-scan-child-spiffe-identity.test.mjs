@@ -76,6 +76,29 @@ test("SPIFFE verifier fails closed when the local Workload API is unavailable", 
   });
 });
 
+test("SPIFFE verifier preserves supervisor cancellation for a genuinely in-flight SDK request", async () => {
+  const controller = new AbortController();
+  const cancellation = new Error("scanner child attempt cancelled");
+  let markRequestStarted;
+  const requestStarted = new Promise((resolve) => { markRequestStarted = resolve; });
+  const adapter = new CustomerAssetScanChildSpiffeSdkAdapter({
+    getJwtSvid(_audience, _filter, signal) {
+      return new Promise((_resolve, reject) => {
+        markRequestStarted();
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    },
+  });
+  const verifier = new CustomerAssetScanChildSpiffeIdentityVerifier(adapter, spiffeId, () => now);
+  const pendingIdentity = verifier.verifyCurrentProcessIdentity(controller.signal);
+
+  // Wait until the fake SDK confirms the request is pending before aborting.
+  await requestStarted;
+  assert.equal(controller.signal.aborted, false);
+  controller.abort(cancellation);
+  await assert.rejects(pendingIdentity, (error) => error === cancellation);
+});
+
 test("SPIFFE verifier preserves supervisor cancellation instead of mapping it to unavailable", async () => {
   const controller = new AbortController();
   const cancellation = new Error("scanner child attempt cancelled");
