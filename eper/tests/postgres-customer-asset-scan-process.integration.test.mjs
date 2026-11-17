@@ -243,7 +243,7 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env, on
     }
     async getJwtSvid(audience, filter) {
       if (audience !== "eper:customer-asset-scan-child") return null;
-      return { spiffeId: filter.spiffeId, token: "test-only-svid", expiresAtMs: Date.now() + 120000 };
+      return { spiffeId: filter.spiffeId, token: "test-only-jwt-svid-fixture", expiresAtMs: Date.now() + 120000 };
     }
     close() {}
   }
@@ -303,6 +303,7 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env, on
   return {
     identity, issuer,
     caPem: await readFile(env.PGSSLROOTCERT, "utf8"),
+    databaseCaPem: await readFile(env.PGSSLROOTCERT, "utf8"),
     close() { return spiffe.close(); },
   };
 }
