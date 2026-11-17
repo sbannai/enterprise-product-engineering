@@ -95,6 +95,11 @@ plugins {
 }
 EOF
 
+# First prove the complete mainline audit schema and child SQL privilege boundary
+# in a separate disposable PostgreSQL service. This does not create a LOGIN or
+# enable any scanner identity; the end-to-end identity fixture remains a later step.
+bash "$ROOT/run-audit-postgres.sh"
+
 docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up -d spire-server
 
 # Wait for the private Server API before creating a short-lived node join token.
