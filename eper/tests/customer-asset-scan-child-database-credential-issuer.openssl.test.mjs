@@ -17,6 +17,10 @@ import {
 import {
   CustomerAssetScanChildDatabaseSignerPolicy,
 } from "../dist/packages/assets/customer-asset-scan-child-database-signer-policy.js";
+import {
+  CustomerAssetScanChildUnixSocketCertificateSigner,
+  listenCustomerAssetScanChildSignerUnixSocket,
+} from "../dist/packages/assets/customer-asset-scan-child-database-signer-unix-socket.js";
 
 const execFile = promisify(execFileCallback);
 const now = Math.floor(Date.now() / 1000);
@@ -29,6 +33,7 @@ function opensslTime(epochSeconds) {
 test("OpenSSL test signer verifies CSR, overrides its subject, enforces notAfter and issues clientAuth certificate", async () => {
   const directory = await mkdtemp(join(tmpdir(), "eper-child-issuer-test-"));
   const request = await createCustomerAssetScanChildEphemeralKeyRequest();
+  let listener;
   try {
     const caKey = join(directory, "ca.key");
     const caCert = join(directory, "ca.crt");
@@ -38,6 +43,7 @@ test("OpenSSL test signer verifies CSR, overrides its subject, enforces notAfter
     const index = join(directory, "index.txt");
     const serial = join(directory, "serial");
     const config = join(directory, "ca.cnf");
+    const socketPath = join(directory, "signer.sock");
     await mkdir(newCerts);
     await writeFile(index, "", { mode: 0o600 });
     await writeFile(serial, "01\n", { mode: 0o600 });
@@ -114,9 +120,19 @@ test("OpenSSL test signer verifies CSR, overrides its subject, enforces notAfter
       },
     }, () => now);
 
+    // Exercise the real scanner-client/listener transport around the policy and
+    // OpenSSL CA adapter. The scanner receives only the certificate; its private
+    // key remains in the child-local key directory.
+    listener = await listenCustomerAssetScanChildSignerUnixSocket({
+      socketPath,
+      signer,
+    });
+    const socketSigner = new CustomerAssetScanChildUnixSocketCertificateSigner({
+      socketPath,
+    });
     const issuer = new CustomerAssetScanChildDatabaseCredentialIssuer(
       new Map([[spiffeId, "eper_scan_child_ci"]]),
-      signer,
+      socketSigner,
       120,
       () => now,
     );
@@ -130,6 +146,12 @@ test("OpenSSL test signer verifies CSR, overrides its subject, enforces notAfter
     await execFile("openssl", [
       "verify", "-CAfile", caCert, "-purpose", "sslclient", certPath,
     ], { timeout: 10_000, maxBuffer: 16_384 });
+    const [certificatePublicKey, requestPublicKey] = await Promise.all([
+      execFile("openssl", ["x509", "-in", certPath, "-pubkey", "-noout"], { timeout: 10_000 }),
+      execFile("openssl", ["req", "-in", csrPath, "-pubkey", "-noout"], { timeout: 10_000 }),
+    ]);
+    assert.equal(certificatePublicKey.stdout.trim(), requestPublicKey.stdout.trim(),
+      "issued certificate public key must match the scanner-local private key CSR");
     const details = await execFile("openssl", [
       "x509", "-in", certPath, "-noout", "-subject", "-enddate", "-ext", "extendedKeyUsage",
     ], { timeout: 10_000, maxBuffer: 16_384 });
@@ -147,6 +169,7 @@ test("OpenSSL test signer verifies CSR, overrides its subject, enforces notAfter
       code: "CUSTOMER_ASSET_SCAN_CHILD_CREDENTIAL_ISSUANCE_UNAVAILABLE",
     });
   } finally {
+    await listener?.close();
     await request.cleanup();
     await rm(directory, { recursive: true, force: true });
   }
