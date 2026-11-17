@@ -11,6 +11,7 @@ on:
       - ".github/workflows/**"
       - "eper/DEVELOPER_SETUP.md"
       - "eper/docker-compose.local.yml"
+      - "eper/Dockerfile.scanner-worker"
       - "eper/scripts/dev-verify.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
