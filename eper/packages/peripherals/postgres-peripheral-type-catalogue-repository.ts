@@ -27,23 +27,35 @@ function validateSchema(value:Record<string,unknown>,depth=0):void {
   if(!value||typeof value!=="object"||Array.isArray(value)||depth>8)invalid();
   let serialized:string;try{serialized=JSON.stringify(value);}catch{invalid();}
   if(serialized!.length>16384||Object.keys(value).length>64)invalid();
-  const allowed=new Set(["type","title","description","properties","required","additionalProperties","enum","items","minLength","maxLength","minimum","maximum"]);
+  const allowed=new Set(["type","title","description","properties","required","additionalProperties","enum","items","minLength","maxLength","minimum","maximum","minItems","maxItems"]);
   if(Object.keys(value).some(k=>!allowed.has(k)))throw new Error("PERIPHERAL_CATALOGUE_SCHEMA_KEYWORD_UNSUPPORTED");
   const types=["object","array","string","number","integer","boolean"];
-  if(value.type!==undefined&&(typeof value.type!=="string"||!types.includes(value.type)))invalid();
-  if(value.type!=="object")invalid();
-  if(value.properties!==undefined){
-    if(!value.properties||typeof value.properties!=="object"||Array.isArray(value.properties))invalid();
-    const entries=Object.entries(value.properties as Record<string,unknown>);if(entries.length>64)invalid();
-    for(const [key,child] of entries){if(!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(key)||!child||typeof child!=="object"||Array.isArray(child))invalid();validateSchema(child as Record<string,unknown>,depth+1);}
+  if(typeof value.type!=="string"||!types.includes(value.type))invalid();
+  if(value.enum!==undefined&&(!Array.isArray(value.enum)||value.enum.length===0||value.enum.length>128||value.enum.some(v=>v!==null&&!["string","number","boolean"].includes(typeof v))))invalid();
+  for(const k of ["minLength","maxLength","minItems","maxItems"]){
+    if(value[k]!==undefined&&(!Number.isSafeInteger(value[k])||(value[k] as number)<0||(value[k] as number)>100000))invalid();
   }
-  if(value.required!==undefined){
-    if(!Array.isArray(value.required)||value.required.length>64)invalid();
-    const required=value.required as unknown[];
-    const names=new Set(value.properties&&typeof value.properties==="object"?Object.keys(value.properties as object):[]);
-    if(required.some((k:unknown)=>typeof k!=="string"||!names.has(k)))invalid();
-  }
-  if(value.additionalProperties!==undefined&&typeof value.additionalProperties!=="boolean")invalid();
+  for(const k of ["minimum","maximum"]){if(value[k]!==undefined&&(typeof value[k]!=="number"||!Number.isFinite(value[k])))invalid();}
+  if(value.minimum!==undefined&&value.maximum!==undefined&&(value.minimum as number)>(value.maximum as number))invalid();
+  if(value.minLength!==undefined&&value.maxLength!==undefined&&(value.minLength as number)>(value.maxLength as number))invalid();
+  if(value.minItems!==undefined&&value.maxItems!==undefined&&(value.minItems as number)>(value.maxItems as number))invalid();
+  if(value.type==="object"){
+    if(value.properties!==undefined){
+      if(!value.properties||typeof value.properties!=="object"||Array.isArray(value.properties))invalid();
+      const entries=Object.entries(value.properties as Record<string,unknown>);if(entries.length>64)invalid();
+      for(const [key,child] of entries){if(!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(key)||!child||typeof child!=="object"||Array.isArray(child))invalid();validateSchema(child as Record<string,unknown>,depth+1);}
+    }
+    if(value.required!==undefined){
+      if(!Array.isArray(value.required)||value.required.length>64)invalid();
+      const required=value.required as unknown[];const names=new Set(value.properties&&typeof value.properties==="object"?Object.keys(value.properties as object):[]);
+      if(required.some((k:unknown)=>typeof k!=="string"||!names.has(k))||new Set(required).size!==required.length)invalid();
+    }
+    if(value.additionalProperties!==undefined&&typeof value.additionalProperties!=="boolean")invalid();
+  } else if(value.properties!==undefined||value.required!==undefined||value.additionalProperties!==undefined)invalid();
+  if(value.type==="array"){
+    if(!value.items||typeof value.items!=="object"||Array.isArray(value.items))invalid();
+    validateSchema(value.items as Record<string,unknown>,depth+1);
+  } else if(value.items!==undefined)invalid();
 }
 function map(r:Row):PeripheralTypeDefinition{return {
   typeKey:r.type_key,displayName:r.display_name,lifecycleStatus:r.lifecycle_status,
