@@ -24,7 +24,7 @@ test("child cleanup continues after a disposer fails and reports the failure", a
   assert.match(errors[0].message, /injected cleanup failure/);
 });
 
-test("child cleanup is idempotent and rejects registration after closing begins", async () => {
+test("child cleanup is idempotent and immediately disposes registration after closing begins", async () => {
   const registry = createCustomerAssetScanChildCleanupRegistry();
   let calls = 0;
   registry.register(async () => { calls += 1; });
@@ -33,7 +33,10 @@ test("child cleanup is idempotent and rejects registration after closing begins"
   assert.equal(first, second);
   assert.deepEqual(await first, []);
   assert.equal(calls, 1);
-  assert.throws(() => registry.register(() => {}), /CLEANUP_REGISTRATION_INVALID/);
+  let lateDisposed = false;
+  registry.register(() => { lateDisposed = true; });
+  await Promise.resolve();
+  assert.equal(lateDisposed, true);
 });
 
 test("child cleanup rejects a non-callable disposer", () => {
@@ -56,7 +59,7 @@ test("child cleanup releases earlier resources when composition factory partiall
 });
 
 
-test("child cleanup immediately disposes resources registered while close is draining", async () => {
+test("child cleanup immediately disposes late registrations while close is draining", async () => {
   const registry = createCustomerAssetScanChildCleanupRegistry();
   const closed = [];
   let release;
@@ -69,7 +72,7 @@ test("child cleanup immediately disposes resources registered while close is dra
   registry.register(async () => { closed.push("late"); });
   release();
   assert.deepEqual(await closing, []);
-  assert.deepEqual(closed, ["original", "late"]);
+  assert.deepEqual(closed, ["late", "original"]);
 });
 
 test("child cleanup immediately runs and contains rejection from a disposer registered after close", async () => {
