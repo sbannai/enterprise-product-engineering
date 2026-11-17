@@ -12,6 +12,7 @@ const spiffeId = "spiffe://eper.example/asset-scanner/child";
 const csrPem = `-----BEGIN CERTIFICATE REQUEST-----
 ${"A".repeat(96)}
 -----END CERTIFICATE REQUEST-----`;
+const jwtSvid = "fixture.jwt.svid-value-with-sufficient-length";
 const certificatePem = `-----BEGIN CERTIFICATE-----
 ${"B".repeat(96)}
 -----END CERTIFICATE-----`;
@@ -19,7 +20,7 @@ ${"B".repeat(96)}
 async function verifiedIdentity(identity = spiffeId) {
   return new CustomerAssetScanChildSpiffeIdentityVerifier({
     async fetchJwtSvid() {
-      return [{ spiffeId: identity, expiresAtMs: (now + 60) * 1000 }];
+      return [{ spiffeId: identity, expiresAtMs: (now + 60) * 1000, token: jwtSvid }];
     },
   }, identity, () => now * 1000).verifyCurrentProcessIdentity();
 }
@@ -37,6 +38,10 @@ test("credential issuer maps verified workload identity to a fixed DB role", asy
   assert.equal(calls.length, 1);
   assert.equal(calls[0].databaseRole, "eper_scan_child_ci");
   assert.equal(calls[0].csrPem, csrPem);
+  assert.equal(calls[0].workloadJwtSvid, jwtSvid);
+  assert.equal(calls[0].expectedSpiffeId, spiffeId);
+  assert.equal(calls[0].expectedTrustDomain, "eper.example");
+  assert.equal(calls[0].expectedAudience, "eper:customer-asset-scan-child");
   assert.equal(calls[0].notAfterEpochSeconds, now + 60);
   assert.deepEqual(credential, {
     databaseRole: "eper_scan_child_ci",
@@ -61,6 +66,7 @@ subject=CN=postgres_superuser`;
   await issuer.issue({ workload: await verifiedIdentity(), csrPem: attackerCsr });
   assert.equal(calls[0].databaseRole, "eper_scan_child_ci");
   assert.equal(calls[0].csrPem, attackerCsr);
+  assert.equal(calls[0].workloadJwtSvid, jwtSvid);
 });
 
 test("issuer rejects unverified and non-entitled identities without invoking signer", async () => {
