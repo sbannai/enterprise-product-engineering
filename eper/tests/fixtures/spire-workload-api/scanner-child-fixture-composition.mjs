@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 
@@ -104,11 +104,22 @@ export async function createCustomerAssetScanChildRuntimeDependencies({
   };
 
   const scanner = {
-    async scan(scanInput, _requestId, scanSignal) {
+    async scan(scanInput, requestId, scanSignal) {
       assert.equal(scanInput.assetId, "00000000-0000-4000-8000-000000000101");
       assert.equal(scanInput.mimeType, "text/plain");
       assert.equal(scanInput.sizeBytes, FIXTURE_BYTES.byteLength);
       assert.equal(scanInput.checksumSha256, FIXTURE_SHA256);
+      // Block only after live SPIRE identity, signer issuance, PostgreSQL mTLS,
+      // tenant resolution and provider-stream setup. The parent harness waits
+      // for this marker before aborting the actual production child.
+      if (requestId === "fixture-cancel-midflight") {
+        await writeFile("/control/scanner-entered", "entered", { mode: 0o600 });
+        await new Promise(resolve => {
+          if (scanSignal.aborted) resolve();
+          else scanSignal.addEventListener("abort", resolve, { once: true });
+        });
+        throw new Error("fixture scan aborted");
+      }
       let received = 0;
       for await (const chunk of scanInput.source) {
         if (scanSignal.aborted) throw new Error("fixture scan aborted");
