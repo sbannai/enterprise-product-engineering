@@ -30,7 +30,7 @@ test("SPIFFE SDK adapter requests exactly the configured audience and workload I
   assert.equal(calls[0][0], CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE);
   assert.deepEqual(calls[0][1], { spiffeId });
   assert.equal(calls[0][2], signal);
-  assert.deepEqual(result, [{ spiffeId, expiresAtMs: 1_800_000_060_000 }]);
+  assert.deepEqual(result, [{ spiffeId, expiresAtMs: 1_800_000_060_000, token: "opaque-jwt-svid" }]);
   assert.equal(JSON.stringify(result).includes("opaque-jwt-svid"), false);
 });
 
