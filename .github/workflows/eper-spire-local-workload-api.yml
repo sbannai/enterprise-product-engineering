@@ -42,7 +42,7 @@ jobs:
         run: npm ci
       - name: Build and run scanner identity and credential issuer contracts
         working-directory: eper
-        run: npm run build && node --test tests/customer-asset-scan-child-spiffe-identity.test.mjs tests/customer-asset-scan-child-spiffe-sdk-adapter.test.mjs tests/customer-asset-scan-child-spiffe-sdk-verifier-contract.test.mjs tests/customer-asset-scan-child-database-credential-issuer.test.mjs tests/customer-asset-scan-child-database-credential-issuer.openssl.test.mjs
+        run: npm run build && node --test tests/customer-asset-scan-child-spiffe-identity.test.mjs tests/customer-asset-scan-child-spiffe-sdk-adapter.test.mjs tests/customer-asset-scan-child-spiffe-sdk-verifier-contract.test.mjs tests/customer-asset-scan-child-database-credential-issuer.test.mjs tests/customer-asset-scan-child-database-credential-issuer.openssl.test.mjs tests/customer-asset-scan-child-database-signer-policy.test.mjs
 
   local-workload-api-attestation:
     runs-on: ubuntu-latest
