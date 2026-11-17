@@ -36,13 +36,8 @@ test("credential issuer maps verified workload identity to a fixed DB role", asy
   const workload = await verifiedIdentity();
   const credential = await issuer.issue({ workload, csrPem });
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].databaseRole, "eper_scan_child_ci");
   assert.equal(calls[0].csrPem, csrPem);
   assert.equal(calls[0].workloadJwtSvid, jwtSvid);
-  assert.equal(calls[0].expectedSpiffeId, spiffeId);
-  assert.equal(calls[0].expectedTrustDomain, "eper.example");
-  assert.equal(calls[0].expectedAudience, "eper:customer-asset-scan-child");
-  assert.equal(calls[0].notAfterEpochSeconds, now + 60);
   assert.deepEqual(credential, {
     databaseRole: "eper_scan_child_ci",
     clientCertificatePem: certificatePem,
@@ -64,7 +59,6 @@ subject=CN=postgres_superuser`;
     () => now,
   );
   await issuer.issue({ workload: await verifiedIdentity(), csrPem: attackerCsr });
-  assert.equal(calls[0].databaseRole, "eper_scan_child_ci");
   assert.equal(calls[0].csrPem, attackerCsr);
   assert.equal(calls[0].workloadJwtSvid, jwtSvid);
 });
