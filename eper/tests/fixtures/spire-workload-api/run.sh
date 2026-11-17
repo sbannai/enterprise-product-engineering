@@ -15,7 +15,7 @@ AUDIENCE="eper:customer-asset-scan-child"
 
 cleanup() {
   docker compose -p "$PROJECT" -f "$COMPOSE_FILE" down --volumes --remove-orphans >/dev/null 2>&1 || true
-  rm -rf "$SPIRE_FIXTURE_DIR"
+  sudo rm -rf "$SPIRE_FIXTURE_DIR"
 }
 trap cleanup EXIT
 
