@@ -66,22 +66,20 @@ try {
     SpiffeClient,
   });
   try {
-    const independentlyValidated = await signerRuntime.validator.validateJwt(
-      CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
-      (await runtime.adapter.fetchJwtSvid({
-        audience: [CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE],
-        spiffeId: expectedSpiffeId,
-      }))[0].token,
-    );
-    assert.equal(independentlyValidated.spiffeId, expectedSpiffeId);
-    assert.ok(independentlyValidated.claims.exp > Math.floor(Date.now() / 1000));
     const scannerToken = (await runtime.adapter.fetchJwtSvid({
       audience: [CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE],
       spiffeId: expectedSpiffeId,
     }))[0].token;
+    // Test rejection before a successful validation can populate an audience cache.
     await assert.rejects(
       signerRuntime.validator.validateJwt("eper:wrong-audience", scannerToken),
     );
+    const independentlyValidated = await signerRuntime.validator.validateJwt(
+      CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
+      scannerToken,
+    );
+    assert.equal(independentlyValidated.spiffeId, expectedSpiffeId);
+    assert.ok(independentlyValidated.claims.exp > Math.floor(Date.now() / 1000));
     await assert.rejects(
       signerRuntime.validator.validateJwt(
         CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
