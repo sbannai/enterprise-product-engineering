@@ -14,6 +14,9 @@ import {
 import {
   createCustomerAssetScanChildEphemeralKeyRequest,
 } from "../dist/packages/assets/customer-asset-scan-child-ephemeral-key.js";
+import {
+  CustomerAssetScanChildDatabaseSignerPolicy,
+} from "../dist/packages/assets/customer-asset-scan-child-database-signer-policy.js";
 
 const execFile = promisify(execFileCallback);
 const now = Math.floor(Date.now() / 1000);
@@ -75,27 +78,39 @@ test("OpenSSL test signer verifies CSR, overrides its subject, enforces notAfter
       },
     }, spiffeId, () => now * 1000).verifyCurrentProcessIdentity();
 
+    const signer = new CustomerAssetScanChildDatabaseSignerPolicy({
+      expectedAudience: "eper:customer-asset-scan-child",
+      roleBySpiffeId: new Map([[spiffeId, "eper_scan_child_ci"]]),
+      maximumLifetimeSeconds: 120,
+    }, {
+      async validateJwt(audience, token) {
+        assert.equal(audience, "eper:customer-asset-scan-child");
+        assert.equal(token, "fixture.jwt.svid-value-with-sufficient-length");
+        return { spiffeId, claims: { exp: now + 120 } };
+      },
+    }, {
+      async sign(input) {
+        assert.equal(input.databaseRole, "eper_scan_child_ci");
+        assert.equal(input.notAfterEpochSeconds, now + 120);
+        await writeFile(csrPath, input.csrPem, { mode: 0o600 });
+        await execFile("openssl", [
+          "req", "-inform", "PEM", "-in", csrPath, "-noout", "-verify",
+        ], { timeout: 10_000, maxBuffer: 16_384 });
+        await execFile("openssl", [
+          "ca", "-batch", "-notext", "-config", config,
+          "-in", csrPath, "-out", certPath,
+          "-startdate", opensslTime(now - 5),
+          "-enddate", opensslTime(input.notAfterEpochSeconds),
+          "-subj", "/CN=" + input.databaseRole,
+          "-extensions", "client",
+        ], { timeout: 10_000, maxBuffer: 16_384 });
+        return readFile(certPath, "utf8");
+      },
+    }, () => now);
+
     const issuer = new CustomerAssetScanChildDatabaseCredentialIssuer(
       new Map([[spiffeId, "eper_scan_child_ci"]]),
-      {
-        async sign(input) {
-          assert.equal(input.databaseRole, "eper_scan_child_ci");
-          assert.equal(input.notAfterEpochSeconds, now + 120);
-          await writeFile(csrPath, input.csrPem, { mode: 0o600 });
-          await execFile("openssl", [
-            "req", "-inform", "PEM", "-in", csrPath, "-noout", "-verify",
-          ], { timeout: 10_000, maxBuffer: 16_384 });
-          await execFile("openssl", [
-            "ca", "-batch", "-notext", "-config", config,
-            "-in", csrPath, "-out", certPath,
-            "-startdate", opensslTime(now - 5),
-            "-enddate", opensslTime(input.notAfterEpochSeconds),
-            "-subj", "/CN=" + input.databaseRole,
-            "-extensions", "client",
-          ], { timeout: 10_000, maxBuffer: 16_384 });
-          return readFile(certPath, "utf8");
-        },
-      },
+      signer,
       120,
       () => now,
     );
