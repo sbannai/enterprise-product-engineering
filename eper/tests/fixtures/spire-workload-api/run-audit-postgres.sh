@@ -28,6 +28,10 @@ if [[ "$READY" -ne 1 ]]; then
   exit 1
 fi
 
+echo "Running focused verifier-bound credential issuer contract tests"
+compose run --build --rm --entrypoint node audit-migrations \
+  --test tests/customer-asset-scan-child-database-credential-issuer.test.mjs
+
 DATABASE_URL="postgres://postgres:eper_fixture_only_password@audit-postgres:5432/eper_scanner_fixture?sslmode=verify-full&sslrootcert=/fixture/ca.crt"
 
 run_migrations() {
