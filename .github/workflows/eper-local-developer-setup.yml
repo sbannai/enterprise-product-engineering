@@ -23,6 +23,7 @@ on:
   pull_request:
     paths:
       - "eper/docs/**"
+      - "eper/Dockerfile.scanner-worker"
       - ".github/workflows/**"
       - "eper/DEVELOPER_SETUP.md"
       - "eper/docker-compose.local.yml"
