@@ -13,7 +13,6 @@ on:
       - "eper/packages/assets/customer-asset-scan-child-database-signer-spiffe-adapter.ts"
       - "eper/tests/customer-asset-scan-child-spiffe-*.test.mjs"
       - "eper/tests/customer-asset-scan-child-database-credential-issuer*.test.mjs"
-      - "eper/tests/customer-asset-scan-child-database-signer-policy.test.mjs tests/customer-asset-scan-child-database-signer-spiffe-adapter.test.mjs"
       - "eper/tests/customer-asset-scan-child-database-signer-spiffe-adapter.test.mjs"
       - ".github/workflows/eper-spire-local-workload-api.yml"
   pull_request:
@@ -46,7 +45,7 @@ jobs:
         run: npm ci
       - name: Build and run scanner identity and credential issuer contracts
         working-directory: eper
-        run: npm run build && node --test tests/customer-asset-scan-child-spiffe-identity.test.mjs tests/customer-asset-scan-child-spiffe-sdk-adapter.test.mjs tests/customer-asset-scan-child-spiffe-sdk-verifier-contract.test.mjs tests/customer-asset-scan-child-database-credential-issuer.test.mjs tests/customer-asset-scan-child-database-credential-issuer.openssl.test.mjs tests/customer-asset-scan-child-database-signer-policy.test.mjs
+        run: npm run build && node --test tests/customer-asset-scan-child-spiffe-identity.test.mjs tests/customer-asset-scan-child-spiffe-sdk-adapter.test.mjs tests/customer-asset-scan-child-spiffe-sdk-verifier-contract.test.mjs tests/customer-asset-scan-child-database-credential-issuer.test.mjs tests/customer-asset-scan-child-database-credential-issuer.openssl.test.mjs tests/customer-asset-scan-child-database-signer-policy.test.mjs tests/customer-asset-scan-child-database-signer-spiffe-adapter.test.mjs
 
   local-workload-api-attestation:
     runs-on: ubuntu-latest
