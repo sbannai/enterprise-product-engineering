@@ -73,11 +73,11 @@ export class PostgresPeripheralTypeCatalogueRepository {
  async list(limit=50):Promise<PeripheralTypeDefinition[]>{
   if(!Number.isInteger(limit)||limit<1||limit>100)throw new Error("PERIPHERAL_CATALOGUE_LIMIT_INVALID");
   const c=await this.pool.connect();try{await c.query("BEGIN");await c.query("SELECT set_config('eper.platform_admin','true',true)");
-   const r=await c.query<Row>(SELECT+" ORDER BY d.display_name,d.type_key,s.schema_version DESC LIMIT $1",[limit]);await c.query("COMMIT");return r.rows.map(map);
+   const r=await c.query<Row>(SELECT+" WHERE s.schema_version=(SELECT MAX(s2.schema_version) FROM eper_peripheral_type_schema_versions s2 WHERE s2.type_key=d.type_key) ORDER BY d.display_name,d.type_key LIMIT $1",[limit]);await c.query("COMMIT");return r.rows.map(map);
   }catch(e){await c.query("ROLLBACK").catch(()=>undefined);throw e;}finally{c.release();}
  }
  async get(typeKey:string):Promise<PeripheralTypeDefinition|null>{
-  const key=field(typeKey,96);const c=await this.pool.connect();try{await c.query("BEGIN");await c.query("SELECT set_config('eper.platform_admin','true',true)");
+  const key=field(typeKey,96);if(!keyPattern.test(key))throw new Error("PERIPHERAL_CATALOGUE_TYPE_KEY_INVALID");const c=await this.pool.connect();try{await c.query("BEGIN");await c.query("SELECT set_config('eper.platform_admin','true',true)");
    const r=await c.query<Row>(SELECT+" WHERE d.type_key=$1 ORDER BY s.schema_version DESC LIMIT 1",[key]);await c.query("COMMIT");return r.rows[0]?map(r.rows[0]):null;
   }catch(e){await c.query("ROLLBACK").catch(()=>undefined);throw e;}finally{c.release();}
  }
@@ -116,7 +116,8 @@ export class PostgresPeripheralTypeCatalogueRepository {
   const c=await this.pool.connect();try{await c.query("BEGIN");await c.query("SELECT set_config('eper.platform_admin','true',true)");
    const current=await c.query<Row>(SELECT+" WHERE d.type_key=$1 AND s.schema_version=$2 FOR UPDATE OF d,l",[key,i.schemaVersion]);
    if(!current.rows[0])throw new Error("PERIPHERAL_CATALOGUE_SCHEMA_NOT_FOUND");
-   if(current.rows[0].lifecycle_status==="DEPRECATED")throw new Error("PERIPHERAL_CATALOGUE_SCHEMA_DEPRECATED_TERMINAL");
+   if(current.rows[0].lifecycle_status==="DEPRECATED")throw new Error("PERIPHERAL_CATALOGUE_TYPE_DEPRECATED_TERMINAL");
+   if(current.rows[0].schema_status==="DEPRECATED")throw new Error("PERIPHERAL_CATALOGUE_SCHEMA_DEPRECATED_TERMINAL");
    const before=map(current.rows[0]);
    await c.query("UPDATE eper_peripheral_type_schema_lifecycle SET lifecycle_status='DEPRECATED',changed_at=NOW(),changed_by=$2 WHERE type_key=$1 AND lifecycle_status='PUBLISHED'",[key,i.actorId]);
    await c.query("UPDATE eper_peripheral_type_schema_lifecycle SET lifecycle_status='PUBLISHED',changed_at=NOW(),changed_by=$3 WHERE type_key=$1 AND schema_version=$2",[key,i.schemaVersion,i.actorId]);
