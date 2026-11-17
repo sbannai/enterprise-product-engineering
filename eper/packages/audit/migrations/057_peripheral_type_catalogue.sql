@@ -2,6 +2,13 @@
 -- Customer-owned instances remain in eper_application_peripheral.
 BEGIN;
 
+-- One additional least-privilege permission is now supported by durable credentials.
+ALTER TABLE eper_platform_admin_credentials
+  DROP CONSTRAINT IF EXISTS eper_platform_admin_credentials_permissions_check;
+ALTER TABLE eper_platform_admin_credentials
+  ADD CONSTRAINT eper_platform_admin_credentials_permissions_check
+  CHECK (jsonb_typeof(permissions) = 'array' AND jsonb_array_length(permissions) BETWEEN 1 AND 6);
+
 CREATE TABLE IF NOT EXISTS eper_peripheral_type_definitions (
   type_key TEXT PRIMARY KEY CHECK (type_key ~ '^[a-z][a-z0-9_.-]{1,95}$'),
   display_name TEXT NOT NULL CHECK (length(btrim(display_name)) BETWEEN 1 AND 160),
