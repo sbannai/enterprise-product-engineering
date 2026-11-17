@@ -31,7 +31,6 @@ CREATE TABLE IF NOT EXISTS eper_peripheral_type_schema_versions (
     AND NOT (configuration_schema ? '$ref')
   ),
   compatibility JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(compatibility) = 'object'),
-  version_status TEXT NOT NULL CHECK (version_status IN ('DRAFT', 'PUBLISHED', 'DEPRECATED')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by TEXT NOT NULL CHECK (length(btrim(created_by)) BETWEEN 1 AND 128),
   PRIMARY KEY (type_key, schema_version)
@@ -39,7 +38,24 @@ CREATE TABLE IF NOT EXISTS eper_peripheral_type_schema_versions (
 
 CREATE INDEX IF NOT EXISTS eper_peripheral_type_schema_published_idx
   ON eper_peripheral_type_schema_versions(type_key, schema_version DESC)
-  WHERE version_status = 'PUBLISHED';
+  ;
+
+
+-- Lifecycle is separated from immutable schema content so publication/deprecation
+-- never mutates a version's configuration or adapter contract.
+CREATE TABLE IF NOT EXISTS eper_peripheral_type_schema_lifecycle (
+  type_key TEXT NOT NULL,
+  schema_version INTEGER NOT NULL,
+  lifecycle_status TEXT NOT NULL CHECK (lifecycle_status IN ('DRAFT', 'PUBLISHED', 'DEPRECATED')),
+  changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  changed_by TEXT NOT NULL CHECK (length(btrim(changed_by)) BETWEEN 1 AND 128),
+  PRIMARY KEY (type_key, schema_version),
+  FOREIGN KEY (type_key, schema_version)
+    REFERENCES eper_peripheral_type_schema_versions(type_key, schema_version)
+);
+CREATE INDEX IF NOT EXISTS eper_peripheral_type_schema_published_idx
+  ON eper_peripheral_type_schema_lifecycle(type_key, schema_version DESC)
+  WHERE lifecycle_status = 'PUBLISHED';
 
 CREATE TABLE IF NOT EXISTS eper_peripheral_type_catalogue_events (
   event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -99,10 +115,17 @@ CREATE POLICY eper_peripheral_type_schema_platform_admin
   ON eper_peripheral_type_schema_versions
   USING (current_setting('eper.platform_admin', true) = 'true')
   WITH CHECK (current_setting('eper.platform_admin', true) = 'true');
-DROP POLICY IF EXISTS eper_peripheral_type_schema_published_read ON eper_peripheral_type_schema_versions;
-CREATE POLICY eper_peripheral_type_schema_published_read
-  ON eper_peripheral_type_schema_versions FOR SELECT
-  USING (version_status = 'PUBLISHED');
+ALTER TABLE eper_peripheral_type_schema_lifecycle ENABLE ROW LEVEL SECURITY;
+ALTER TABLE eper_peripheral_type_schema_lifecycle FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS eper_peripheral_type_schema_lifecycle_platform_admin ON eper_peripheral_type_schema_lifecycle;
+CREATE POLICY eper_peripheral_type_schema_lifecycle_platform_admin
+  ON eper_peripheral_type_schema_lifecycle
+  USING (current_setting('eper.platform_admin', true) = 'true')
+  WITH CHECK (current_setting('eper.platform_admin', true) = 'true');
+DROP POLICY IF EXISTS eper_peripheral_type_schema_lifecycle_published_read ON eper_peripheral_type_schema_lifecycle;
+CREATE POLICY eper_peripheral_type_schema_lifecycle_published_read
+  ON eper_peripheral_type_schema_lifecycle FOR SELECT
+  USING (lifecycle_status = 'PUBLISHED');
 
 ALTER TABLE eper_peripheral_type_catalogue_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE eper_peripheral_type_catalogue_events FORCE ROW LEVEL SECURITY;
