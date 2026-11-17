@@ -13,12 +13,6 @@ export interface CustomerAssetScanChildClientCertificateSigner {
   sign(input: {
     readonly csrPem: string;
     readonly workloadJwtSvid: string;
-    readonly expectedSpiffeId: string;
-    readonly expectedTrustDomain: string;
-    readonly expectedAudience: string;
-    /** Defense-in-depth hint only; signer must derive role independently. */
-    readonly databaseRole: string;
-    readonly notAfterEpochSeconds: number;
   }): Promise<string>;
 }
 
@@ -97,11 +91,6 @@ export class CustomerAssetScanChildDatabaseCredentialIssuer {
       const clientCertificatePem = await this.signer.sign({
         csrPem: input.csrPem,
         workloadJwtSvid: getVerifiedCustomerAssetScanChildJwtSvid(workload),
-        expectedSpiffeId: workload.spiffeId,
-        expectedTrustDomain: workload.trustDomain,
-        expectedAudience: workload.audience,
-        databaseRole,
-        notAfterEpochSeconds: expiresAt,
       });
       if (!boundedPem(clientCertificatePem, "CERTIFICATE")) throw new Error("invalid certificate");
       return Object.freeze({ databaseRole, clientCertificatePem, expiresAt });
