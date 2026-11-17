@@ -34,7 +34,7 @@ export async function handlePlatformPeripheralTypeCatalogueRoute(req:IncomingMes
  const item=/^\/([^/]+)$/.exec(suffix);
  if(suffix&&!publish&&!item){respond(req,res,404,{error:"not_found"});return true;}
  if(process.env.EPER_PERIPHERAL_CATALOGUE_ADMIN_API_ENABLED!=="true"||process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED!=="true"||!deps.credentialStore||!deps.repository||!deps.environment){respond(req,res,404,{error:"not_found"});return true;}
- const method=!suffix?(req.method==="GET"?"GET":"POST"):publish?"POST":req.method==="GET"?"GET":"UNSUPPORTED";
+ const method=!suffix?(req.method==="GET"?"GET":"POST"):(publish||schemaDraft)?"POST":req.method==="GET"?"GET":"UNSUPPORTED";
  if(req.method!==method){respond(req,res,405,{error:"method_not_allowed"});return true;}
  if(crossOrigin(req)){respond(req,res,403,{error:"cross_origin_mutation_forbidden"});return true;}
  try{
@@ -49,10 +49,16 @@ export async function handlePlatformPeripheralTypeCatalogueRoute(req:IncomingMes
    const type=await deps.repository.create({...context,typeKey:body.typeKey as string,displayName:body.displayName as string,adapterKey:body.adapterKey as string,adapterVersion:body.adapterVersion as string,configurationSchema:body.configurationSchema as Record<string,unknown>,...(body.compatibility===undefined?{}:{compatibility:body.compatibility as Record<string,unknown>})});
    respond(req,res,201,{type});return true;
   }
-  let typeKey:string;try{typeKey=decodeURIComponent((publish??item)![1]);}catch{respond(req,res,400,{error:"peripheral_catalogue_type_key_encoding_invalid"});return true;}
+  let typeKey:string;try{typeKey=decodeURIComponent((publish??schemaDraft??item)![1]);}catch{respond(req,res,400,{error:"peripheral_catalogue_type_key_encoding_invalid"});return true;}
   if(!/^[a-z][a-z0-9_.-]{1,95}$/.test(typeKey)){respond(req,res,400,{error:"peripheral_catalogue_type_key_invalid"});return true;}
   if(item&&req.method==="GET"){const type=await deps.repository.get(typeKey);respond(req,res,type?200:404,type?{type}:{error:"peripheral_catalogue_type_not_found"});return true;}
   const body=await readBody(req);
+  if(schemaDraft){
+   const keys=["adapterKey","adapterVersion","configurationSchema","compatibility"];
+   if(!exact(body,keys)||keys.slice(0,3).some(k=>body[k]===undefined)){respond(req,res,400,{error:"peripheral_catalogue_schema_fields_invalid"});return true;}
+   const type=await deps.repository.createSchemaVersion({...context,typeKey,adapterKey:body.adapterKey as string,adapterVersion:body.adapterVersion as string,configurationSchema:body.configurationSchema as Record<string,unknown>,...(body.compatibility===undefined?{}:{compatibility:body.compatibility as Record<string,unknown>})});
+   respond(req,res,201,{type});return true;
+  }
   if(publish){if(!exact(body,[])&&Object.keys(body).length!==0){respond(req,res,400,{error:"peripheral_catalogue_publish_body_invalid"});return true;}
    const type=await deps.repository.publish({...context,typeKey,schemaVersion:Number(publish[2])});respond(req,res,200,{type});return true;}
   respond(req,res,405,{error:"method_not_allowed"});return true;
