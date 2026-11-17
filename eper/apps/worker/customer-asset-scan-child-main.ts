@@ -10,6 +10,7 @@ import { assertCustomerAssetScanChildPostgresDnsHost, provisionCustomerAssetScan
 import { assertCustomerAssetScanChildDatabaseTlsBootstrap, type CustomerAssetScanChildDatabaseTlsBootstrap } from "../../packages/assets/customer-asset-scan-child-database-tls-bootstrap-contract.js";
 import { assertCustomerAssetScanChildRuntimeComposition, type CustomerAssetScanChildRuntimeComposition, type CustomerAssetScanChildRuntimeDependenciesFactory } from "../../packages/assets/customer-asset-scan-child-composition-contract.js";
 import { createCustomerAssetScanChildCleanupRegistry } from "../../packages/assets/customer-asset-scan-child-cleanup.js";
+import { awaitCustomerAssetScanChildDeadline } from "../../packages/assets/customer-asset-scan-child-deadline.js";
 import {
   isCustomerAssetScanChildStart,
   type CustomerAssetScanChildFailure,
@@ -30,23 +31,6 @@ function boundedInteger(name: string, fallback: number, minimum: number, maximum
   const value = Number(raw);
   if (!Number.isSafeInteger(value) || value < minimum || value > maximum) throw new Error(name + "_OUT_OF_RANGE");
   return value;
-}
-function awaitChildDeadline<T>(
-  operation: Promise<T> | T,
-  abort: Promise<never>,
-  signal: AbortSignal,
-  disposeLate?: (value: T) => void,
-): Promise<T> {
-  const pending = Promise.resolve(operation);
-  if (disposeLate) {
-    void pending.then((value) => {
-      if (signal.aborted) disposeLate(value);
-    }).catch(() => undefined);
-  } else {
-    // A timed-out import/factory may reject after the caller has moved on.
-    void pending.catch(() => undefined);
-  }
-  return Promise.race([pending, abort]);
 }
 function resolveCompositionPath(value: string): string {
   const root = resolve(process.cwd(), "dist/packages/assets/scanners");
@@ -140,7 +124,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     // Distinguish deployment module resolution/import from TLS credential
     // bootstrap. Both remain fail-closed and expose only bounded protocol codes.
     bootstrapFailureCode = "SCANNER_COMPOSITION_PATH_INVALID";
-    const compositionPath = await awaitChildDeadline(assertTrustedCustomerAssetScanCompositionModule(
+    const compositionPath = await awaitCustomerAssetScanChildDeadline(assertTrustedCustomerAssetScanCompositionModule(
       resolveCompositionPath(required("EPER_SCANNER_CHILD_COMPOSITION_MODULE")),
     ), abortPromise, controller.signal);
     bootstrapFailureCode = "SCANNER_COMPOSITION_MODULE_LOAD_FAILED";
@@ -153,7 +137,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
       createCustomerAssetScanChildRuntimeDependencies?: CustomerAssetScanChildRuntimeDependenciesFactory;
     };
     try {
-      module = await awaitChildDeadline(import(pathToFileURL(compositionPath).href) as Promise<typeof module>, abortPromise, controller.signal);
+      module = await awaitCustomerAssetScanChildDeadline(import(pathToFileURL(compositionPath).href) as Promise<typeof module>, abortPromise, controller.signal);
     } catch (error) {
       const candidate = error && typeof error === "object" ? error as { code?: unknown; name?: unknown } : {};
       bootstrapFailureCode = candidate.code === "ERR_MODULE_NOT_FOUND"
@@ -169,7 +153,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_EXPORTS_INVALID");
     }
     bootstrapFailureCode = "SCANNER_TLS_BOOTSTRAP_FAILED";
-    tlsBootstrap = await awaitChildDeadline(module.createCustomerAssetScanChildDatabaseTlsBootstrap({
+    tlsBootstrap = await awaitCustomerAssetScanChildDeadline(module.createCustomerAssetScanChildDatabaseTlsBootstrap({
       env: process.env,
       signal: controller.signal,
       onStage(stage) {
@@ -182,7 +166,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     bootstrapFailureCode = "SCANNER_TLS_CONTRACT_INVALID";
     assertCustomerAssetScanChildDatabaseTlsBootstrap(tlsBootstrap);
     bootstrapFailureCode = "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED";
-    tlsMaterial = await awaitChildDeadline(provisionCustomerAssetScanChildDatabaseTlsMaterial({
+    tlsMaterial = await awaitCustomerAssetScanChildDeadline(provisionCustomerAssetScanChildDatabaseTlsMaterial({
       identity: tlsBootstrap.identity,
       issuer: tlsBootstrap.issuer,
       caPem: tlsBootstrap.caPem,
@@ -215,12 +199,12 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
       ssl: { ca, cert, key, rejectUnauthorized: true },
     });
     pool = createdPool;
-    await awaitChildDeadline(createdPool.query("SELECT 1"), abortPromise, controller.signal);
+    await awaitCustomerAssetScanChildDeadline(createdPool.query("SELECT 1"), abortPromise, controller.signal);
     // From this point onward the database is connected and TLS bootstrap has
     // completed. Keep composition failures distinct from earlier bootstrap
     // failures so process-level diagnostics identify the failing boundary.
     bootstrapFailureCode = "SCANNER_COMPOSITION_DEPENDENCIES_FAILED";
-    const dependencies = await awaitChildDeadline(module.createCustomerAssetScanChildRuntimeDependencies({
+    const dependencies = await awaitCustomerAssetScanChildDeadline(module.createCustomerAssetScanChildRuntimeDependencies({
       pool: createdPool, env: process.env, identity: tlsBootstrap.identity,
       signal: controller.signal,
       registerCleanup: cleanupRegistry.register,
@@ -240,7 +224,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     assertCustomerAssetScanChildRuntimeComposition(dependencies);
     const runtime = new CustomerAssetScanChildRuntime(dependencies);
     try {
-      const result = await awaitChildDeadline(runtime.execute(start, controller.signal), abortPromise, controller.signal);
+      const result = await awaitCustomerAssetScanChildDeadline(runtime.execute(start, controller.signal), abortPromise, controller.signal);
       protocolWrite(JSON.stringify(result));
       if (result.type === "failure") process.exitCode = 1;
     } finally {
