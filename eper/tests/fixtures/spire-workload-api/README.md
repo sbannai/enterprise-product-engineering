@@ -23,7 +23,7 @@ It verifies:
 - The child access role has no direct SELECT privilege on `eper_customer_assets`.
 - A second invocation of the migration runner is idempotent and preserves the checksum ledger.
 
-The PostgreSQL service is disposable and has no host port published. Its volume is removed by the existing Compose cleanup trap. This stage does not provision a LOGIN, seed tenant data, enable a scanner identity, or claim mTLS-to-PostgreSQL child execution; those are subsequent harness stages.
+The PostgreSQL service is disposable and has no host port published. Its volume is removed by the existing Compose cleanup trap. The fixture then provisions one dedicated LOGIN, maps its certificate CN to that LOGIN, and tests the migration-defined session_user-bound resolver over verified PostgreSQL mTLS. The fixture client certificate is static test material signed by the disposable CA; it is not issued from, nor cryptographically bound to, the live SPIFFE JWT-SVID. This stage therefore proves PostgreSQL certificate authentication and the SQL privilege boundary, not a production SVID-to-client-certificate issuance chain.
 
 ## Ephemeral material and cleanup
 
@@ -71,3 +71,26 @@ Observed assertions:
 - The fixture completed and its cleanup ran.
 
 This is live local SPIRE Agent socket integration evidence for the SDK adapter/verifier path. It does not yet cover the full failure/cancellation matrix, deployment-owned composition, production activation, or Business UAT.
+
+
+## Combined PostgreSQL mTLS + SPIRE fixture result — 17 Nov 2026
+
+The combined fixture passed on work-branch commit `9254ad0b3f71edb20610febed439da8d59ff87ce` (GitHub Actions run [44035332515](https://github.com/sbannai/enterprise-product-engineering/actions/runs/44035332515), job `133876753128`).
+
+Observed assertions from the completed hosted run:
+
+- All 57 checked-in audit migrations applied to a fresh PostgreSQL 16 database.
+- The authenticated `(uuid, bigint)` context resolver exists and is executable.
+- The scanner-child access role has no direct SELECT privilege on `eper_customer_assets`.
+- A second migration-runner invocation preserved the 57-row checksum ledger.
+- A dedicated LOGIN authenticated as `eper_fixture_scanner` using PostgreSQL TLS client-certificate authentication.
+- The authenticated LOGIN inherited resolver EXECUTE and had no direct asset-table SELECT.
+- The LOGIN invoked the `session_user`-bound resolver successfully; the synthetic fixture returned zero rows.
+- Registered UID/GID 20001 received the expected SPIFFE identity; EPER's Node SDK adapter and verifier obtained and verified the current process JWT-SVID.
+- Missing and permission-restricted Workload API sockets failed closed.
+- Unregistered UID 20002 and sibling UID 20003 received no scanner SVID.
+- Compose cleanup completed successfully.
+
+The migration runner now verifies the disposable PostgreSQL server certificate using the fixture CA and hostname (`sslmode=verify-full`). The earlier failures were caused first by directory traversal permissions and then by the migration container not trusting the disposable CA; both were corrected before this passing run.
+
+**Evidence boundary:** the PostgreSQL client certificate used in this fixture is static test material. Its subject is mapped to the dedicated test LOGIN, but the certificate was not issued in response to a CSR from the verified live SPIFFE process identity. The passing run does not prove SVID-bound certificate issuance, live scanner-child entrypoint composition, tenant/application seeded-data isolation, secret-broker integration, real provider scanning, production deployment, or Business UAT.
