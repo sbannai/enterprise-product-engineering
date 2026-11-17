@@ -79,7 +79,7 @@ try {
   const identityResult = await pool.query(
     "SELECT concat_ws('|', session_user, current_user, has_function_privilege(current_user, 'public.eper_resolve_customer_asset_scan_child_context(uuid,bigint)', 'EXECUTE'), has_table_privilege(current_user, 'public.eper_customer_assets', 'SELECT')) AS proof",
   );
-  assert.equal(identityResult.rows[0]?.proof, "eper_fixture_scanner|eper_fixture_scanner|true|false");
+  assert.equal(identityResult.rows[0]?.proof, "eper_fixture_scanner|eper_fixture_scanner|t|f");
   const resolver = await pool.query(
     "SELECT count(*)::int AS count FROM public.eper_resolve_customer_asset_scan_child_context($1::uuid, $2::bigint)",
     ["00000000-0000-0000-0000-000000000001", 1],
