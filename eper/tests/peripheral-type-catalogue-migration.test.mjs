@@ -5,6 +5,8 @@ import { readFile } from "node:fs/promises";
 const migration = await readFile(new URL("../packages/audit/migrations/057_peripheral_type_catalogue.sql", import.meta.url), "utf8");
 
 test("F-023 migration creates a platform-owned type catalogue and immutable schema versions", () => {
+  assert.match(migration, /ALTER TABLE eper_platform_admin_credentials/);
+  assert.match(migration, /jsonb_array_length\(permissions\) BETWEEN 1 AND 6/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS eper_peripheral_type_definitions/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS eper_peripheral_type_schema_versions/);
   assert.match(migration, /PRIMARY KEY \(type_key, schema_version\)/);
