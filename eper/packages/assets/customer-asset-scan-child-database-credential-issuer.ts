@@ -1,5 +1,5 @@
 import type { CustomerAssetScanChildSpiffeIdentity } from "./customer-asset-scan-child-spiffe-identity.js";
-import { isVerifiedCustomerAssetScanChildSpiffeIdentity } from "./customer-asset-scan-child-spiffe-identity.js";
+import { getVerifiedCustomerAssetScanChildJwtSvid, isVerifiedCustomerAssetScanChildSpiffeIdentity } from "./customer-asset-scan-child-spiffe-identity.js";
 
 /**
  * Deployment-owned signer. It must independently validate workloadJwtSvid
@@ -96,7 +96,7 @@ export class CustomerAssetScanChildDatabaseCredentialIssuer {
       }
       const clientCertificatePem = await this.signer.sign({
         csrPem: input.csrPem,
-        workloadJwtSvid: workload.jwtSvid,
+        workloadJwtSvid: getVerifiedCustomerAssetScanChildJwtSvid(workload),
         expectedSpiffeId: workload.spiffeId,
         expectedTrustDomain: workload.trustDomain,
         expectedAudience: workload.audience,
