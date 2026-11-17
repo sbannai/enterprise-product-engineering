@@ -9,6 +9,9 @@ const {
   createCustomerAssetScanChildSpiffeSdkRuntime,
 } = await import("/eper/dist/packages/assets/customer-asset-scan-child-spiffe-sdk-adapter.js");
 const {
+  createCustomerAssetScanChildSignerSpiffeSdkRuntime,
+} = await import("/eper/dist/packages/assets/customer-asset-scan-child-database-signer-spiffe-adapter.js");
+const {
   CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
   CustomerAssetScanChildSpiffeIdentityError,
   CustomerAssetScanChildSpiffeIdentityVerifier,
@@ -58,6 +61,24 @@ try {
   assert.ok(identity.expiresAt <= Math.floor(Date.now() / 1000) + 300);
   assert.equal(JSON.stringify(identity).includes("eyJ"), false);
   console.log("PASS: Node SDK obtained and EPER verified the current process JWT-SVID");
+  const signerRuntime = createCustomerAssetScanChildSignerSpiffeSdkRuntime({
+    endpoint: "unix:///run/spire/agent/public/api.sock",
+    SpiffeClient,
+  });
+  try {
+    const independentlyValidated = await signerRuntime.validator.validateJwt(
+      CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
+      (await runtime.adapter.fetchJwtSvid({
+        audience: [CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE],
+        spiffeId: expectedSpiffeId,
+      }))[0].token,
+    );
+    assert.equal(independentlyValidated.spiffeId, expectedSpiffeId);
+    assert.ok(independentlyValidated.claims.exp > Math.floor(Date.now() / 1000));
+    console.log("PASS: Node SDK independently validated JWT-SVID signature, audience and expiry");
+  } finally {
+    await signerRuntime.close();
+  }
 
 } finally {
   await runtime.close();
