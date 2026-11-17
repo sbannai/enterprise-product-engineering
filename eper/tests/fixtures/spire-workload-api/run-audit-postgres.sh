@@ -28,7 +28,7 @@ if [[ "$READY" -ne 1 ]]; then
   exit 1
 fi
 
-DATABASE_URL="postgres://postgres:eper_fixture_only_password@audit-postgres:5432/eper_scanner_fixture"
+DATABASE_URL="postgres://postgres:eper_fixture_only_password@audit-postgres:5432/eper_scanner_fixture?sslmode=require"
 
 run_migrations() {
   compose run --build --rm \
