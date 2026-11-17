@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { access, readdir } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
-import { runTrustedCustomerAssetScanChild } from "../../../packages/assets/customer-asset-scan-child-launcher.js";
+import { runTrustedCustomerAssetScanChild } from "../../../dist/packages/assets/customer-asset-scan-child-launcher.js";
 
 const start = {
   version: 3,
