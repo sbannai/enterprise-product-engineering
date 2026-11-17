@@ -248,6 +248,11 @@ if [[ "$SOCKET_READY" -ne 1 ]]; then
   exit 1
 fi
 
+# Export only the public signer CA into PostgreSQL's read-only fixture mount.
+# Keep the private signer IPC directory inaccessible to the database process.
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T signer-process cat /signer-ipc/ca.crt > "$SPIRE_FIXTURE_DIR/postgres/scanner-client-ca.crt"
+chmod 644 "$SPIRE_FIXTURE_DIR/postgres/scanner-client-ca.crt"
+
 # The signer CA is now available. Start disposable PostgreSQL with that CA as
 # its client-certificate trust root, then prove dynamic SVID-bound mTLS LOGIN.
 bash "$ROOT/run-audit-postgres.sh"
