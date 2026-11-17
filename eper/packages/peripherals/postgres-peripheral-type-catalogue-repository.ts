@@ -65,8 +65,7 @@ export class PostgresPeripheralTypeCatalogueRepository {
   }catch(e){await c.query("ROLLBACK").catch(()=>undefined);throw e;}finally{c.release();}
  }
  async get(typeKey:string):Promise<PeripheralTypeDefinition|null>{
-  const key=field(typeKey,96);const c=await this.pool.connect();try{await c.query("SELECT set_config('eper.platform_admin','true',false)");
-   await c.query("BEGIN");await c.query("SELECT set_config('eper.platform_admin','true',true)");
+  const key=field(typeKey,96);const c=await this.pool.connect();try{await c.query("BEGIN");await c.query("SELECT set_config('eper.platform_admin','true',true)");
    const r=await c.query<Row>(SELECT+" WHERE d.type_key=$1 ORDER BY s.schema_version DESC LIMIT 1",[key]);await c.query("COMMIT");return r.rows[0]?map(r.rows[0]):null;
   }catch(e){await c.query("ROLLBACK").catch(()=>undefined);throw e;}finally{c.release();}
  }
@@ -85,7 +84,7 @@ export class PostgresPeripheralTypeCatalogueRepository {
   }catch(e){await c.query("ROLLBACK").catch(()=>undefined);throw e;}finally{c.release();}
  }
  async createSchemaVersion(i:PeripheralCatalogueContext&{typeKey:string;adapterKey:string;adapterVersion:string;configurationSchema:Record<string,unknown>;compatibility?:Record<string,unknown>}):Promise<PeripheralTypeDefinition>{
-  field(i.actorId,128);field(i.correlationId,128);const key=field(i.typeKey,96);
+  field(i.actorId,128);field(i.correlationId,128);const key=field(i.typeKey,96);if(!keyPattern.test(key))throw new Error("PERIPHERAL_CATALOGUE_TYPE_KEY_INVALID");
   const adapterKey=field(i.adapterKey,96),adapterVersion=field(i.adapterVersion,64);validateSchema(i.configurationSchema);
   const compatibility=i.compatibility??{};if(!compatibility||typeof compatibility!=="object"||Array.isArray(compatibility)||JSON.stringify(compatibility).length>8192)throw new Error("PERIPHERAL_CATALOGUE_COMPATIBILITY_INVALID");
   const c=await this.pool.connect();try{await c.query("BEGIN");await c.query("SELECT set_config('eper.platform_admin','true',true)");
@@ -127,5 +126,7 @@ export class PostgresPeripheralTypeCatalogueRepository {
  }
  private async audit(c:AuditSqlClient,i:PeripheralCatalogueContext,action:string,key:string,before:PeripheralTypeDefinition|null,after:PeripheralTypeDefinition){
   await appendAuditEventInTransaction(c,{tenantId:"platform",applicationId:"peripheral-catalogue",environment:i.environment,actorType:"human",actorId:i.actorId,action,outcome:"success",resourceType:"peripheral-type",resourceId:key,correlationId:i.correlationId,source:"platform",operationName:action,serviceVersion:this.serviceVersion,beforeHash:before?hashAuditEnvelope(before as unknown as Record<string,unknown>):undefined,afterHash:hashAuditEnvelope(after as unknown as Record<string,unknown>),payload:{typeKey:key,schemaVersion:after.schemaVersion,schemaStatus:after.schemaStatus}});
+  const eventType=action==="peripheral.type.create"?"TYPE_CREATED":action==="peripheral.type.deprecate"?"TYPE_DEPRECATED":action==="peripheral.type.schema.draft"?"SCHEMA_DRAFTED":action==="peripheral.type.schema.publish"?"SCHEMA_PUBLISHED":"SCHEMA_DEPRECATED";
+  await c.query("INSERT INTO eper_peripheral_type_catalogue_events(type_key,schema_version,event_type,actor_id,correlation_id,details) VALUES($1,$2,$3,$4,$5,$6::jsonb)",[key,after.schemaVersion,eventType,i.actorId,i.correlationId,JSON.stringify({schemaStatus:after.schemaStatus,environment:i.environment})]);
  }
 }
