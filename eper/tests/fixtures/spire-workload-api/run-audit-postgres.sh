@@ -101,30 +101,12 @@ ON CONFLICT (login_role) DO UPDATE SET
   updated_at = clock_timestamp();
 SQL
 
-echo "Authenticating the dedicated LOGIN over verified PostgreSQL mTLS"
-TLS_RESULT="$(compose exec -T audit-postgres env \
-  PGSSLMODE=verify-full \
-  PGSSLROOTCERT=/fixture/ca.crt \
-  PGSSLCERT=/fixture/client.crt \
-  PGSSLKEY=/fixture/client.key \
-  psql "host=audit-postgres port=5432 dbname=eper_scanner_fixture user=eper_fixture_scanner" \
-  -v ON_ERROR_STOP=1 -Atc "SELECT concat_ws('|', session_user, current_user, has_function_privilege(current_user, 'public.eper_resolve_customer_asset_scan_child_context(uuid,bigint)', 'EXECUTE'), has_table_privilege(current_user, 'public.eper_customer_assets', 'SELECT'))")"
-if [[ "$TLS_RESULT" != "eper_fixture_scanner|eper_fixture_scanner|t|f" ]]; then
-  echo "FAIL: PostgreSQL mTLS identity/privilege assertion mismatch: $TLS_RESULT" >&2
-  exit 1
-fi
-echo "PASS: certificate-authenticated LOGIN is eper_fixture_scanner"
-echo "PASS: LOGIN inherits resolver EXECUTE and has no direct asset-table SELECT"
-
-RESOLVER_RESULT="$(compose exec -T audit-postgres env \
-  PGSSLMODE=verify-full \
-  PGSSLROOTCERT=/fixture/ca.crt \
-  PGSSLCERT=/fixture/client.crt \
-  PGSSLKEY=/fixture/client.key \
-  psql "host=audit-postgres port=5432 dbname=eper_scanner_fixture user=eper_fixture_scanner" \
-  -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM public.eper_resolve_customer_asset_scan_child_context('00000000-0000-0000-0000-000000000001'::uuid, 1)")"
-if [[ "$RESOLVER_RESULT" != "0" ]]; then
-  echo "FAIL: authenticated context resolver returned unexpected fixture rows: $RESOLVER_RESULT" >&2
-  exit 1
-fi
-echo "PASS: mTLS LOGIN can invoke session_user-bound resolver (empty synthetic fixture result)"
+echo "Authenticating the dedicated LOGIN with a dynamically issued SVID-bound client certificate"
+compose run --build --rm \
+  -e PGHOST=audit-postgres \
+  -e PGPORT=5432 \
+  -e PGDATABASE=eper_scanner_fixture \
+  -e PGUSER=eper_fixture_scanner \
+  scanner-signer-socket-probe
+echo "PASS: dynamic signer-issued certificate authenticated the dedicated PostgreSQL LOGIN"
+echo "PASS: mTLS LOGIN invoked the session_user-bound resolver with EXECUTE-only access"
