@@ -31,6 +31,23 @@ function boundedInteger(name: string, fallback: number, minimum: number, maximum
   if (!Number.isSafeInteger(value) || value < minimum || value > maximum) throw new Error(name + "_OUT_OF_RANGE");
   return value;
 }
+function awaitChildDeadline<T>(
+  operation: Promise<T> | T,
+  abort: Promise<never>,
+  signal: AbortSignal,
+  disposeLate?: (value: T) => void,
+): Promise<T> {
+  const pending = Promise.resolve(operation);
+  if (disposeLate) {
+    void pending.then((value) => {
+      if (signal.aborted) disposeLate(value);
+    }).catch(() => undefined);
+  } else {
+    // A timed-out import/factory may reject after the caller has moved on.
+    void pending.catch(() => undefined);
+  }
+  return Promise.race([pending, abort]);
+}
 function resolveCompositionPath(value: string): string {
   const root = resolve(process.cwd(), "dist/packages/assets/scanners");
   const candidate = resolve(process.cwd(), value);
@@ -103,7 +120,16 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
   let tlsBootstrap: CustomerAssetScanChildDatabaseTlsBootstrap | undefined;
   let tlsMaterial: Awaited<ReturnType<typeof provisionCustomerAssetScanChildDatabaseTlsMaterial>> | undefined;
   const controller = new AbortController();
+  const timeoutMs = boundedInteger("EPER_SCANNER_CHILD_TIMEOUT_MS", 120_000, 1_000, MAX_TIMEOUT_MS);
+  let rejectAbort!: (reason: Error) => void;
+  const abortPromise = new Promise<never>((_resolve, reject) => { rejectAbort = reject; });
+  void abortPromise.catch(() => undefined);
   let bootstrapFailureCode: CustomerAssetScanChildFailure["code"] = "SCANNER_BOOTSTRAP_FAILED";
+  controller.signal.addEventListener("abort", () => rejectAbort(new Error("CUSTOMER_ASSET_SCAN_CHILD_ABORTED")), { once: true });
+  const deadlineTimer = setTimeout(() => {
+    bootstrapFailureCode = "SCANNER_BOOTSTRAP_TIMEOUT";
+    controller.abort();
+  }, timeoutMs);
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => controller.abort());
   try {
     if (required("EPER_SCANNER_CHILD_SPIFFE_AUDIENCE") !== CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE) {
@@ -120,11 +146,12 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
       createCustomerAssetScanChildDatabaseTlsBootstrap?: (input: {
         env: NodeJS.ProcessEnv;
         onStage?: (stage: "sdk" | "identity" | "issuer" | "ca") => void;
+        signal: AbortSignal;
       }) => Promise<CustomerAssetScanChildDatabaseTlsBootstrap> | CustomerAssetScanChildDatabaseTlsBootstrap;
       createCustomerAssetScanChildRuntimeDependencies?: CustomerAssetScanChildRuntimeDependenciesFactory;
     };
     try {
-      module = await import(pathToFileURL(compositionPath).href) as typeof module;
+      module = await awaitChildDeadline(import(pathToFileURL(compositionPath).href) as Promise<typeof module>, abortPromise, controller.signal);
     } catch (error) {
       const candidate = error && typeof error === "object" ? error as { code?: unknown; name?: unknown } : {};
       bootstrapFailureCode = candidate.code === "ERR_MODULE_NOT_FOUND"
@@ -140,19 +167,20 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_EXPORTS_INVALID");
     }
     bootstrapFailureCode = "SCANNER_TLS_BOOTSTRAP_FAILED";
-    tlsBootstrap = await module.createCustomerAssetScanChildDatabaseTlsBootstrap({
+    tlsBootstrap = await awaitChildDeadline(module.createCustomerAssetScanChildDatabaseTlsBootstrap({
       env: process.env,
+      signal: controller.signal,
       onStage(stage) {
         bootstrapFailureCode = stage === "sdk" ? "SCANNER_TLS_BOOTSTRAP_FAILED" :
           stage === "identity" ? "SCANNER_IDENTITY_FAILED" :
           stage === "issuer" ? "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED" :
           "SCANNER_CERTIFICATE_BOOTSTRAP_FAILED";
       },
-    });
+    }), abortPromise, controller.signal, (late) => cleanupRegistry.register(() => late.close?.()));
     bootstrapFailureCode = "SCANNER_TLS_CONTRACT_INVALID";
     assertCustomerAssetScanChildDatabaseTlsBootstrap(tlsBootstrap);
     bootstrapFailureCode = "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED";
-    tlsMaterial = await provisionCustomerAssetScanChildDatabaseTlsMaterial({
+    tlsMaterial = await awaitChildDeadline(provisionCustomerAssetScanChildDatabaseTlsMaterial({
       identity: tlsBootstrap.identity,
       issuer: tlsBootstrap.issuer,
       caPem: tlsBootstrap.caPem,
@@ -164,7 +192,7 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
           "SCANNER_CREDENTIAL_BOOTSTRAP_FAILED";
         console.error("EPER scanner child TLS provisioning stage: " + stage);
       },
-    });
+    }), abortPromise, controller.signal, (late) => cleanupRegistry.register(() => late.cleanup()));
     if (controller.signal.aborted) throw new Error("CUSTOMER_ASSET_SCAN_CHILD_BOOTSTRAP_ABORTED");
 
     const require = createRequire(import.meta.url);
@@ -185,14 +213,19 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
       ssl: { ca, cert, key, rejectUnauthorized: true },
     });
     pool = createdPool;
-    await createdPool.query("SELECT 1");
+    await awaitChildDeadline(createdPool.query("SELECT 1"), abortPromise, controller.signal);
     // From this point onward the database is connected and TLS bootstrap has
     // completed. Keep composition failures distinct from earlier bootstrap
     // failures so process-level diagnostics identify the failing boundary.
     bootstrapFailureCode = "SCANNER_COMPOSITION_DEPENDENCIES_FAILED";
-    const dependencies = await module.createCustomerAssetScanChildRuntimeDependencies({
+    const dependencies = await awaitChildDeadline(module.createCustomerAssetScanChildRuntimeDependencies({
       pool: createdPool, env: process.env, identity: tlsBootstrap.identity,
+      signal: controller.signal,
       registerCleanup: cleanupRegistry.register,
+    }), abortPromise, controller.signal, (late) => {
+      if (late && typeof late === "object" && typeof late.close === "function") {
+        cleanupRegistry.register(late.close.bind(late));
+      }
     });
     if (!dependencies || dependencies.identity !== tlsBootstrap.identity) {
       bootstrapFailureCode = "SCANNER_COMPOSITION_CONTRACT_INVALID";
@@ -204,19 +237,18 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     bootstrapFailureCode = "SCANNER_COMPOSITION_CONTRACT_INVALID";
     assertCustomerAssetScanChildRuntimeComposition(dependencies);
     const runtime = new CustomerAssetScanChildRuntime(dependencies);
-    const timeoutMs = boundedInteger("EPER_SCANNER_CHILD_TIMEOUT_MS", 120_000, 1_000, MAX_TIMEOUT_MS);
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const result = await runtime.execute(start, controller.signal);
+      const result = await awaitChildDeadline(runtime.execute(start, controller.signal), abortPromise, controller.signal);
       protocolWrite(JSON.stringify(result));
       if (result.type === "failure") process.exitCode = 1;
     } finally {
-      clearTimeout(timer);
+      clearTimeout(deadlineTimer);
     }
   } catch {
     emitFailure(start, bootstrapFailureCode);
     process.exitCode = 1;
   } finally {
+    clearTimeout(deadlineTimer);
     const cleanupErrors = await cleanupRegistry.close();
     if (cleanupErrors.length) console.error("EPER scanner child cleanup reported " + cleanupErrors.length + " disposer failure(s)");
     if (pool) await pool.end().catch(() => undefined);
