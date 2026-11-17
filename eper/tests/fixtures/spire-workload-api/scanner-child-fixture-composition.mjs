@@ -58,6 +58,7 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ signal 
       identity,
       issuer,
       caPem,
+      databaseCaPem: await readFile("/fixture/ca.crt", "utf8"),
       close: () => spiffeRuntime.close(),
     };
   } catch (error) {
