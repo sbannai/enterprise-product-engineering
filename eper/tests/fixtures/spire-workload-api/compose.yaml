@@ -5,6 +5,22 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: eper_fixture_only_password
       POSTGRES_DB: eper_scanner_fixture
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/fixture/server.crt
+      - -c
+      - ssl_key_file=/fixture/server.key
+      - -c
+      - ssl_ca_file=/fixture/ca.crt
+      - -c
+      - hba_file=/fixture/pg_hba.conf
+      - -c
+      - ident_file=/fixture/pg_ident.conf
+    volumes:
+      - "${SPIRE_FIXTURE_DIR:?}/postgres:/fixture:ro"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d eper_scanner_fixture"]
       interval: 2s
