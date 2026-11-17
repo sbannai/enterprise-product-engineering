@@ -45,7 +45,8 @@ export function parseCustomerAssetScanChildDatabaseCertificateRole(subjectOutput
 
 export interface CustomerAssetScanChildDatabaseTlsMaterial {
   readonly databaseRole: string;
-  readonly caPath: string;\n  readonly databaseCaPath: string;
+  readonly caPath: string;
+  readonly databaseCaPath: string;
   readonly certificatePath: string;
   readonly privateKeyPath: string;
   cleanup(): Promise<void>;
