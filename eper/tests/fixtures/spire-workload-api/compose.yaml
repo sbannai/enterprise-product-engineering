@@ -105,6 +105,23 @@ services:
     networks: [spire-isolated]
     restart: "no"
 
+  scanner-child-cancellation-probe:
+    build:
+      context: ../../../..
+      dockerfile: eper/tests/fixtures/spire-workload-api/Dockerfile.node-sdk-probe
+    user: "20001:20001"
+    pid: "service:spire-agent"
+    volumes:
+      - "${SPIRE_FIXTURE_DIR:?}/agent-public:/run/spire/agent/public:ro"
+      - "${SPIRE_FIXTURE_DIR:?}/signer-ipc:/signer-ipc:ro"
+      - "${SPIRE_FIXTURE_DIR:?}/postgres:/fixture:ro"
+    tmpfs:
+      - /control:uid=20001,gid=20001,mode=0700
+    entrypoint: ["node", "tests/fixtures/spire-workload-api/scanner-child-cancellation-parent.mjs"]
+    depends_on: [spire-agent, signer-process, audit-postgres]
+    networks: [spire-isolated]
+    restart: "no"
+
   scanner-child-entrypoint-probe:
     build:
       context: ../../../..
