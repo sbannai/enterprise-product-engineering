@@ -29,7 +29,7 @@ export async function handlePlatformPeripheralTypeCatalogueRoute(req:IncomingMes
 }):Promise<boolean>{
  if(pathname!==ROOT&&!pathname.startsWith(ROOT+"/"))return false;
  if(!pathname.startsWith(ROOT))return false;
- if(!["application/vnd.eper.v1+json","application/json"].some(v=>(req.headers.accept??"").toLowerCase().includes(v))){respond(req,res,406,{error:"versioned_api_accept_required"});return true;}
+ if(!(req.headers.accept??"").split(",").some(v=>v.split(";")[0].trim().toLowerCase()===VERSIONED_JSON)){respond(req,res,406,{error:"versioned_api_accept_required"});return true;}
  const suffix=pathname.slice(ROOT.length);const publish=/^\/([^/]+)\/schemas\/(\d+)\/publish$/.exec(suffix);
  const item=/^\/([^/]+)$/.exec(suffix);
  if(suffix&&!publish&&!item){respond(req,res,404,{error:"not_found"});return true;}
