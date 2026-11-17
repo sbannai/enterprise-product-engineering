@@ -11,6 +11,20 @@ This fixture is a disposable, CI-only integration test for SPIRE v1.16.0. It use
 
 The probe runs under its tested UID inside the Agent container so the Unix WorkloadAttestor can resolve its caller PID. The Agent data directory is mode 0700, and the Agent config containing the ephemeral join token is mode 0600 and owned by UID/GID 1000, keeping both inaccessible to the probe. The public socket directory grants traversal without directory listing; the probe runs with its registered primary GID 20001, so both Unix UID and GID selectors are verified. No host PID namespace, Docker socket, privileged container, or host filesystem mount is used.
 
+## Disposable PostgreSQL migration gate
+
+Before the SPIRE server is started, `run.sh` now invokes `run-audit-postgres.sh`. That script starts a separate PostgreSQL 16 service on the fixture's internal Compose network, builds the existing Node 24 test image, and runs the repository's actual `npm run migrate:audit` entrypoint against a fresh database.
+
+It verifies:
+
+- The migration ledger row count equals the checked-in audit migration file count.
+- The authenticated scanner-child context resolver exists with the exact `(uuid, bigint)` signature.
+- The child access role can execute that resolver.
+- The child access role has no direct SELECT privilege on `eper_customer_assets`.
+- A second invocation of the migration runner is idempotent and preserves the checksum ledger.
+
+The PostgreSQL service is disposable and has no host port published. Its volume is removed by the existing Compose cleanup trap. This stage does not provision a LOGIN, seed tenant data, enable a scanner identity, or claim mTLS-to-PostgreSQL child execution; those are subsequent harness stages.
+
 ## Ephemeral material and cleanup
 
 The runner creates a one-day, test-only upstream CA and a 10-minute join token under a temporary directory. The CA private key is mode 0600 and owned by the non-root SPIRE identity. Neither the key nor token is committed or uploaded as an artifact. The script tears down the Compose project and named volumes on exit.
