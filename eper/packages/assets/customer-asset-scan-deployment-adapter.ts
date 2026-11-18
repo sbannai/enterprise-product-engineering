@@ -107,7 +107,7 @@ export function createCustomerAssetScanDeploymentAdapter(host: CustomerAssetScan
   }
 
   const cleanup = createCustomerAssetScanChildCleanupRegistry();
-  const close = () => cleanup.close();
+  const close = async (): Promise<void> => { await cleanup.close(); };
   let identityVerifier: CustomerAssetScanChildRuntimeDependencies["identity"] | undefined;
   let bootstrapStarted = false;
   let runtimeStarted = false;
