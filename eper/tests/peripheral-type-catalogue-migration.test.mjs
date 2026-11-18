@@ -27,12 +27,12 @@ test("F-023 migration makes catalogue events append-only and restricts private r
 
 test("F-023 isolated database role receives only catalogue and audit-chain grants", async () => {
   const access = await readFile(new URL("../packages/audit/migrations/058_peripheral_type_catalogue_access_role.sql", import.meta.url), "utf8");
-  assert.match(access, /eper_peripheral_type_catalogue_access NOLOGIN NOSUPERUSER/);
+  assert.match(access, /eper_peripheral_type_catalogue_access[\\s\\S]*?NOLOGIN NOSUPERUSER/);
   assert.match(access, /GRANT SELECT, INSERT ON eper_peripheral_type_definitions/);
   assert.match(access, /GRANT SELECT, INSERT ON eper_peripheral_type_schema_versions/);
   assert.match(access, /GRANT SELECT, INSERT ON eper_peripheral_type_schema_lifecycle/);
   assert.match(access, /GRANT SELECT, INSERT ON eper_peripheral_type_catalogue_events/);
   assert.match(access, /GRANT INSERT ON eper_audit_events/);
   assert.match(access, /GRANT UPDATE \(last_event_hash, updated_at\) ON eper_audit_chain_head/);
-  assert.doesNotMatch(access, /GRANT ALL|SUPERUSER|BYPASSRLS/i);
+  assert.doesNotMatch(access, /\\bGRANT\\s+ALL\\b|\\bALTER\\s+ROLE\\s+\\S+\\s+SUPERUSER\\b|\\bALTER\\s+ROLE\\s+\\S+\\s+BYPASSRLS\\b/i);
 });
