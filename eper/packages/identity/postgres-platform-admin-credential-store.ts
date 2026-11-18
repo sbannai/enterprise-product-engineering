@@ -2,7 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { appendAuditEventInTransaction, assertAuditStoreReady, type AuditEnvironment, type AuditSqlClient, type AuditSqlPool } from "../audit/audit-event-store.js";
 
 export const PLATFORM_ADMIN_CREDENTIAL_PERMISSIONS = [
-  "customer_admin:provision", "customer_admin:recover", "application:remediate", "provider_catalogue:manage", "platform_admin:credentials:manage",
+  "customer_admin:provision", "customer_admin:recover", "application:remediate", "provider_catalogue:manage", "peripheral_catalogue:manage", "platform_admin:credentials:manage",
 ] as const;
 export type PlatformAdminCredentialPermission = typeof PLATFORM_ADMIN_CREDENTIAL_PERMISSIONS[number];
 export interface PlatformAdminCredentialContext {

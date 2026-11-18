@@ -6,6 +6,7 @@ const provisionCredential = "provision-secret-credential-0000000001";
 const recoverCredential = "recover-secret-credential-00000000000001";
 const remediationCredential = "remediate-secret-credential-00000001";
 const catalogueCredential = "provider-catalogue-admin-credential-00001";
+const peripheralCatalogueCredential = "peripheral-catalogue-admin-credential-0001";
 
 function mapping(overrides = {}) {
   return JSON.stringify({
@@ -24,6 +25,7 @@ function mapping(overrides = {}) {
       permissions: ["application:remediate"],
       credentialId: "platform-key-rotation-03",
     },
+    [peripheralCatalogueCredential]: { platformActorId: "platform-peripheral-catalogue-admin-01", permissions: ["peripheral_catalogue:manage"], credentialId: "platform-key-rotation-05" },
     [catalogueCredential]: {
       platformActorId: "platform-catalogue-admin-01",
       permissions: ["provider_catalogue:manage"],
@@ -148,4 +150,16 @@ test("durable resolver rejects malformed bearer credentials without querying the
   assert.equal(await resolvePlatformAdminPrincipalFromStore("Basic abc", store), null);
   assert.equal(await resolvePlatformAdminPrincipalFromStore("Bearer short", store), null);
   assert.equal(calls, 0);
+});
+
+
+test("peripheral catalogue permission is independently assignable and does not imply provider catalogue authority", () => {
+  const principal = resolvePlatformAdminPrincipal(`Bearer ${peripheralCatalogueCredential}`, mapping());
+  assert.deepEqual(principal, {
+    platformActorId: "platform-peripheral-catalogue-admin-01",
+    permissions: ["peripheral_catalogue:manage"],
+    credentialId: "platform-key-rotation-05",
+  });
+  assert.equal(principal?.permissions.includes("provider_catalogue:manage"), false);
+  assert.equal(principal?.permissions.includes("customer_admin:provision"), false);
 });
