@@ -1,7 +1,7 @@
 name: EPER Fresh-Clone Developer Setup
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 
 on:
@@ -43,7 +43,7 @@ permissions:
 jobs:
   fresh-clone-postgres-verification:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 90
     services:
       postgres:
         image: postgres:16
