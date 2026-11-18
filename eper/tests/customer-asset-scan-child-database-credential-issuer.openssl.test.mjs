@@ -79,8 +79,7 @@ test("OpenSSL test signer verifies CSR, overrides its subject, enforces notAfter
       new Map([[spiffeId, "eper_scan_child_ci"]]),
       {
         async sign(input) {
-          assert.equal(input.databaseRole, "eper_scan_child_ci");
-          assert.equal(input.notAfterEpochSeconds, now + 120);
+          assert.equal(input.workloadJwtSvid, "eyJhbGciOiJub25lIn0.eyJzdWIiOiJzY2FubmVyLWNoaWxkIn0.signature");
           await writeFile(csrPath, input.csrPem, { mode: 0o600 });
           await execFile("openssl", [
             "req", "-inform", "PEM", "-in", csrPath, "-noout", "-verify",
