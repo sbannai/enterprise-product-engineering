@@ -66,6 +66,9 @@ const platformApplicationRemediationEnabled = process.env.EPER_PLATFORM_APPLICAT
 const platformAdminCredentialsEnabled = process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED === "true";
 const providerCatalogueAdminEnabled = process.env.EPER_PROVIDER_CATALOGUE_ADMIN_API_ENABLED === "true";
 const peripheralTypeCatalogueAdminEnabled = process.env.EPER_PERIPHERAL_CATALOGUE_ADMIN_API_ENABLED === "true";
+if (peripheralTypeCatalogueAdminEnabled && process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED !== "true") {
+  throw new Error("PERIPHERAL_TYPE_CATALOGUE_REQUIRES_PLATFORM_ADMIN_CREDENTIALS");
+}
 const workflowOutboxAdminEnabled = process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED === "true";
 const applicationDataModelAdminEnabled = process.env.EPER_APPLICATION_DATA_MODEL_ADMIN_API_ENABLED === "true";
 const commercialTariffAdminEnabled = process.env.EPER_COMMERCIAL_TARIFF_API_ENABLED === "true";
