@@ -55,7 +55,7 @@ test("oversized mutation bodies return HTTP 413 instead of a service error",asyn
  const req=Readable.from([Buffer.alloc(24*1024+1,0x20)]);req.method="POST";req.url="/platform/admin/peripheral-types";
  req.headers={authorization:"Bearer durable-platform-token-000000000000",accept:"application/vnd.eper.v1+json"};
  const deps=fixture(),res=response();await handlePlatformPeripheralTypeCatalogueRoute(req,res,"/platform/admin/peripheral-types",deps);
- assert.equal(res.statusCode,413);assert.equal(JSON.parse(res.body).error,"payload_too_large");assert.equal(deps.calls.length,0);
+ assert.equal(res.statusCode,413);assert.equal(JSON.parse(res.body).data.error,"payload_too_large");assert.equal(deps.calls.length,0);
 });
 
 test("unversioned media type and cross-origin mutation fail before repository access",async()=>{
