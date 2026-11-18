@@ -41,10 +41,24 @@ jobs:
       - name: Initialize QA evidence
         if: always()
         run: mkdir -p reexec-evidence
-      - name: Execute 228 requirement test suite
+      - name: Execute bounded full regression test suite
         run: |
+          set +e
           set -o pipefail
-          npm test 2>&1 | tee reexec-evidence/qa-test-output.log
+          test_started_epoch=$(date +%s)
+          test_started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          timeout --signal=TERM --kill-after=60s 60m node --test tests/*.test.mjs 2>&1 | tee reexec-evidence/qa-test-output.log
+          test_status=${PIPESTATUS[0]}
+          test_ended_epoch=$(date +%s)
+          test_ended_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          {
+            echo "test_started_at=$test_started_at"
+            echo "test_ended_at=$test_ended_at"
+            echo "test_duration_seconds=$((test_ended_epoch - test_started_epoch))"
+            echo "test_exit_code=$test_status"
+            if [ "$test_status" -eq 124 ]; then echo "test_timeout=60m"; else echo "test_timeout=not_reached"; fi
+          } > reexec-evidence/test-timing.txt
+          exit "$test_status"
       - name: Record execution metadata
         if: always()
         run: |
@@ -52,7 +66,7 @@ jobs:
           {
             echo "program=EPER-REEXEC-001"
             echo "classification=NEW CONTROLLED EXECUTION EVIDENCE — NOT HISTORICAL EVIDENCE"
-            echo "population=228 requirements / 38 chapters"
+            echo "population=full EPER Node.js regression test suite; 228-requirement pilot matrix is a separate workflow check"
             echo "commit=${{github.sha}}"
             echo "run_id=${{github.run_id}}"
             echo "run_number=${{github.run_number}}"
@@ -97,7 +111,7 @@ jobs:
             "",
             "Classification: NEW CONTROLLED EXECUTION EVIDENCE — NOT HISTORICAL EVIDENCE",
             "",
-            "- Population: 228 requirements / 38 chapters",
+            "- Population: full EPER Node.js regression test suite (separate from the 228-requirement pilot matrix)",
             `- Workflow run ID: ${process.env.GITHUB_RUN_ID}`,
             `- Repository: ${process.env.GITHUB_REPOSITORY}`,
             `- PR head SHA: ${prHeadSha}`,
@@ -109,14 +123,14 @@ jobs:
             `- Cancelled: ${summary.cancelled ?? "UNAVAILABLE"}`,
             `- Skipped: ${summary.skipped ?? "UNAVAILABLE"}`,
             `- Technical QA outcome: ${outcome}`,
-            "- Full TAP output: qa-test-output.log",
+            "- Full TAP output: qa-test-output.log\n            - Test timing and timeout status: test-timing.txt",
             "- Execution metadata: execution-metadata.txt",
             "",
             "## Interpretation",
             "",
             "This report is generated from the current workflow run and its test log. It does not establish business UAT, release/go-live, production/operations, final acceptance, certification, or traceability freeze.",
             "",
-            "A PASS is recorded only when a complete TAP summary exists, failed tests are zero, and cancelled tests are zero. Missing or incomplete summaries remain INCOMPLETE.",
+            "A PASS is recorded only when a complete TAP summary exists, failed tests are zero, and cancelled tests are zero. Missing or incomplete summaries remain INCOMPLETE. The regression suite is bounded to 60 minutes; a timeout is a failed/incomplete execution, not a pass.",
             ""
           ];
           writeFileSync(`reexec-evidence/EPER-REEXEC-001-${process.env.GITHUB_RUN_ID}.md`, lines.join("\n"));
