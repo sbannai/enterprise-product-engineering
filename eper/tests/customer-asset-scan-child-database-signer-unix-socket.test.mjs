@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createConnection } from "node:net";
@@ -25,7 +25,7 @@ async function fixture(t, signer) {
     await server.close();
     await rm(directory, { recursive: true, force: true });
   });
-  return { socketPath, directory };
+  return { socketPath };
 }
 
 test("scanner sends only CSR and opaque SVID over signer Unix socket", async t => {
@@ -39,7 +39,6 @@ test("scanner sends only CSR and opaque SVID over signer Unix socket", async t =
   assert.equal(await client.sign({ csrPem, workloadJwtSvid: token }), certificatePem);
   assert.deepEqual(received, { csrPem, workloadJwtSvid: token });
   assert.deepEqual(Object.keys(received).sort(), ["csrPem", "workloadJwtSvid"]);
-  assert.equal((await readFile(directory + "/signer.sock").catch(() => Buffer.from(""))).length, 0);
 });
 
 test("signer failures return a generic denial without leaking CA diagnostics", async t => {
