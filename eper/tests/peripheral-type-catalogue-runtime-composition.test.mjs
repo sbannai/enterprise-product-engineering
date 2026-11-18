@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const main = await readFile(new URL("../apps/api/main.ts", import.meta.url), "utf8");
+const repository = await readFile(new URL("../packages/peripherals/postgres-peripheral-type-catalogue-repository.ts", import.meta.url), "utf8");
 
 test("F-023 peripheral type catalogue is composed with an isolated PostgreSQL pool", () => {
   assert.match(main, /PostgresPeripheralTypeCatalogueRepository/);
@@ -15,4 +16,6 @@ test("F-023 peripheral type catalogue is composed with an isolated PostgreSQL po
   assert.match(main, /peripheralTypeCataloguePool\.end\(\)/);
   assert.doesNotMatch(main, /new PostgresPeripheralTypeCatalogueRepository\(platformAdminPool/);
   assert.doesNotMatch(main, /new PostgresPeripheralTypeCatalogueRepository\(providerCataloguePool/);
+  assert.equal((repository.match(/SET LOCAL ROLE eper_peripheral_type_catalogue_access/g) ?? []).length, 6);
+  assert.equal((repository.match(/BEGIN/g) ?? []).length, 6);
 });
