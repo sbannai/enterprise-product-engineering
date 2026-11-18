@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "eper/tests/fixtures/spire-workload-api/**"
+      - "eper/packages/assets/customer-asset-scan-child-*.ts"
+      - "eper/apps/worker/customer-asset-scan-child-main.ts"
       - ".github/workflows/eper-spire-local-workload-api.yml"
   workflow_dispatch:
 

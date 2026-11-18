@@ -15,11 +15,14 @@ AUDIENCE="eper:customer-asset-scan-child"
 
 cleanup() {
   docker compose -p "$PROJECT" -f "$COMPOSE_FILE" down --volumes --remove-orphans >/dev/null 2>&1 || true
-  rm -rf "$SPIRE_FIXTURE_DIR"
+  sudo rm -rf "$SPIRE_FIXTURE_DIR"
 }
 trap cleanup EXIT
 
 mkdir -p "$SPIRE_FIXTURE_DIR/server" "$SPIRE_FIXTURE_DIR/agent" "$SPIRE_FIXTURE_DIR/agent-public"
+mkdir -p "$SPIRE_FIXTURE_DIR/signer-ipc"
+sudo chown 20001:20001 "$SPIRE_FIXTURE_DIR/signer-ipc"
+sudo chmod 2770 "$SPIRE_FIXTURE_DIR/signer-ipc"
 chmod 0711 "$SPIRE_FIXTURE_DIR/agent-public"
 sudo chown 1000:1000 "$SPIRE_FIXTURE_DIR/agent-public"
 
@@ -95,6 +98,43 @@ plugins {
 }
 EOF
 
+# Prepare the disposable PostgreSQL server TLS authority. The scanner client
+# certificate is issued later by the separate signer process after SVID validation.
+mkdir -p "$SPIRE_FIXTURE_DIR/postgres"
+chmod 700 "$SPIRE_FIXTURE_DIR/postgres"
+openssl req -x509 -newkey rsa:2048 -nodes \
+  -keyout "$SPIRE_FIXTURE_DIR/postgres/ca.key" \
+  -out "$SPIRE_FIXTURE_DIR/postgres/ca.crt" \
+  -days 1 -subj "/CN=eper-fixture-postgres-ca" \
+  -addext "basicConstraints=critical,CA:TRUE" \
+  -addext "keyUsage=critical,keyCertSign,cRLSign" >/dev/null 2>&1
+openssl req -new -newkey rsa:2048 -nodes \
+  -keyout "$SPIRE_FIXTURE_DIR/postgres/server.key" \
+  -out "$SPIRE_FIXTURE_DIR/postgres/server.csr" \
+  -subj "/CN=audit-postgres" >/dev/null 2>&1
+printf 'subjectAltName=DNS:audit-postgres\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n' > "$SPIRE_FIXTURE_DIR/postgres/server.ext"
+openssl x509 -req -in "$SPIRE_FIXTURE_DIR/postgres/server.csr" \
+  -CA "$SPIRE_FIXTURE_DIR/postgres/ca.crt" -CAkey "$SPIRE_FIXTURE_DIR/postgres/ca.key" \
+  -CAcreateserial -out "$SPIRE_FIXTURE_DIR/postgres/server.crt" -days 1 -sha256 \
+  -extfile "$SPIRE_FIXTURE_DIR/postgres/server.ext" >/dev/null 2>&1
+cat > "$SPIRE_FIXTURE_DIR/postgres/pg_hba.conf" <<'EOF'
+local all all trust
+hostssl eper_scanner_fixture postgres 0.0.0.0/0 scram-sha-256
+hostssl eper_scanner_fixture postgres ::/0 scram-sha-256
+hostssl eper_scanner_fixture eper_fixture_scanner 0.0.0.0/0 cert map=eper_fixture_scanner
+hostssl eper_scanner_fixture eper_fixture_scanner ::/0 cert map=eper_fixture_scanner
+host all all all reject
+EOF
+cat > "$SPIRE_FIXTURE_DIR/postgres/pg_ident.conf" <<'EOF'
+eper_fixture_scanner eper_fixture_scanner eper_fixture_scanner
+EOF
+chmod 755 "$SPIRE_FIXTURE_DIR" "$SPIRE_FIXTURE_DIR/postgres"
+chmod 600 "$SPIRE_FIXTURE_DIR/postgres/server.key"
+chmod 644 "$SPIRE_FIXTURE_DIR/postgres/ca.crt" "$SPIRE_FIXTURE_DIR/postgres/server.crt" "$SPIRE_FIXTURE_DIR/postgres/pg_hba.conf" "$SPIRE_FIXTURE_DIR/postgres/pg_ident.conf"
+# Keep the fixture directory owned by the runner so cleanup can always remove it.
+# Only the two private keys need PostgreSQL's UID for its server and psql client.
+sudo chown 999:999 "$SPIRE_FIXTURE_DIR/postgres/server.key"
+
 docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up -d spire-server
 
 # Wait for the private Server API before creating a short-lived node join token.
@@ -135,9 +175,12 @@ docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T spire-server \
   -parentID "$AGENT_ID" -spiffeID "$EXPECTED_ID" \
   -selector unix:uid:20001 -selector unix:gid:20001 >/dev/null
 
-# Exercise EPER's actual Node 24 SDK adapter and verifier from a separate
-# container sharing only the Agent PID namespace and public socket directory.
-docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --build --rm node-sdk-probe
+# The signer is a separate unprivileged process with its own SPIFFE identity.
+# It shares only the Agent Workload API socket, not scanner process credentials.
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T spire-server \
+  /opt/spire/bin/spire-server entry create -socketPath "$SERVER_SOCKET" \
+  -parentID "$AGENT_ID" -spiffeID "spiffe://example.org/ns/scanner/sa/customer-asset-scan-signer" \
+  -selector unix:uid:20004 -selector unix:gid:20004 >/dev/null
 
 probe() {
   local uid="$1"
@@ -178,6 +221,43 @@ if [[ "$POSITIVE_OK" -ne 1 ]]; then
 fi
 unset POSITIVE_OUTPUT LAST_PROBE_OUTPUT
 echo "PASS: registered UID received the expected SPIFFE identity"
+
+# Only invoke the SDK probe after the Agent CLI has demonstrated that the
+# registered workload identity is available. This avoids racing Agent
+# registration/selector propagation and treating an empty first SVID set as
+# an invalid identity result.
+# Keep the signer alive as a distinct UID/GID and container process. It has its
+# own SPIRE registration and Workload API access; scanner receives only the
+# shared socket and public CA certificate.
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up -d signer-process
+# Inspect the socket from inside the signer container. Docker's bind-mount
+# backing path is not guaranteed to be visible to the runner namespace.
+SOCKET_READY=0
+for _ in $(seq 1 45); do
+  if docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T signer-process \
+      node -e 'const fs=require("node:fs"); process.exit(fs.existsSync("/signer-ipc/signer.sock") && fs.statSync("/signer-ipc/signer.sock").isSocket() ? 0 : 1)' 2>/dev/null; then
+    SOCKET_READY=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$SOCKET_READY" -ne 1 ]]; then
+  echo "FAIL: isolated signer process did not create its Unix socket in the shared IPC mount" >&2
+  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T signer-process ls -la /signer-ipc >&2 || true
+  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" logs --no-color signer-process >&2 || true
+  exit 1
+fi
+
+# Export only the public signer CA into PostgreSQL's read-only fixture mount.
+# Keep the private signer IPC directory inaccessible to the database process.
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T signer-process cat /signer-ipc/ca.crt > "$SPIRE_FIXTURE_DIR/postgres/scanner-client-ca.crt"
+chmod 644 "$SPIRE_FIXTURE_DIR/postgres/scanner-client-ca.crt"
+
+# The signer CA is now available. Start disposable PostgreSQL with that CA as
+# its client-certificate trust root, then prove dynamic SVID-bound mTLS LOGIN.
+bash "$ROOT/run-audit-postgres.sh"
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" stop signer-process
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --build --rm node-sdk-probe
 
 # Both an unregistered UID and a sibling UID must fail to obtain any SVID.
 for uid in 20002 20003; do

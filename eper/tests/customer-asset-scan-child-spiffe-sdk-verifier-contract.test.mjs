@@ -27,7 +27,7 @@ function verifierForSdkResult(svid) {
 test("real SDK adapter boundary and identity verifier accept one exact, short-lived child SVID", async () => {
   const verifier = verifierForSdkResult({
     spiffeId,
-    token: "opaque-bearer-token",
+    token: "opaque-bearer-token-fixture",
     expiresAtMs,
   });
   const identity = await verifier.verifyCurrentProcessIdentity();
@@ -40,7 +40,7 @@ test("real SDK adapter boundary and identity verifier accept one exact, short-li
 test("SDK adapter result with an unexpected SPIFFE ID is rejected by the identity verifier", async () => {
   const verifier = verifierForSdkResult({
     spiffeId: "spiffe://eper.example/another-workload",
-    token: "opaque-bearer-token",
+    token: "opaque-bearer-token-fixture",
     expiresAtMs,
   });
   await assert.rejects(verifier.verifyCurrentProcessIdentity(), {
@@ -52,7 +52,7 @@ test("SDK adapter result with expired or excessive SVID lifetime is rejected", a
   for (const invalidExpiry of [now - 1, now + 301_000]) {
     const verifier = verifierForSdkResult({
       spiffeId,
-      token: "opaque-bearer-token",
+      token: "opaque-bearer-token-fixture",
       expiresAtMs: invalidExpiry,
     });
     await assert.rejects(verifier.verifyCurrentProcessIdentity(), {

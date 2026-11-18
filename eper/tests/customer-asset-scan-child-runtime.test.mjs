@@ -44,7 +44,7 @@ test("child runtime authorizes its own workload, resolves provider scope and sca
   assert.equal(calls.dispatch, 1);
   assert.equal(calls.dispatchInput.expectedConnectionId, "connection-1");
   assert.equal(calls.dispatchInput.operation.kind, "read_object_internal");
-  assert.equal(calls.dispatchInput.operation.request.providerObjectReference, "opaque-upload-reference");
+  assert.equal(calls.dispatchInput.operation.request.providerObjectReference, "opaque-object-reference");
 });
 
 test("child runtime rejects a scanner that returns before exhausting the verified stream", async () => {
