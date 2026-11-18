@@ -67,7 +67,8 @@ export async function handlePlatformPeripheralTypeCatalogueRoute(req:IncomingMes
   respond(req,res,405,{error:"method_not_allowed"});return true;
  }catch(error){
   const msg=error instanceof Error?error.message:"PERIPHERAL_CATALOGUE_OPERATION_FAILED";
-  const conflict=error instanceof PeripheralCatalogueConflictError;
+  const alreadyDeprecated=msg==="PERIPHERAL_CATALOGUE_TYPE_ALREADY_DEPRECATED";
+  const conflict=error instanceof PeripheralCatalogueConflictError||alreadyDeprecated;
   const tooLarge=msg==="PERIPHERAL_CATALOGUE_BODY_TOO_LARGE";
   const notFound=msg.includes("NOT_FOUND");
   const invalid=msg.includes("INVALID")||msg.includes("UNSUPPORTED")||msg.includes("FIELD_")||msg.includes("SCHEMA_")||msg.includes("TERMINAL");
