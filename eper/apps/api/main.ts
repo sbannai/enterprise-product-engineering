@@ -38,6 +38,7 @@ import { PostgresApplicationAddonEntitlementReader } from "../../packages/addon-
 import { ApplicationAddonAccessGate } from "../../packages/addon-entitlements/application-addon-access-gate.js";
 import { ApplicationCapabilityBoundary } from "../../packages/addon-entitlements/application-capability-boundary.js";
 import { PostgresPeripheralRepository } from "../../packages/peripherals/postgres-peripheral-repository.js";
+import { PostgresPeripheralTypeCatalogueRepository } from "../../packages/peripherals/postgres-peripheral-type-catalogue-repository.js";
 import { PostgresDependencyInventoryRepository } from "../../packages/dependencies/postgres-dependency-inventory-repository.js";
 import { ApplicationPeripheralService } from "../../packages/peripherals/application-peripheral-service.js";
 import { PostgresPeripheralRoleAuthorizer } from "../../packages/peripherals/peripheral-authorization.js";
@@ -64,6 +65,7 @@ const platformCustomerAdminEnabled = process.env.EPER_PLATFORM_CUSTOMER_ADMIN_AP
 const platformApplicationRemediationEnabled = process.env.EPER_PLATFORM_APPLICATION_REMEDIATION_API_ENABLED === "true";
 const platformAdminCredentialsEnabled = process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED === "true";
 const providerCatalogueAdminEnabled = process.env.EPER_PROVIDER_CATALOGUE_ADMIN_API_ENABLED === "true";
+const peripheralTypeCatalogueAdminEnabled = process.env.EPER_PERIPHERAL_CATALOGUE_ADMIN_API_ENABLED === "true";
 const workflowOutboxAdminEnabled = process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED === "true";
 const applicationDataModelAdminEnabled = process.env.EPER_APPLICATION_DATA_MODEL_ADMIN_API_ENABLED === "true";
 const commercialTariffAdminEnabled = process.env.EPER_COMMERCIAL_TARIFF_API_ENABLED === "true";
@@ -93,7 +95,7 @@ if (providerStorageRuntimeConfiguration.enabled) {
 if (customerIdentityPersistenceMode !== "disabled" && customerIdentityPersistenceMode !== "postgres") {
   throw new Error("EPER_CUSTOMER_IDENTITY_PERSISTENCE_UNSUPPORTED");
 }
-const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || applicationDataModelAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled || providerCatalogueAdminEnabled || providerConnectionsEnabled || customerIdentityPersistenceMode === "postgres" || customerAssetPersistenceApiEnabled || peripheralApiEnabled || remoteDesktopApiEnabled;
+const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || applicationDataModelAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled || providerCatalogueAdminEnabled || providerConnectionsEnabled || peripheralTypeCatalogueAdminEnabled || customerIdentityPersistenceMode === "postgres" || customerAssetPersistenceApiEnabled || peripheralApiEnabled || remoteDesktopApiEnabled;
 const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
 if (applicationDataModelAdminEnabled && (!paymentPool || process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
     process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" || process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres" ||
@@ -112,6 +114,11 @@ const platformAdminPool = platformAdminCredentialsEnabled ? (() => {
 const providerCataloguePool = (providerCatalogueAdminEnabled || providerConnectionsEnabled) ? (() => {
   const connectionString = process.env.EPER_PROVIDER_CATALOGUE_DATABASE_URL?.trim();
   if (!connectionString) throw new Error("EPER_PROVIDER_CATALOGUE_DATABASE_URL_REQUIRED");
+  return createPostgresPaymentPool({ ...process.env, EPER_PAYMENT_DATABASE_URL: connectionString, DATABASE_URL: undefined });
+})() : null;
+const peripheralTypeCataloguePool = peripheralTypeCatalogueAdminEnabled ? (() => {
+  const connectionString = process.env.EPER_PERIPHERAL_TYPE_CATALOGUE_DATABASE_URL?.trim();
+  if (!connectionString) throw new Error("EPER_PERIPHERAL_TYPE_CATALOGUE_DATABASE_URL_REQUIRED");
   return createPostgresPaymentPool({ ...process.env, EPER_PAYMENT_DATABASE_URL: connectionString, DATABASE_URL: undefined });
 })() : null;
 
@@ -178,6 +185,14 @@ if (providerCataloguePool) {
       "eper_provider_operations", "eper_audit_events", "eper_audit_chain_head",
     ],
     "EPER_PROVIDER_CATALOGUE_DATABASE_ROLE_INVALID",
+  );
+}
+if (peripheralTypeCataloguePool) {
+  await assertPrivilegedPoolRole(
+    peripheralTypeCataloguePool,
+    "eper_peripheral_type_catalogue_access",
+    ["eper_peripheral_type_definitions", "eper_peripheral_type_schema_versions", "eper_peripheral_type_schema_lifecycle", "eper_peripheral_type_catalogue_events", "eper_audit_events", "eper_audit_chain_head"],
+    "EPER_PERIPHERAL_TYPE_CATALOGUE_DATABASE_ROLE_INVALID",
   );
 }
 const paymentStore = postgresPaymentMode && paymentPool ? new PostgresPaymentStore(paymentPool, true) : undefined;
@@ -550,6 +565,21 @@ if (adminConfigMode === "postgres" && adminConfigurationStore) {
   await adminConfigurationStore.assertReady();
 }
 
+const peripheralTypeCatalogueRepository = peripheralTypeCatalogueAdminEnabled && peripheralTypeCataloguePool
+  ? new PostgresPeripheralTypeCatalogueRepository(peripheralTypeCataloguePool, process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
+  : undefined;
+if (peripheralTypeCatalogueRepository) {
+  const readinessClient = await peripheralTypeCataloguePool!.connect();
+  try {
+    const readiness = await readinessClient.query<{ table_name: string | null }>(
+      "SELECT to_regclass('public.eper_peripheral_type_definitions')::text AS table_name",
+    );
+    if (!readiness.rows[0]?.table_name) throw new Error("PERIPHERAL_TYPE_CATALOGUE_SCHEMA_NOT_APPLIED");
+  } finally {
+    readinessClient.release();
+  }
+}
+
 const platformAdminCredentialStore = platformAdminCredentialsEnabled && platformAdminPool
   ? new PostgresPlatformAdminCredentialStore(platformAdminPool, process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
   : undefined;
@@ -613,7 +643,7 @@ const server = createAppServer({
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
   workflowRoleDefinitionStore, workflowActorRoleAssignmentStore, workflowRoleDelegationStore, customerAssetRepository, platformCustomerAdminProvisioningStore, platformApplicationRemediationStore, platformAdminCredentialStore,
-  providerConnectionRepository, providerValidationService, providerCatalogueRepository,
+  providerConnectionRepository, providerValidationService, providerCatalogueRepository, peripheralTypeCatalogueRepository,
   workflowDefinitionPublisher, workflowDefinitionDraftStore, workflowExecutionService, applicationDataModelAuthoringService, peripheralService, remoteDesktopService,
 });
 
@@ -630,6 +660,7 @@ async function shutdown(signal: string): Promise<void> {
     if (paymentPool) await paymentPool.end();
     if (platformAdminPool) await platformAdminPool.end();
     if (providerCataloguePool) await providerCataloguePool.end();
+    if (peripheralTypeCataloguePool) await peripheralTypeCataloguePool.end();
   } catch (error) {
     console.error(`EPER API shutdown failed after ${signal}`, error);
     process.exitCode = 1;
