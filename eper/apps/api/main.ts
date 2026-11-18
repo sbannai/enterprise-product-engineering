@@ -197,6 +197,17 @@ if (peripheralTypeCataloguePool) {
     ["eper_peripheral_type_definitions", "eper_peripheral_type_schema_versions", "eper_peripheral_type_schema_lifecycle", "eper_peripheral_type_catalogue_events", "eper_audit_events", "eper_audit_chain_head"],
     "EPER_PERIPHERAL_TYPE_CATALOGUE_DATABASE_ROLE_INVALID",
   );
+  const roleClient = await peripheralTypeCataloguePool.connect();
+  try {
+    const role = await roleClient.query(
+      "SELECT pg_has_role(current_user, 'eper_peripheral_type_catalogue_access', 'SET') AS can_set_role",
+    );
+    if (role.rows[0]?.can_set_role !== true) {
+      throw new Error("EPER_PERIPHERAL_TYPE_CATALOGUE_DATABASE_ROLE_SET_REQUIRED");
+    }
+  } finally {
+    roleClient.release();
+  }
 }
 const paymentStore = postgresPaymentMode && paymentPool ? new PostgresPaymentStore(paymentPool, true) : undefined;
 if (commercialTariffAdminEnabled && (!paymentPool || process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
