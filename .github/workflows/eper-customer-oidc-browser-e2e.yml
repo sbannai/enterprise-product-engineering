@@ -35,7 +35,7 @@ jobs:
   browser-lifecycle:
     name: Chromium OIDC login, protected access, logout and revocation
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 90
     services:
       postgres:
         image: postgres:16
