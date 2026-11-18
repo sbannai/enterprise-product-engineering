@@ -18,7 +18,7 @@ const start = {
 };
 const spiffeId = "spiffe://eper.example/scanner/child";
 const workload = await new CustomerAssetScanChildSpiffeIdentityVerifier({
-  async fetchJwtSvid() { return [{ spiffeId, expiresAtMs: Date.now() + 120_000 }]; },
+  async fetchJwtSvid() { return [{ spiffeId, expiresAtMs: Date.now() + 120_000, jwtSvid: "fixture-workload-jwt-svid-value" }]; },
 }, spiffeId).verifyCurrentProcessIdentity();
 const context = Object.freeze({
   tenantId: "tenant-db", applicationId: "app-db", workerId: "worker-db",
