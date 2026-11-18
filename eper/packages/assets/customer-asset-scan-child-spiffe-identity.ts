@@ -105,13 +105,22 @@ export class CustomerAssetScanChildSpiffeIdentityVerifier {
         throw new CustomerAssetScanChildSpiffeIdentityError("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_INVALID");
       }
 
-      const identity: CustomerAssetScanChildSpiffeIdentity = Object.freeze({
+      // Keep the bearer credential available for the isolated signer, but
+      // exclude it from ordinary object serialization, logs and JSON snapshots.
+      const identity = Object.defineProperties({
         spiffeId: this.expectedSpiffeId,
         trustDomain,
         audience: CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
         expiresAt,
-        jwtSvid: fetched[0].jwtSvid,
-      });
+      }, {
+        jwtSvid: {
+          value: fetched[0].jwtSvid,
+          enumerable: false,
+          writable: false,
+          configurable: false,
+        },
+      }) as CustomerAssetScanChildSpiffeIdentity;
+      Object.freeze(identity);
       verifiedCurrentProcessIdentities.add(identity);
       return identity;
     } catch (error) {
