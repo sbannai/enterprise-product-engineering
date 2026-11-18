@@ -88,8 +88,8 @@ test("OpenSSL test signer verifies CSR, overrides its subject, enforces notAfter
             "ca", "-batch", "-notext", "-config", config,
             "-in", csrPath, "-out", certPath,
             "-startdate", opensslTime(now - 5),
-            "-enddate", opensslTime(input.notAfterEpochSeconds),
-            "-subj", "/CN=" + input.databaseRole,
+            "-enddate", opensslTime(now + 120),
+            "-subj", "/CN=eper_scan_child_ci",
             "-extensions", "client",
           ], { timeout: 10_000, maxBuffer: 16_384 });
           return readFile(certPath, "utf8");
