@@ -50,6 +50,13 @@ test("DELETE deprecates a type through the repository and returns the resulting 
  assert.deepEqual(deps.calls[0],["deprecate",{actorId:"peripheral-admin",correlationId:"peripheral-catalogue-test",environment:"sandbox",typeKey:"barcode.scanner"}]);
 });
 
+test("repeated DELETE deprecation returns HTTP 409 instead of a service error",async()=>{
+ process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED="true";process.env.EPER_PERIPHERAL_CATALOGUE_ADMIN_API_ENABLED="true";
+ const deps=fixture();deps.repository.deprecate=async()=>{throw new Error("PERIPHERAL_CATALOGUE_TYPE_ALREADY_DEPRECATED");};
+ const res=response();await handlePlatformPeripheralTypeCatalogueRoute(request("DELETE","/platform/admin/peripheral-types/barcode.scanner"),res,"/platform/admin/peripheral-types/barcode.scanner",deps);
+ assert.equal(res.statusCode,409);assert.equal(JSON.parse(res.body).data.error,"peripheral_catalogue_conflict");
+});
+
 test("oversized mutation bodies return HTTP 413 instead of a service error",async()=>{
  process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED="true";process.env.EPER_PERIPHERAL_CATALOGUE_ADMIN_API_ENABLED="true";
  const req=Readable.from([Buffer.alloc(24*1024+1,0x20)]);req.method="POST";req.url="/platform/admin/peripheral-types";
