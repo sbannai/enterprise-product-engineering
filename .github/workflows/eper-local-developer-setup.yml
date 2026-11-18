@@ -79,7 +79,7 @@ jobs:
         run: bash scripts/configure-scan-child-client-cert-ci.sh
       - name: Provision pinned Node 24 scanner child runtime
         uses: ./.github/actions/eper-scanner-node24-runtime
-      - name: Run the same one-command developer verification documented for a fresh clone
-        run: npm run dev:verify
+      - name: Verify fresh-clone typecheck, build and PostgreSQL migrations
+        run: npm run dev:verify -- --skip-tests
       - name: Prove PostgreSQL backup and restore with server-matched PostgreSQL 16 utilities
         run: docker run --rm --network host -e DATABASE_URL -e RESTORE_DATABASE_URL -v "$PWD:/workspace" -w /workspace postgres:16 bash scripts/postgres-backup-restore-smoke.sh

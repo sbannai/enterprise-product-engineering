@@ -86,5 +86,13 @@ const testEnv = {
   EPER_CUSTOMER_ASSET_LIVE_TESTS: "1",
   EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_DATABASE_URL: databaseUrl,
 };
-run("Full EPER test suite with live PostgreSQL integration enabled", ["test"], testEnv);
-console.log("\nEPER_LOCAL_DEVELOPER_VERIFICATION=PASS");
+const skipTests = process.argv.includes("--skip-tests");
+if (skipTests) {
+  console.log("\nFull test suite intentionally delegated to the dedicated controlled-QA workflow.");
+  console.log("Run `npm test` separately when full unit and integration coverage is required.");
+} else {
+  run("Full EPER test suite with live PostgreSQL integration enabled", ["test"], testEnv);
+}
+console.log(skipTests
+  ? "\nEPER_LOCAL_DEVELOPER_SETUP_VERIFICATION=PASS"
+  : "\nEPER_LOCAL_DEVELOPER_VERIFICATION=PASS");
