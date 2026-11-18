@@ -36,7 +36,7 @@ export async function handlePlatformPeripheralTypeCatalogueRoute(req:IncomingMes
  const item=/^\/([^/]+)$/.exec(suffix);
  if(suffix&&!publish&&!schemaDraft&&!item){respond(req,res,404,{error:"not_found"});return true;}
  if(process.env.EPER_PERIPHERAL_CATALOGUE_ADMIN_API_ENABLED!=="true"||process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED!=="true"||!deps.credentialStore||!deps.repository||!deps.environment){respond(req,res,404,{error:"not_found"});return true;}
- const method=!suffix?(req.method==="GET"?"GET":"POST"):(publish||schemaDraft)?"POST":req.method==="GET"?"GET":"UNSUPPORTED";
+ const method=!suffix?(req.method==="GET"?"GET":"POST"):(publish||schemaDraft)?"POST":item&&req.method==="DELETE"?"DELETE":req.method==="GET"?"GET":"UNSUPPORTED";
  if(req.method!==method){respond(req,res,405,{error:"method_not_allowed"});return true;}
  if(crossOrigin(req)){respond(req,res,403,{error:"cross_origin_mutation_forbidden"});return true;}
  try{
@@ -54,6 +54,7 @@ export async function handlePlatformPeripheralTypeCatalogueRoute(req:IncomingMes
   let typeKey:string;try{typeKey=decodeURIComponent((publish??schemaDraft??item)![1]);}catch{respond(req,res,400,{error:"peripheral_catalogue_type_key_encoding_invalid"});return true;}
   if(!/^[a-z][a-z0-9_.-]{1,95}$/.test(typeKey)){respond(req,res,400,{error:"peripheral_catalogue_type_key_invalid"});return true;}
   if(item&&req.method==="GET"){const type=await deps.repository.get(typeKey);respond(req,res,type?200:404,type?{type}:{error:"peripheral_catalogue_type_not_found"});return true;}
+  if(item&&req.method==="DELETE"){const type=await deps.repository.deprecate({...context,typeKey});respond(req,res,200,{type});return true;}
   const body=await readBody(req);
   if(schemaDraft){
    const keys=["adapterKey","adapterVersion","configurationSchema","compatibility"];
@@ -67,9 +68,10 @@ export async function handlePlatformPeripheralTypeCatalogueRoute(req:IncomingMes
  }catch(error){
   const msg=error instanceof Error?error.message:"PERIPHERAL_CATALOGUE_OPERATION_FAILED";
   const conflict=error instanceof PeripheralCatalogueConflictError;
+  const tooLarge=msg==="PERIPHERAL_CATALOGUE_BODY_TOO_LARGE";
   const notFound=msg.includes("NOT_FOUND");
   const invalid=msg.includes("INVALID")||msg.includes("UNSUPPORTED")||msg.includes("FIELD_")||msg.includes("SCHEMA_")||msg.includes("TERMINAL");
-  const status=conflict?409:notFound?404:invalid?400:503;
-  respond(req,res,status,{error:conflict?"peripheral_catalogue_conflict":notFound?"peripheral_catalogue_not_found":invalid?"peripheral_catalogue_input_invalid":"peripheral_catalogue_operation_failed"});return true;
+  const status=tooLarge?413:conflict?409:notFound?404:invalid?400:503;
+  respond(req,res,status,{error:tooLarge?"payload_too_large":conflict?"peripheral_catalogue_conflict":notFound?"peripheral_catalogue_not_found":invalid?"peripheral_catalogue_input_invalid":"peripheral_catalogue_operation_failed"});return true;
  }
 }
