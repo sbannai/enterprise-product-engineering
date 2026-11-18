@@ -40,14 +40,22 @@ jobs:
         run: npm run build
       - name: Initialize QA evidence
         if: always()
-        run: mkdir -p reexec-evidence
+        run: |
+          mkdir -p reexec-evidence
+          : > reexec-evidence/qa-progress.jsonl
+          : > reexec-evidence/qa-test-output.log
       - name: Execute bounded full regression test suite
         run: |
           set +e
           set -o pipefail
           test_started_epoch=$(date +%s)
           test_started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          timeout --signal=TERM --kill-after=60s 60m node --test tests/*.test.mjs 2>&1 | tee reexec-evidence/qa-test-output.log
+          timeout --signal=TERM --kill-after=60s 60m node --test \
+            --test-reporter=tap \
+            --test-reporter=./scripts/qa-progress-reporter.mjs \
+            --test-reporter-destination=stdout \
+            --test-reporter-destination=reexec-evidence/qa-progress.jsonl \
+            tests/*.test.mjs 2>&1 | tee reexec-evidence/qa-test-output.log
           test_status=${PIPESTATUS[0]}
           test_ended_epoch=$(date +%s)
           test_ended_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -123,7 +131,9 @@ jobs:
             `- Cancelled: ${summary.cancelled ?? "UNAVAILABLE"}`,
             `- Skipped: ${summary.skipped ?? "UNAVAILABLE"}`,
             `- Technical QA outcome: ${outcome}`,
-            "- Full TAP output: qa-test-output.log\n            - Test timing and timeout status: test-timing.txt",
+            "- Full TAP output: qa-test-output.log",
+            "- Per-test execution event timeline: qa-progress.jsonl",
+            "- Test timing and timeout status: test-timing.txt",
             "- Execution metadata: execution-metadata.txt",
             "",
             "## Interpretation",
