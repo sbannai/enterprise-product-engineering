@@ -11,6 +11,8 @@ test("F-023 peripheral type catalogue is composed with an isolated PostgreSQL po
   assert.match(main, /PERIPHERAL_TYPE_CATALOGUE_REQUIRES_PLATFORM_ADMIN_CREDENTIALS/);
   assert.match(main, /EPER_PERIPHERAL_TYPE_CATALOGUE_DATABASE_URL_REQUIRED/);
   assert.match(main, /eper_peripheral_type_catalogue_access/);
+  assert.match(main, /EPER_PERIPHERAL_TYPE_CATALOGUE_DATABASE_ROLE_SET_REQUIRED/);
+  assert.ok(main.includes("pg_has_role(current_user, 'eper_peripheral_type_catalogue_access', 'SET')"));
   assert.match(main, /peripheralTypeCatalogueRepository\s*=\s*peripheralTypeCatalogueAdminEnabled/);
   assert.match(main, /peripheralTypeCatalogueRepository,/);
   assert.match(main, /peripheralTypeCataloguePool\.end\(\)/);
