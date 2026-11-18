@@ -1035,7 +1035,7 @@ test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { s
   const supervisorUrl = new URL(connectionString);
   supervisorUrl.username = role;
   supervisorUrl.password = password;
-  const supervisorPool = new Pool({ connectionString: supervisorUrl.toString(), max: 1 });
+  const supervisorPool = new Pool({ connectionString: supervisorUrl.toString(), max: 2 });
   try {
     await fixtureRepository.claimScanJobs({
       tenantId: fixture.tenantId, applicationId: fixture.applicationId,
@@ -1249,10 +1249,20 @@ test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { s
       lifecycle_status: "active", state: "leased",
     }, "failed audit append must roll back asset and job transitions");
 
-    assert.equal(await supervisorRepository.recoverExhaustedScanJobsAsSupervisor({
-      tenantId: fixture.tenantId, applicationId: fixture.applicationId,
-      scannerServiceId, environment: "sandbox", limit: 5,
-    }), 1);
+    // Use separate PostgreSQL connections so these supervisor calls truly race.
+    // Exactly one call may dead-letter this exhausted lease.
+    const recoveryOutcomes = await Promise.all([
+      supervisorRepository.recoverExhaustedScanJobsAsSupervisor({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        scannerServiceId, environment: "sandbox", limit: 5,
+      }),
+      supervisorRepository.recoverExhaustedScanJobsAsSupervisor({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        scannerServiceId, environment: "sandbox", limit: 5,
+      }),
+    ]);
+    assert.equal(recoveryOutcomes.reduce((total, count) => total + count, 0), 1,
+      "concurrent supervisor recovery calls must finalize the exhausted lease exactly once");
     await assert.rejects(
       supervisorPool.query("SELECT * FROM public.eper_customer_asset_scan_jobs"),
       error => error.code === "42501",
