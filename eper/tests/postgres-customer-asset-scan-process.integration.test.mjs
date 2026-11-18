@@ -289,8 +289,8 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env, on
       await execFile("openssl", [
           "ca", "-batch", "-notext", "-config", config, "-in", csrPath, "-out", certPath,
           "-startdate", opensslTime(Math.floor(Date.now() / 1000) - 5),
-          "-enddate", opensslTime(input.notAfterEpochSeconds),
-          "-subj", "/CN=" + input.databaseRole, "-extensions", "client",
+          "-enddate", opensslTime(Math.floor(Date.now() / 1000) + 60),
+          "-subj", "/CN=eper_scan_child_ci", "-extensions", "client",
         ], { timeout: 10000, maxBuffer: 16384 });
         return await readFile(certPath, "utf8");
       } finally {
