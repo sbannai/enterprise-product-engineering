@@ -11,6 +11,7 @@ export const CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE =
 export interface SpiffeWorkloadApiJwtSvid {
   spiffeId: string;
   expiresAtMs: number;
+  jwtSvid: string;
 }
 
 /** Narrow port implemented by the SPIFFE SDK adapter. */
@@ -27,6 +28,8 @@ export interface CustomerAssetScanChildSpiffeIdentity {
   readonly trustDomain: string;
   readonly audience: typeof CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE;
   readonly expiresAt: number;
+  /** Opaque current-process JWT-SVID; forwarded only to the isolated signer. */
+  readonly jwtSvid: string;
 }
 
 // A WeakSet makes verification provenance unforgeable by constructing a structurally
@@ -86,7 +89,9 @@ export class CustomerAssetScanChildSpiffeIdentityVerifier {
       });
       if (!Array.isArray(fetched) || fetched.length !== 1 ||
           fetched[0]?.spiffeId !== this.expectedSpiffeId ||
-          !Number.isSafeInteger(fetched[0]?.expiresAtMs)) {
+          !Number.isSafeInteger(fetched[0]?.expiresAtMs) ||
+          typeof fetched[0]?.jwtSvid !== "string" ||
+          fetched[0].jwtSvid.length < 20 || fetched[0].jwtSvid.length > 16_384) {
         throw new CustomerAssetScanChildSpiffeIdentityError("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_INVALID");
       }
 
@@ -100,12 +105,22 @@ export class CustomerAssetScanChildSpiffeIdentityVerifier {
         throw new CustomerAssetScanChildSpiffeIdentityError("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_INVALID");
       }
 
-      const identity: CustomerAssetScanChildSpiffeIdentity = Object.freeze({
+      // Keep the bearer credential available for the isolated signer, but
+      // exclude it from ordinary object serialization, logs and JSON snapshots.
+      const identity = Object.defineProperties({
         spiffeId: this.expectedSpiffeId,
         trustDomain,
         audience: CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
         expiresAt,
-      });
+      }, {
+        jwtSvid: {
+          value: fetched[0].jwtSvid,
+          enumerable: false,
+          writable: false,
+          configurable: false,
+        },
+      }) as CustomerAssetScanChildSpiffeIdentity;
+      Object.freeze(identity);
       verifiedCurrentProcessIdentities.add(identity);
       return identity;
     } catch (error) {

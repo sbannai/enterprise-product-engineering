@@ -5,6 +5,7 @@ export interface CustomerAssetScanChildDatabaseTlsBootstrap {
   readonly identity: Pick<CustomerAssetScanChildSpiffeIdentityVerifier, "verifyCurrentProcessIdentity">;
   readonly issuer: Pick<CustomerAssetScanChildDatabaseCredentialIssuer, "issue">;
   readonly caPem: string;
+  readonly databaseCaPem: string;
   close?: () => void | Promise<void>;
 }
 
@@ -19,6 +20,7 @@ export function assertCustomerAssetScanChildDatabaseTlsBootstrap(value: unknown)
   if (!identity || typeof identity.verifyCurrentProcessIdentity !== "function" ||
       !issuer || typeof issuer.issue !== "function" ||
       typeof bootstrap.caPem !== "string" ||
+      typeof bootstrap.databaseCaPem !== "string" ||
       (bootstrap.close !== undefined && typeof bootstrap.close !== "function")) {
     throw new Error("CUSTOMER_ASSET_SCAN_CHILD_DATABASE_TLS_BOOTSTRAP_INVALID");
   }

@@ -20,7 +20,7 @@ function client({ fetched, fetchError } = {}) {
     async fetchJwtSvid(input) {
       calls.push(input);
       if (fetchError) throw fetchError;
-      return fetched ?? [{ spiffeId, expiresAtMs }];
+      return fetched ?? [{ spiffeId, expiresAtMs, jwtSvid: "fixture.jwt.svid-value-long-enough" }];
     },
   };
 }
@@ -33,6 +33,7 @@ test("SPIFFE verifier obtains the current process SVID for the fixed audience an
   assert.equal(identity.trustDomain, "eper.example");
   assert.equal(identity.audience, CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE);
   assert.equal(identity.expiresAt, Math.floor(expiresAtMs / 1000));
+  assert.equal(identity.jwtSvid, "fixture.jwt.svid-value-long-enough");
   assert.deepEqual(api.calls, [{
     audience: [CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE],
     spiffeId,
@@ -128,7 +129,7 @@ test("SPIFFE verifier rejects malformed configured workload identities", () => {
   }
 });
 
-test("SPIFFE SDK adapter requests the exact child identity and discards the bearer token", async () => {
+test("SPIFFE SDK adapter retains the opaque bearer token only for isolated signer handoff", async () => {
   const sdkCalls = [];
   const adapter = new CustomerAssetScanChildSpiffeSdkAdapter({
     async getJwtSvid(audience, filter) {
@@ -144,8 +145,7 @@ test("SPIFFE SDK adapter requests the exact child identity and discards the bear
     audience: CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
     filter: { spiffeId },
   }]);
-  assert.deepEqual(result, [{ spiffeId, expiresAtMs }]);
-  assert.equal(JSON.stringify(result).includes("do-not-propagate-this-token"), false);
+  assert.deepEqual(result, [{ spiffeId, expiresAtMs, jwtSvid: "do-not-propagate-this-token" }]);
 });
 
 test("SPIFFE SDK adapter returns no identity when the workload has no entitled SVID", async () => {

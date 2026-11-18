@@ -230,7 +230,7 @@ import { PostgresCustomerAssetScanChildInputResolver } from "../customer-asset-s
 import { ProviderStorageDriverDispatchService } from "../../integrations/provider-storage-driver-dispatch-service.js";
 const execFile = promisify(execFileCallback);
 const objectPath = ${JSON.stringify(objectPath)};
-const expectedObjectReference = ${JSON.stringify(fixture.providerUploadReference)};
+const expectedObjectReference = ${JSON.stringify(fixture.providerObjectReference)};
 const spiffeId = "spiffe://eper.example/asset-scanner/ci-child";
 function opensslTime(epochSeconds) {
   return new Date(epochSeconds * 1000).toISOString().slice(2).replace(/[-:T]/g, "").replace(/\\.\\d{3}Z$/, "Z");
@@ -243,7 +243,7 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env, on
     }
     async getJwtSvid(audience, filter) {
       if (audience !== "eper:customer-asset-scan-child") return null;
-      return { spiffeId: filter.spiffeId, token: "test-only-svid", expiresAtMs: Date.now() + 120000 };
+      return { spiffeId: filter.spiffeId, token: "test-only-jwt-svid-fixture", expiresAtMs: Date.now() + 120000 };
     }
     close() {}
   }
@@ -289,8 +289,8 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env, on
       await execFile("openssl", [
           "ca", "-batch", "-notext", "-config", config, "-in", csrPath, "-out", certPath,
           "-startdate", opensslTime(Math.floor(Date.now() / 1000) - 5),
-          "-enddate", opensslTime(input.notAfterEpochSeconds),
-          "-subj", "/CN=" + input.databaseRole, "-extensions", "client",
+          "-enddate", opensslTime(Math.floor(Date.now() / 1000) + 60),
+          "-subj", "/CN=eper_scan_child_ci", "-extensions", "client",
         ], { timeout: 10000, maxBuffer: 16384 });
         return await readFile(certPath, "utf8");
       } finally {
@@ -303,6 +303,7 @@ export async function createCustomerAssetScanChildDatabaseTlsBootstrap({ env, on
   return {
     identity, issuer,
     caPem: await readFile(env.PGSSLROOTCERT, "utf8"),
+    databaseCaPem: await readFile(env.PGSSLROOTCERT, "utf8"),
     close() { return spiffe.close(); },
   };
 }

@@ -10,8 +10,7 @@ import { isVerifiedCustomerAssetScanChildSpiffeIdentity } from "./customer-asset
 export interface CustomerAssetScanChildClientCertificateSigner {
   sign(input: {
     readonly csrPem: string;
-    readonly databaseRole: string;
-    readonly notAfterEpochSeconds: number;
+    readonly workloadJwtSvid: string;
   }): Promise<string>;
 }
 
@@ -89,8 +88,7 @@ export class CustomerAssetScanChildDatabaseCredentialIssuer {
       }
       const clientCertificatePem = await this.signer.sign({
         csrPem: input.csrPem,
-        databaseRole,
-        notAfterEpochSeconds: expiresAt,
+        workloadJwtSvid: workload.jwtSvid,
       });
       if (!boundedPem(clientCertificatePem, "CERTIFICATE")) throw new Error("invalid certificate");
       return Object.freeze({ databaseRole, clientCertificatePem, expiresAt });

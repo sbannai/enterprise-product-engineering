@@ -46,6 +46,7 @@ export function parseCustomerAssetScanChildDatabaseCertificateRole(subjectOutput
 export interface CustomerAssetScanChildDatabaseTlsMaterial {
   readonly databaseRole: string;
   readonly caPath: string;
+  readonly databaseCaPath: string;
   readonly certificatePath: string;
   readonly privateKeyPath: string;
   cleanup(): Promise<void>;
@@ -60,6 +61,7 @@ export async function provisionCustomerAssetScanChildDatabaseTlsMaterial(input: 
   readonly identity: Pick<CustomerAssetScanChildSpiffeIdentityVerifier, "verifyCurrentProcessIdentity">;
   readonly issuer: Pick<CustomerAssetScanChildDatabaseCredentialIssuer, "issue">;
   readonly caPem: string;
+  readonly databaseCaPem: string;
   readonly signal?: AbortSignal;
   readonly onStage?: (stage: "identity" | "key" | "issuer" | "certificate-write" | "certificate-key-binding" | "certificate-ca-validation" | "certificate-policy") => void;
 }): Promise<CustomerAssetScanChildDatabaseTlsMaterial> {
@@ -71,6 +73,13 @@ export async function provisionCustomerAssetScanChildDatabaseTlsMaterial(input: 
         !input.caPem.includes("-----END CERTIFICATE-----") ||
         /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(input.caPem)) {
       throw new Error("CA_MATERIAL_INVALID");
+    }
+    if (typeof input.databaseCaPem !== "string" || input.databaseCaPem.length < 80 ||
+        input.databaseCaPem.length > 65_536 ||
+        !input.databaseCaPem.includes("-----BEGIN CERTIFICATE-----") ||
+        !input.databaseCaPem.includes("-----END CERTIFICATE-----") ||
+        /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(input.databaseCaPem)) {
+      throw new Error("DATABASE_CA_MATERIAL_INVALID");
     }
     if (input.signal?.aborted) throw new Error("BOOTSTRAP_ABORTED");
     input.onStage?.("identity");
@@ -96,11 +105,14 @@ export async function provisionCustomerAssetScanChildDatabaseTlsMaterial(input: 
 
     const directory = dirname(keyRequest.privateKeyPath);
     const caPath = join(directory, "database-ca.pem");
+    const databaseCaPath = join(directory, "postgres-server-ca.pem");
     const certificatePath = join(directory, "database-client.pem");
     input.onStage?.("certificate-write");
     await writeFile(caPath, input.caPem, { mode: 0o600, flag: "wx" });
+    await writeFile(databaseCaPath, input.databaseCaPem, { mode: 0o600, flag: "wx" });
     await writeFile(certificatePath, credential.clientCertificatePem, { mode: 0o600, flag: "wx" });
     await chmod(caPath, 0o600);
+    await chmod(databaseCaPath, 0o600);
     await chmod(certificatePath, 0o600);
 
     input.onStage?.("certificate-key-binding");
@@ -132,6 +144,7 @@ export async function provisionCustomerAssetScanChildDatabaseTlsMaterial(input: 
     return Object.freeze({
       databaseRole: credential.databaseRole,
       caPath,
+      databaseCaPath,
       certificatePath,
       privateKeyPath: keyRequest.privateKeyPath,
       async cleanup() {

@@ -56,7 +56,7 @@ try {
   assert.equal(identity.audience, CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE);
   assert.ok(identity.expiresAt > Math.floor(Date.now() / 1000));
   assert.ok(identity.expiresAt <= Math.floor(Date.now() / 1000) + 300);
-  assert.equal(JSON.stringify(identity).includes("eyJ"), false);
+  assert.ok(identity.jwtSvid.length > 20); // JWT-SVID is intentionally returned to the isolated signer, not logged.
   console.log("PASS: Node SDK obtained and EPER verified the current process JWT-SVID");
 
 } finally {
