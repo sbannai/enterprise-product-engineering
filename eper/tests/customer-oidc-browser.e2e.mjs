@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import pg from "pg";
 import { chromium } from "playwright";
 import https from "node:https";
@@ -25,7 +25,7 @@ test("browser OIDC login grants the customer workspace and support journey, logo
   process.env.no_proxy = process.env.NO_PROXY;
   const keys = ["EPER_CUSTOMER_OIDC_ENABLED","EPER_CUSTOMER_IDENTITY_PERSISTENCE","EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE","EPER_ADMIN_CONFIG_API_ENABLED","EPER_ADMIN_CONFIG_PERSISTENCE","EPER_AUDIT_PERSISTENCE","EPER_CUSTOMER_PORTAL_API_ENABLED","EPER_TICKETING_API_ENABLED","EPER_CUSTOMER_WORKSPACE_MODULES_JSON","EPER_CUSTOMER_APPLICATION_SETTINGS_JSON","EPER_CUSTOMER_ASSETS_API_ENABLED","EPER_CUSTOMER_APPLICATION_ASSETS_JSON"];
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
-  const state="s".repeat(43), nonce="n".repeat(43);
+  const state=randomBytes(32).toString("base64url"), nonce=randomBytes(32).toString("base64url");
   const issuer="https://idp.example.test";
   const subject="subject-"+randomUUID();
   const tenantId="tenant-"+randomUUID();
