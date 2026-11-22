@@ -1035,7 +1035,7 @@ test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { s
   const supervisorUrl = new URL(connectionString);
   supervisorUrl.username = role;
   supervisorUrl.password = password;
-  const supervisorPool = new Pool({ connectionString: supervisorUrl.toString(), max: 1 });
+  const supervisorPool = new Pool({ connectionString: supervisorUrl.toString(), max: 2 });
   try {
     await fixtureRepository.claimScanJobs({
       tenantId: fixture.tenantId, applicationId: fixture.applicationId,
@@ -1249,10 +1249,64 @@ test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { s
       lifecycle_status: "active", state: "leased",
     }, "failed audit append must roll back asset and job transitions");
 
-    assert.equal(await supervisorRepository.recoverExhaustedScanJobsAsSupervisor({
-      tenantId: fixture.tenantId, applicationId: fixture.applicationId,
-      scannerServiceId, environment: "sandbox", limit: 5,
-    }), 1);
+    // Hold both independent supervisor clients at the recovery SQL boundary.
+    // This proves the second call has reached PostgreSQL before either recovery
+    // function can execute, rather than relying on Promise.all scheduling.
+    const originalSupervisorConnect = supervisorPool.connect.bind(supervisorPool);
+    const recoveryClients = new Set();
+    let recoveryArrivals = 0;
+    let releaseRecoveryBarrier;
+    let recoveryBarrierTimer;
+    const recoveryBarrier = new Promise((resolve, reject) => {
+      releaseRecoveryBarrier = resolve;
+      recoveryBarrierTimer = setTimeout(
+        () => reject(new Error("SUPERVISOR_RECOVERY_CONCURRENCY_BARRIER_TIMEOUT")),
+        10_000,
+      );
+    });
+
+    supervisorPool.connect = async () => {
+      const client = await originalSupervisorConnect();
+      recoveryClients.add(client);
+      const originalQuery = client.query.bind(client);
+      client.query = (...args) => {
+        const queryText = typeof args[0] === "string" ? args[0] : args[0]?.text;
+        if (queryText?.includes("eper_recover_exhausted_customer_asset_scan_jobs")) {
+          recoveryArrivals += 1;
+          if (recoveryArrivals === 2) {
+            clearTimeout(recoveryBarrierTimer);
+            releaseRecoveryBarrier();
+          }
+          return recoveryBarrier.then(() => originalQuery(...args));
+        }
+        return originalQuery(...args);
+      };
+      return client;
+    };
+
+    let recoveryOutcomes;
+    try {
+      recoveryOutcomes = await Promise.all([
+        supervisorRepository.recoverExhaustedScanJobsAsSupervisor({
+          tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+          scannerServiceId, environment: "sandbox", limit: 5,
+        }),
+        supervisorRepository.recoverExhaustedScanJobsAsSupervisor({
+          tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+          scannerServiceId, environment: "sandbox", limit: 5,
+        }),
+      ]);
+    } finally {
+      supervisorPool.connect = originalSupervisorConnect;
+      clearTimeout(recoveryBarrierTimer);
+    }
+
+    assert.equal(recoveryArrivals, 2,
+      "both supervisor calls must reach the recovery SQL boundary");
+    assert.equal(recoveryClients.size, 2,
+      "concurrent recovery calls must use distinct PostgreSQL clients");
+    assert.equal(recoveryOutcomes.reduce((total, count) => total + count, 0), 1,
+      "concurrent supervisor recovery calls must finalize the exhausted lease exactly once");
     await assert.rejects(
       supervisorPool.query("SELECT * FROM public.eper_customer_asset_scan_jobs"),
       error => error.code === "42501",
