@@ -107,6 +107,12 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
         retryAfterSeconds: 1, maxAttempts: 3, auditEnvironment,
       });
       assert.equal(retry.status, "RETRYING");
+      const retryTimestamp = await pool.query(
+        "SELECT terminal_at FROM eper_provider_operations WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3",
+        [tenantId, applicationId, firstClaim.operationId],
+      );
+      assert.equal(retryTimestamp.rows[0].terminal_at, null,
+        "a retry that remains non-terminal must not receive terminal_at");
       await pool.query(
         "UPDATE eper_provider_operations SET available_at=NOW()-INTERVAL '1 second' WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3",
         [tenantId, applicationId, firstClaim.operationId],
@@ -163,12 +169,27 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
       assert.equal(recovered[0].status, "NEEDS_ATTENTION");
 
       const persisted = await pool.query(
-        "SELECT operation_status,attempt_count,fencing_token FROM eper_provider_operations WHERE tenant_id=$1 AND application_id=$2 ORDER BY created_at,operation_id",
+        "SELECT operation_status,attempt_count,fencing_token,terminal_at FROM eper_provider_operations WHERE tenant_id=$1 AND application_id=$2 ORDER BY created_at,operation_id",
         [tenantId, applicationId],
       );
       assert.deepEqual(persisted.rows.map(row => row.operation_status), ["NEEDS_ATTENTION", "NEEDS_ATTENTION"]);
       assert.equal(Number(persisted.rows[0].attempt_count), 3);
       assert.equal(Number(persisted.rows[0].fencing_token), 3);
+      assert.ok(persisted.rows.every(row => row.terminal_at instanceof Date),
+        "both production terminal transitions must persist terminal_at");
+
+      await pool.query(
+        "UPDATE eper_provider_operations SET operation_status=operation_status WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3",
+        [tenantId, applicationId, recoveryQueued.operation.operationId],
+      );
+      const terminalAtAfter = await pool.query(
+        "SELECT terminal_at FROM eper_provider_operations WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3",
+        [tenantId, applicationId, recoveryQueued.operation.operationId],
+      );
+      assert.equal(terminalAtAfter.rows[0].terminal_at.getTime(),
+        persisted.rows[1].terminal_at.getTime(),
+        "a later terminal-row update must not reset terminal_at");
+
       const audit = await pool.query(
         "SELECT action FROM eper_audit_events WHERE tenant_id=$1 AND application_id=$2 AND resource_type='provider-operation'",
         [tenantId, applicationId],
