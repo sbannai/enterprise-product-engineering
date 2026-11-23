@@ -1,4 +1,5 @@
 import { appendAuditEventInTransaction, hashAuditEnvelope, type AuditEnvironment, type AuditSqlClient, type AuditSqlPool } from "../audit/audit-event-store.js";
+import { acquirePeripheralCatalogueTypeLock } from "./peripheral-type-catalogue-lock.js";
 
 export type PeripheralTypeLifecycle = "ACTIVE" | "DEPRECATED";
 export type PeripheralSchemaLifecycle = "DRAFT" | "PUBLISHED" | "DEPRECATED";
@@ -114,6 +115,7 @@ export class PostgresPeripheralTypeCatalogueRepository {
   field(i.actorId,128);field(i.correlationId,128);const key=field(i.typeKey,96);
   if(!Number.isSafeInteger(i.schemaVersion)||i.schemaVersion<1)throw new Error("PERIPHERAL_CATALOGUE_SCHEMA_VERSION_INVALID");
   const c=await this.pool.connect();try{await c.query("BEGIN");await c.query("SET LOCAL ROLE eper_peripheral_type_catalogue_access");await c.query("SELECT set_config('eper.platform_admin','true',true)");
+   await acquirePeripheralCatalogueTypeLock(c,key,"exclusive");
    const current=await c.query<Row>(SELECT+" WHERE d.type_key=$1 AND s.schema_version=$2 FOR UPDATE OF d,l",[key,i.schemaVersion]);
    if(!current.rows[0])throw new Error("PERIPHERAL_CATALOGUE_SCHEMA_NOT_FOUND");
    if(current.rows[0].lifecycle_status==="DEPRECATED")throw new Error("PERIPHERAL_CATALOGUE_TYPE_DEPRECATED_TERMINAL");
@@ -128,6 +130,7 @@ export class PostgresPeripheralTypeCatalogueRepository {
  async deprecate(i:PeripheralCatalogueContext&{typeKey:string}):Promise<PeripheralTypeDefinition>{
   field(i.actorId,128);field(i.correlationId,128);const key=field(i.typeKey,96);const c=await this.pool.connect();
   try{await c.query("BEGIN");await c.query("SET LOCAL ROLE eper_peripheral_type_catalogue_access");await c.query("SELECT set_config('eper.platform_admin','true',true)");
+   await acquirePeripheralCatalogueTypeLock(c,key,"exclusive");
    const found=await c.query<Row>(SELECT+" WHERE d.type_key=$1 ORDER BY s.schema_version DESC LIMIT 1 FOR UPDATE OF d",[key]);
    if(!found.rows[0])throw new Error("PERIPHERAL_CATALOGUE_TYPE_NOT_FOUND");const before=map(found.rows[0]);
    if(before.lifecycleStatus==="DEPRECATED")throw new Error("PERIPHERAL_CATALOGUE_TYPE_ALREADY_DEPRECATED");

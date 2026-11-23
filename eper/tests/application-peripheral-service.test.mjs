@@ -16,7 +16,7 @@ const configuration = {
   adapterKey: "synthetic.local", adapterVersion: "1.0.0", settings: { mode: "test" },
 };
 
-function fixture({ connect = async () => {}, disconnect = async () => {}, noRegistration = false, noConfiguration = false, failDegradedPersist = false, initialStatus = "CONFIGURED", initialVersion = 7, authorize = async () => {}, dependencyIds = [], dependencyInventory = null } = {}) {
+function fixture({ connect = async () => {}, disconnect = async () => {}, noRegistration = false, noConfiguration = false, failDegradedPersist = false, initialStatus = "CONFIGURED", initialVersion = 7, authorize = async () => {}, dependencyIds = [], dependencyInventory = null, catalogueResolver = null } = {}) {
   const calls = [];
   let current = registration({ status: initialStatus, version: initialVersion });
   const config = configuration;
@@ -64,7 +64,7 @@ function fixture({ connect = async () => {}, disconnect = async () => {}, noRegi
   const authorizer = {
     async authorize(input) { calls.push(["authorize", input.action]); await authorize(input); },
   };
-  return { service: new ApplicationPeripheralService(capabilities, repository, adapters, authorizer, dependencyInventory), calls };
+  return { service: new ApplicationPeripheralService(capabilities, repository, adapters, authorizer, dependencyInventory, catalogueResolver), calls };
 }
 
 test("role authorization denial blocks entitlement lookup and registration", async () => {
@@ -288,4 +288,99 @@ test("persisted dependency activation fails closed when policy is missing or ret
     /EPER_PERIPHERAL_DEPENDENCY_POLICY_UNAVAILABLE:vendor\.scanner\.sdk/);
   assert.equal(retired.calls.some(call=>call[0]==="transition"),false);
   assert.equal(retired.calls.some(call=>call[0]==="connect"),false);
+});
+
+
+const configureInput = {
+  ...scope,
+  peripheralId: "peripheral-1",
+  expectedVersion: 7,
+  catalogueTypeKey: "barcode.scanner",
+  catalogueSchemaVersion: 2,
+  configuration,
+};
+
+const publishedSchema = {
+  typeKey: "barcode.scanner",
+  schemaVersion: 2,
+  adapterKey: "synthetic.local",
+  adapterVersion: "1.0.0",
+  configurationSchema: {
+    type: "object",
+    properties: { mode: { type: "string" } },
+    required: ["mode"],
+    additionalProperties: false,
+  },
+  compatibility: {},
+};
+
+const resolverFor = (result = publishedSchema) => ({
+  async withPublishedSchema(typeKey, schemaVersion, operation) {
+    assert.equal(typeKey, "barcode.scanner");
+    assert.equal(schemaVersion, 2);
+    return operation(result);
+  },
+});
+
+test("configure resolves published schema and persists its catalogue binding", async () => {
+  const { service, calls } = fixture({ catalogueResolver: resolverFor() });
+
+  await service.configure(configureInput);
+
+  const persisted = calls.find(call => call[0] === "configure");
+  assert.ok(persisted);
+  assert.equal(persisted[1].catalogueTypeKey, "barcode.scanner");
+  assert.equal(persisted[1].catalogueSchemaVersion, 2);
+  assert.deepEqual(persisted[1].configuration, configuration);
+});
+
+test("configure fails closed when catalogue resolver is not configured", async () => {
+  const { service, calls } = fixture();
+
+  await assert.rejects(
+    service.configure(configureInput),
+    /EPER_PERIPHERAL_CATALOGUE_RESOLVER_NOT_CONFIGURED/,
+  );
+  assert.equal(calls.some(call => call[0] === "configure"), false);
+});
+
+test("configure rejects a schema that is not published", async () => {
+  const { service, calls } = fixture({ catalogueResolver: resolverFor(null) });
+
+  await assert.rejects(
+    service.configure(configureInput),
+    /EPER_PERIPHERAL_CATALOGUE_SCHEMA_NOT_PUBLISHED/,
+  );
+  assert.equal(calls.some(call => call[0] === "configure"), false);
+});
+
+test("configure rejects adapter identity that differs from the published schema", async () => {
+  const { service, calls } = fixture({
+    catalogueResolver: resolverFor({
+      ...publishedSchema,
+      adapterKey: "different.adapter",
+    }),
+  });
+
+  await assert.rejects(
+    service.configure(configureInput),
+    /EPER_PERIPHERAL_CATALOGUE_ADAPTER_MISMATCH/,
+  );
+  assert.equal(calls.some(call => call[0] === "configure"), false);
+});
+
+test("configure rejects settings that violate the published schema", async () => {
+  const { service, calls } = fixture({ catalogueResolver: resolverFor() });
+
+  await assert.rejects(
+    service.configure({
+      ...configureInput,
+      configuration: {
+        ...configuration,
+        settings: { mode: 42 },
+      },
+    }),
+    /EPER_PERIPHERAL_CONFIGURATION_SCHEMA_VALIDATION_FAILED/,
+  );
+  assert.equal(calls.some(call => call[0] === "configure"), false);
 });

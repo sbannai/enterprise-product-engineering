@@ -128,3 +128,6 @@ export function assertPeripheralConfiguredForActivation(input: {
     throw new Error("PERIPHERAL_CONFIGURATION_REQUIRED_FOR_ACTIVATION");
   }
 }
+
+export { PostgresPeripheralTypeCatalogueResolver } from "./postgres-peripheral-type-catalogue-resolver.js";
+export type { PublishedPeripheralSchema } from "./postgres-peripheral-type-catalogue-resolver.js";
