@@ -9,5 +9,5 @@ test("peripheral API runtime requires and injects durable vendor dependency inve
   assert.match(source, /const dependencyInventory = peripheralApiEnabled && paymentPool\s*\? new PostgresDependencyInventoryRepository\(paymentPool,/);
   assert.match(source, /if \(dependencyInventory\) await dependencyInventory\.assertReady\(\)/);
   assert.match(source, /dependencyIds: \[\]/);
-  assert.match(source, /peripheralRoleAuthorizer,\s*dependencyInventory,\s*\)/);
+  assert.match(source, /peripheralRoleAuthorizer,\s*dependencyInventory,\s*new PostgresPeripheralTypeCatalogueResolver\(/);
 });
