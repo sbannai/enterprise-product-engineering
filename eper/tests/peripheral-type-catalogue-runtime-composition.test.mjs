@@ -48,6 +48,7 @@ test("F-023 validates shared primary database identity before serving requests",
   assert.ok(listen > identityGuard, "database identity guard must run before listening");
   assert.match(main, /if \(peripheralApiEnabled\)\s*\{\s*if \(!paymentPool \|\| !peripheralApplicationPool \|\| !peripheralTypeCatalogueReadPool\)/);
   assert.match(main, /application:\s*peripheralApplicationPool/);
+  assert.match(main, /payment:\s*paymentPool/);
   assert.match(main, /admin:\s*peripheralTypeCataloguePool/);
   assert.match(main, /read:\s*peripheralTypeCatalogueReadPool/);
 });

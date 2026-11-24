@@ -283,6 +283,7 @@ if (peripheralApiEnabled) {
   }
   await assertPeripheralCatalogueDatabaseIdentity({
     application: peripheralApplicationPool,
+    payment: paymentPool,
     admin: peripheralTypeCataloguePool,
     read: peripheralTypeCatalogueReadPool,
   });

@@ -51,12 +51,17 @@ test("F-023 application binding migration creates a published-only read role and
   assert.match(binding, /NOINHERIT NOREPLICATION NOBYPASSRLS/);
   assert.match(binding, /GRANT SELECT ON eper_peripheral_type_schema_versions,[\s\S]*?eper_peripheral_type_schema_lifecycle/);
 
+  assert.match(binding, /CREATE POLICY eper_peripheral_type_schema_published_consumer_read_grant[\s\S]*?AS PERMISSIVE[\s\S]*?TO eper_peripheral_type_catalogue_read_access/);
   assert.match(binding, /CREATE POLICY eper_peripheral_type_schema_published_consumer_read/);
   assert.match(binding, /CREATE POLICY eper_peripheral_type_schema_published_consumer_read[\s\S]*?AS RESTRICTIVE[\s\S]*?TO eper_peripheral_type_catalogue_read_access/);
   assert.match(binding, /lifecycle\.lifecycle_status = 'PUBLISHED'/);
 
   assert.match(binding, /CREATE POLICY eper_peripheral_type_lifecycle_published_consumer_read[\s\S]*?AS RESTRICTIVE[\s\S]*?TO eper_peripheral_type_catalogue_read_access/);
   assert.match(binding, /USING \(lifecycle_status = 'PUBLISHED'\)/);
+  assert.match(
+    migration,
+    /CREATE POLICY eper_peripheral_type_schema_lifecycle_published_read[\s\S]*?FOR SELECT[\s\S]*?USING \(lifecycle_status = 'PUBLISHED'\)/,
+  );
 
   assert.ok(binding.includes("CREATE POLICY eper_peripheral_type_lifecycle_published_consumer_read"));
   assert.ok(binding.includes("USING (lifecycle_status = 'PUBLISHED')"));

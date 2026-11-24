@@ -49,6 +49,23 @@ GRANT SELECT ON eper_peripheral_type_schema_versions,
                 eper_peripheral_type_schema_lifecycle
   TO eper_peripheral_type_catalogue_read_access;
 
+-- PostgreSQL requires at least one permissive policy to grant SELECT.
+-- Scope that grant to this reader role and published schemas only.
+CREATE POLICY eper_peripheral_type_schema_published_consumer_read_grant
+  ON eper_peripheral_type_schema_versions
+  AS PERMISSIVE
+  FOR SELECT
+  TO eper_peripheral_type_catalogue_read_access
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM eper_peripheral_type_schema_lifecycle lifecycle
+      WHERE lifecycle.type_key = eper_peripheral_type_schema_versions.type_key
+        AND lifecycle.schema_version = eper_peripheral_type_schema_versions.schema_version
+        AND lifecycle.lifecycle_status = 'PUBLISHED'
+    )
+  );
+
 -- Restrictive policies are ANDed with permissive policies, preventing the
 -- platform-admin PUBLIC policy from widening this reader role's visibility.
 CREATE POLICY eper_peripheral_type_schema_published_consumer_read

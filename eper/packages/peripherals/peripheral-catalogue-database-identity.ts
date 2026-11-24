@@ -9,6 +9,7 @@ interface DatabaseIdentity {
 
 export interface PeripheralCatalogueDatabasePools {
   application: SqlPool;
+  payment: SqlPool;
   admin?: SqlPool | null;
   read: SqlPool;
 }
@@ -49,6 +50,7 @@ export async function assertPeripheralCatalogueDatabaseIdentity(
 ): Promise<void> {
   const entries: Array<[string, SqlPool]> = [
     ["application", pools.application],
+    ["payment", pools.payment],
     ...(pools.admin ? [["admin", pools.admin] as [string, SqlPool]] : []),
     ["read", pools.read],
   ];
