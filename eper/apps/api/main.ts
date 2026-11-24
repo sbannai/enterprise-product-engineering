@@ -39,10 +39,14 @@ import { ApplicationAddonAccessGate } from "../../packages/addon-entitlements/ap
 import { ApplicationCapabilityBoundary } from "../../packages/addon-entitlements/application-capability-boundary.js";
 import { PostgresPeripheralRepository } from "../../packages/peripherals/postgres-peripheral-repository.js";
 import { PostgresPeripheralTypeCatalogueRepository } from "../../packages/peripherals/postgres-peripheral-type-catalogue-repository.js";
+import { assertPeripheralCatalogueDatabaseIdentity } from "../../packages/peripherals/peripheral-catalogue-database-identity.js";
 import { PostgresDependencyInventoryRepository } from "../../packages/dependencies/postgres-dependency-inventory-repository.js";
 import { ApplicationPeripheralService } from "../../packages/peripherals/application-peripheral-service.js";
 import { PostgresPeripheralRoleAuthorizer } from "../../packages/peripherals/peripheral-authorization.js";
-import { PeripheralAdapterRegistry } from "../../packages/peripherals/index.js";
+import {
+  PeripheralAdapterRegistry,
+  PostgresPeripheralTypeCatalogueResolver,
+} from "../../packages/peripherals/index.js";
 import { SyntheticPeripheralAdapter } from "../../packages/peripherals/synthetic-peripheral-adapter.js";
 import { PostgresRemoteDesktopSessionStore } from "../../packages/remote-desktop/postgres-remote-desktop-session-store.js";
 import { ApplicationRemoteDesktopService } from "../../packages/remote-desktop/application-remote-desktop-service.js";
@@ -124,6 +128,16 @@ const peripheralTypeCataloguePool = peripheralTypeCatalogueAdminEnabled ? (() =>
   if (!connectionString) throw new Error("EPER_PERIPHERAL_TYPE_CATALOGUE_DATABASE_URL_REQUIRED");
   return createPostgresPaymentPool({ ...process.env, EPER_PAYMENT_DATABASE_URL: connectionString, DATABASE_URL: undefined });
 })() : null;
+const peripheralTypeCatalogueReadPool = peripheralApiEnabled ? (() => {
+  const connectionString = process.env.EPER_PERIPHERAL_TYPE_CATALOGUE_READ_DATABASE_URL?.trim();
+  if (!connectionString) throw new Error("EPER_PERIPHERAL_TYPE_CATALOGUE_READ_DATABASE_URL_REQUIRED");
+  return createPostgresPaymentPool({ ...process.env, EPER_PAYMENT_DATABASE_URL: connectionString, DATABASE_URL: undefined });
+})() : null;
+const peripheralApplicationPool = peripheralApiEnabled ? (() => {
+  const connectionString = process.env.EPER_APPLICATION_PERIPHERAL_DATABASE_URL?.trim();
+  if (!connectionString) throw new Error("EPER_APPLICATION_PERIPHERAL_DATABASE_URL_REQUIRED");
+  return createPostgresPaymentPool({ ...process.env, EPER_PAYMENT_DATABASE_URL: connectionString, DATABASE_URL: undefined });
+})() : null;
 
 async function assertPrivilegedPoolRole(
   pool: ReturnType<typeof createPostgresPaymentPool> | null,
@@ -169,6 +183,31 @@ async function assertPrivilegedPoolRole(
   }
 }
 
+if (peripheralApplicationPool) {
+  await assertPrivilegedPoolRole(
+    peripheralApplicationPool,
+    "eper_application_peripheral_access",
+    [
+      "eper_application_peripheral",
+      "eper_application_peripheral_configuration",
+      "eper_audit_events",
+      "eper_audit_chain_head",
+    ],
+    "EPER_APPLICATION_PERIPHERAL_DATABASE_ROLE_INVALID",
+  );
+  const roleClient = await peripheralApplicationPool.connect();
+  try {
+    const role = await roleClient.query(
+      "SELECT pg_has_role(current_user, 'eper_application_peripheral_access', 'SET') AS can_set_role",
+    );
+    if (role.rows[0]?.can_set_role !== true) {
+      throw new Error("EPER_APPLICATION_PERIPHERAL_DATABASE_ROLE_SET_REQUIRED");
+    }
+  } finally {
+    roleClient.release();
+  }
+}
+
 if (platformAdminPool) {
   await assertPrivilegedPoolRole(
     platformAdminPool,
@@ -209,6 +248,47 @@ if (peripheralTypeCataloguePool) {
     roleClient.release();
   }
 }
+if (peripheralTypeCatalogueReadPool) {
+  await assertPrivilegedPoolRole(
+    peripheralTypeCatalogueReadPool,
+    "eper_peripheral_type_catalogue_read_access",
+    [
+      "eper_peripheral_type_definitions",
+      "eper_peripheral_type_schema_versions",
+      "eper_peripheral_type_schema_lifecycle",
+      "eper_peripheral_type_catalogue_events",
+      "eper_audit_events",
+      "eper_audit_chain_head",
+    ],
+    "EPER_PERIPHERAL_TYPE_CATALOGUE_READ_DATABASE_ROLE_INVALID",
+  );
+  const roleClient = await peripheralTypeCatalogueReadPool.connect();
+  try {
+    const role = await roleClient.query(`
+      SELECT
+        pg_has_role(current_user, 'eper_peripheral_type_catalogue_read_access', 'SET') AS can_set_read_role,
+        pg_has_role(current_user, 'eper_peripheral_type_catalogue_access', 'SET') AS can_set_admin_role
+    `);
+    if (role.rows[0]?.can_set_read_role !== true ||
+        role.rows[0]?.can_set_admin_role !== false) {
+      throw new Error("EPER_PERIPHERAL_TYPE_CATALOGUE_READ_DATABASE_ROLE_BOUNDARY_INVALID");
+    }
+  } finally {
+    roleClient.release();
+  }
+}
+if (peripheralApiEnabled) {
+  if (!paymentPool || !peripheralApplicationPool || !peripheralTypeCatalogueReadPool) {
+    throw new Error("EPER_PERIPHERAL_CATALOGUE_DATABASE_POOLS_REQUIRED");
+  }
+  await assertPeripheralCatalogueDatabaseIdentity({
+    application: peripheralApplicationPool,
+    payment: paymentPool,
+    admin: peripheralTypeCataloguePool,
+    read: peripheralTypeCatalogueReadPool,
+  });
+}
+
 const paymentStore = postgresPaymentMode && paymentPool ? new PostgresPaymentStore(paymentPool, true) : undefined;
 if (commercialTariffAdminEnabled && (!paymentPool || process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
     process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" || process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres")) {
@@ -599,8 +679,8 @@ const platformAdminCredentialStore = platformAdminCredentialsEnabled && platform
   : undefined;
 if (platformAdminCredentialStore) await platformAdminCredentialStore.assertReady();
 
-const peripheralRepository = peripheralApiEnabled && paymentPool
-  ? new PostgresPeripheralRepository(paymentPool)
+const peripheralRepository = peripheralApiEnabled && peripheralApplicationPool
+  ? new PostgresPeripheralRepository(peripheralApplicationPool)
   : undefined;
 const dependencyInventory = peripheralApiEnabled && paymentPool
   ? new PostgresDependencyInventoryRepository(paymentPool, process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
@@ -626,6 +706,7 @@ const peripheralService = peripheralApiEnabled && paymentPool && peripheralRepos
       }]),
       peripheralRoleAuthorizer,
       dependencyInventory,
+      new PostgresPeripheralTypeCatalogueResolver(peripheralTypeCatalogueReadPool!),
     )
   : undefined;
 if (peripheralRepository) await peripheralRepository.assertReady();
@@ -675,6 +756,8 @@ async function shutdown(signal: string): Promise<void> {
     if (platformAdminPool) await platformAdminPool.end();
     if (providerCataloguePool) await providerCataloguePool.end();
     if (peripheralTypeCataloguePool) await peripheralTypeCataloguePool.end();
+    if (peripheralTypeCatalogueReadPool) await peripheralTypeCatalogueReadPool.end();
+    if (peripheralApplicationPool) await peripheralApplicationPool.end();
   } catch (error) {
     console.error(`EPER API shutdown failed after ${signal}`, error);
     process.exitCode = 1;

@@ -3249,10 +3249,14 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           return;
         }
         if (peripheralPath[3] === "configure") {
-          const allowed = ["expectedVersion", "configuration"];
+          const allowed = ["expectedVersion", "catalogueTypeKey", "catalogueSchemaVersion", "configuration"];
           const config = body.configuration as Record<string, unknown> | undefined;
-          if (Object.keys(body).some(key => !allowed.includes(key)) || !config ||
-              typeof config !== "object" || Array.isArray(config) ||
+          if (Object.keys(body).some(key => !allowed.includes(key)) ||
+              typeof body.catalogueTypeKey !== "string" ||
+              !/^[a-z][a-z0-9_.-]{1,95}$/.test(body.catalogueTypeKey) ||
+              typeof body.catalogueSchemaVersion !== "number" ||
+              !Number.isSafeInteger(body.catalogueSchemaVersion) || body.catalogueSchemaVersion < 1 ||
+              !config || typeof config !== "object" || Array.isArray(config) ||
               Object.keys(config).some(key => !["adapterKey", "adapterVersion", "settings", "secretReference"].includes(key)) ||
               typeof config.adapterKey !== "string" || typeof config.adapterVersion !== "string" ||
               !config.settings || typeof config.settings !== "object" || Array.isArray(config.settings) ||
@@ -3262,6 +3266,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           }
           result = await options.peripheralService.configure({
             ...scope, peripheralId, expectedVersion: body.expectedVersion,
+            catalogueTypeKey: body.catalogueTypeKey,
+            catalogueSchemaVersion: body.catalogueSchemaVersion,
             configuration: {
               adapterKey: config.adapterKey, adapterVersion: config.adapterVersion,
               settings: config.settings as Record<string, unknown>,

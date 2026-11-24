@@ -1,6 +1,8 @@
 import type { ApplicationCapabilityBoundary, ApplicationCapabilityScope } from "../addon-entitlements/application-capability-boundary.js";
 import { assertDependencyRuntimeCompatible } from "../dependencies/runtime-gate.js";
 import type { PostgresDependencyInventoryRepository } from "../dependencies/postgres-dependency-inventory-repository.js";
+import { assertPeripheralConfigurationMatchesSchema } from "./peripheral-configuration-schema.js";
+import type { PublishedPeripheralSchema } from "./postgres-peripheral-type-catalogue-resolver.js";
 import {
   PeripheralAdapterRegistry,
   type PeripheralConnectionContext,
@@ -18,6 +20,14 @@ export interface PeripheralServiceScope extends ApplicationCapabilityScope, Peri
   /** Trusted execution context IDs used to resolve shared dependency installations. */
   workstationId?: string;
   gatewayId?: string;
+}
+
+export interface PeripheralCatalogueSchemaResolver {
+  withPublishedSchema<T>(
+    typeKey: string,
+    schemaVersion: number,
+    operation: (published: PublishedPeripheralSchema | null) => Promise<T>,
+  ): Promise<T>;
 }
 
 export interface PeripheralActionAuthorizer {
@@ -41,6 +51,8 @@ export interface RegisterApplicationPeripheralInput extends PeripheralServiceSco
 export interface ConfigureApplicationPeripheralInput extends PeripheralServiceScope {
   peripheralId: string;
   expectedVersion: number;
+  catalogueTypeKey: string;
+  catalogueSchemaVersion: number;
   configuration: {
     adapterKey: string;
     adapterVersion: string;
@@ -66,6 +78,7 @@ export class ApplicationPeripheralService {
     private readonly adapters: PeripheralAdapterRegistry,
     private readonly authorizer: PeripheralActionAuthorizer,
     private readonly dependencyInventory?: PostgresDependencyInventoryRepository,
+    private readonly catalogueResolver?: PeripheralCatalogueSchemaResolver,
   ) {}
 
   async list(input: PeripheralServiceScope): Promise<PeripheralRegistration[]> {
@@ -88,8 +101,35 @@ export class ApplicationPeripheralService {
 
   async configure(input: ConfigureApplicationPeripheralInput): Promise<PeripheralRegistration> {
     await this.authorizer.authorize({ ...this.actorScope(input), action: "peripheral.configure" });
-    return this.capabilities.withPeripheralManagement(input, () =>
-      this.repository.configure(this.configureInput(input)));
+    return this.capabilities.withPeripheralManagement(input, async () => {
+      if (!this.catalogueResolver) {
+        throw new Error("EPER_PERIPHERAL_CATALOGUE_RESOLVER_NOT_CONFIGURED");
+      }
+
+      return this.catalogueResolver.withPublishedSchema(
+        input.catalogueTypeKey,
+        input.catalogueSchemaVersion,
+        async (published) => {
+          if (!published) {
+            throw new Error("EPER_PERIPHERAL_CATALOGUE_SCHEMA_NOT_PUBLISHED");
+          }
+
+          if (
+            published.adapterKey !== input.configuration.adapterKey ||
+            published.adapterVersion !== input.configuration.adapterVersion
+          ) {
+            throw new Error("EPER_PERIPHERAL_CATALOGUE_ADAPTER_MISMATCH");
+          }
+
+          assertPeripheralConfigurationMatchesSchema(
+            input.configuration.settings,
+            published.configurationSchema,
+          );
+
+          return this.repository.configure(this.configureInput(input));
+        },
+      );
+    });
   }
 
   async activate(input: PeripheralActivationInput): Promise<PeripheralRegistration> {
@@ -263,6 +303,8 @@ export class ApplicationPeripheralService {
       ...this.auditInput(input),
       peripheralId: input.peripheralId,
       expectedVersion: input.expectedVersion,
+      catalogueTypeKey: input.catalogueTypeKey,
+      catalogueSchemaVersion: input.catalogueSchemaVersion,
       configuration: input.configuration,
     };
   }

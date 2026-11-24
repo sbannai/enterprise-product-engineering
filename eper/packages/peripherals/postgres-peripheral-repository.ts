@@ -43,6 +43,8 @@ export interface RegisterPeripheralInput extends PeripheralScope, PeripheralAudi
 export interface ConfigurePeripheralInput extends PeripheralScope, PeripheralAuditContext {
   peripheralId: string;
   expectedVersion: number;
+  catalogueTypeKey: string;
+  catalogueSchemaVersion: number;
   configuration: PeripheralConfiguration;
 }
 
@@ -195,6 +197,14 @@ export class PostgresPeripheralRepository {
     if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) {
       throw new Error("EPER_PERIPHERAL_EXPECTED_VERSION_INVALID");
     }
+    if (
+      typeof input.catalogueTypeKey !== "string" ||
+      !/^[a-z][a-z0-9_.-]{1,95}$/.test(input.catalogueTypeKey) ||
+      !Number.isSafeInteger(input.catalogueSchemaVersion) ||
+      input.catalogueSchemaVersion < 1
+    ) {
+      throw new Error("EPER_PERIPHERAL_CATALOGUE_SCHEMA_REFERENCE_INVALID");
+    }
     const config = input.configuration;
     if (!config.adapterKey.trim() || !/^\d+\.\d+\.\d+$/.test(config.adapterVersion) ||
         !config.settings || typeof config.settings !== "object" || Array.isArray(config.settings)) {
@@ -233,11 +243,13 @@ export class PostgresPeripheralRepository {
       await client.query(
         `INSERT INTO eper_application_peripheral_configuration
           (tenant_id, application_id, peripheral_id, configuration_version,
-           adapter_key, adapter_version, settings, secret_reference, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9)`,
+           adapter_key, adapter_version, settings, secret_reference, created_by,
+           catalogue_type_key, catalogue_schema_version)
+         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11)`,
         [input.tenantId, input.applicationId, input.peripheralId, configurationVersion,
           config.adapterKey, config.adapterVersion, JSON.stringify(config.settings),
-          config.secretReference ?? null, input.actorId],
+          config.secretReference ?? null, input.actorId,
+          input.catalogueTypeKey, input.catalogueSchemaVersion],
       );
       const updated = await client.query<PeripheralRow>(
         `UPDATE eper_application_peripheral
@@ -255,6 +267,8 @@ export class PostgresPeripheralRepository {
       await this.audit(client, input, "peripheral.configure", input.peripheralId, {
         adapterKey: config.adapterKey, adapterVersion: config.adapterVersion,
         configurationVersion,
+        catalogueTypeKey: input.catalogueTypeKey,
+        catalogueSchemaVersion: input.catalogueSchemaVersion,
       });
       await client.query("COMMIT");
       return this.mapRegistration(row);
@@ -370,6 +384,7 @@ export class PostgresPeripheralRepository {
   }
 
   private async setScope(client: AuditSqlClient, scope: PeripheralScope): Promise<void> {
+    await client.query("SET LOCAL ROLE eper_application_peripheral_access");
     await client.query("SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
       [scope.tenantId, scope.applicationId]);
   }
