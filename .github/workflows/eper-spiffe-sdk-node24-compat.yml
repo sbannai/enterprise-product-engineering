@@ -1,0 +1,75 @@
+name: EPER SPIFFE SDK Node 24 compatibility preflight
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/eper-spiffe-sdk-node24-compat.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  node24-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize isolated evaluation directory
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$RUNNER_TEMP/eper-spiffe-node24" "$RUNNER_TEMP/spiffe-node24-evidence"
+          cd "$RUNNER_TEMP/eper-spiffe-node24"
+          npm init -y
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+      - name: Enforce dependency engine declarations and install exact SDK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$RUNNER_TEMP/eper-spiffe-node24"
+          npm_config_engine_strict=true npm install --package-lock-only --ignore-scripts --save-dev --save-exact @jeengbe/spiffe@2.1.1
+          npm_config_engine_strict=true npm ci --ignore-scripts
+      - name: Smoke-test the real SDK API and owned-client lifecycle
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$RUNNER_TEMP/eper-spiffe-node24"
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { SpiffeClient } from '@jeengbe/spiffe';
+
+          const client = new SpiffeClient({
+            connection: 'unix:///tmp/eper-spiffe-sdk-smoke.sock',
+            retry: { enabled: false },
+          });
+          assert.equal(typeof client.getJwtSvid, 'function');
+          assert.equal(typeof client.close, 'function');
+          await client.close();
+          console.log('SDK import, configured construction, getJwtSvid surface, and owned-client close passed');
+          NODE
+      - name: Verify registry signatures and provenance
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$RUNNER_TEMP/eper-spiffe-node24"
+          npm audit signatures --json --include-attestations > "$RUNNER_TEMP/spiffe-node24-evidence/signature-attestation-report.json"
+      - name: Record runtime and dependency evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$RUNNER_TEMP/eper-spiffe-node24"
+          node --version > "$RUNNER_TEMP/spiffe-node24-evidence/node-version.txt"
+          npm --version > "$RUNNER_TEMP/spiffe-node24-evidence/npm-version.txt"
+          npm ls --all --json > "$RUNNER_TEMP/spiffe-node24-evidence/dependency-tree.json"
+          cp package.json package-lock.json "$RUNNER_TEMP/spiffe-node24-evidence/"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eper-spiffe-sdk-node24-compatibility-evidence
+          path: ${{ runner.temp }}/spiffe-node24-evidence/
+          if-no-files-found: error
+          retention-days: 14
